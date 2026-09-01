@@ -11,8 +11,8 @@ import { filterProfiles, sortProfiles } from './utils/filterUtils';
 import { useShortlist } from './hooks/useShortlist';
 import { useURLSync } from './hooks/useURLSync';
 import { useSpecialistDocuments } from './hooks/useSpecialistDocuments';
+import { useTheme } from './hooks/useTheme';
 import { ModernHeroSearch } from './components/ModernHeroSearch';
-import { QuickFilterBar } from './components/QuickFilterBar';
 import { SpecialistDossierPane } from './components/SpecialistDossierPane';
 import { SpecialistTableView } from './components/SpecialistTableView';
 import { ProfileDetailModal } from './components/ProfileDetailModal';
@@ -43,9 +43,12 @@ import {
   Scale,
   Send,
   Printer,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export default function App() {
+  const { theme, isDark, toggleTheme } = useTheme();
   const [query, setQuery] = useState('');
   const [activePresetId, setActivePresetId] = useState('all');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -85,6 +88,9 @@ export default function App() {
     addDocument,
     removeDocument,
   } = useSpecialistDocuments();
+
+  // Focused Workspace mode for working comfortably on a crew member
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -246,6 +252,20 @@ export default function App() {
     return results.find((r) => r.id === selectedProfileId) || results[0] || null;
   }, [results, selectedProfileId]);
 
+  const currentSelectedIdx = results.findIndex((r) => r.id === (activeSelectedProfile?.id || selectedProfileId));
+
+  const handlePrevProfile = useCallback(() => {
+    if (results.length === 0) return;
+    const prevIdx = currentSelectedIdx > 0 ? currentSelectedIdx - 1 : results.length - 1;
+    setSelectedProfileId(results[prevIdx].id);
+  }, [results, currentSelectedIdx]);
+
+  const handleNextProfile = useCallback(() => {
+    if (results.length === 0) return;
+    const nextIdx = currentSelectedIdx < results.length - 1 ? currentSelectedIdx + 1 : 0;
+    setSelectedProfileId(results[nextIdx].id);
+  }, [results, currentSelectedIdx]);
+
   // Global & Split View Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -256,6 +276,25 @@ export default function App() {
       if (e.key === '?') {
         e.preventDefault();
         setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
+
+      if (e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        toggleTheme();
+        showToast(isDark ? 'Switched to High-Contrast Light Theme' : 'Switched to Deep Zinc Dark Theme');
+        return;
+      }
+
+      if (e.key.toLowerCase() === 'f' && activeSelectedProfile) {
+        e.preventDefault();
+        setIsFocusMode((prev) => !prev);
+        return;
+      }
+
+      if (e.key === 'Escape' && isFocusMode) {
+        e.preventDefault();
+        setIsFocusMode(false);
         return;
       }
 
@@ -271,6 +310,12 @@ export default function App() {
         e.preventDefault();
         const prevIndex = currentIndex > 0 ? currentIndex - 1 : results.length - 1;
         setSelectedProfileId(results[prevIndex].id);
+      } else if (e.key === 'ArrowLeft' && isFocusMode) {
+        e.preventDefault();
+        handlePrevProfile();
+      } else if (e.key === 'ArrowRight' && isFocusMode) {
+        e.preventDefault();
+        handleNextProfile();
       } else if (e.key.toLowerCase() === 's' && activeSelectedProfile) {
         e.preventDefault();
         toggleBookmark(activeSelectedProfile.id);
@@ -281,14 +326,14 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'm' && activeSelectedProfile) {
         e.preventDefault();
         handleRequestMobilization(activeSelectedProfile);
-      } else if (e.key === 'Enter' && activeSelectedProfile) {
+      } else if (e.key === 'Enter' && activeSelectedProfile && !isFocusMode) {
         setModalProfile(activeSelectedProfile);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [results, selectedProfileId, activeSelectedProfile, toggleBookmark, showToast, handleRequestMobilization]);
+  }, [results, selectedProfileId, activeSelectedProfile, toggleBookmark, showToast, handleRequestMobilization, isFocusMode, handlePrevProfile, handleNextProfile]);
 
   const handleResetAll = () => {
     setShowSavedOnly(false);
@@ -405,6 +450,31 @@ export default function App() {
               <Command className="w-3.5 h-3.5" />
             </button>
 
+            {/* Theme Toggle Button */}
+            <button
+              type="button"
+              id="app-theme-toggle-btn"
+              onClick={() => {
+                toggleTheme();
+                showToast(isDark ? 'Switched to High-Contrast Light Theme' : 'Switched to Deep Zinc Dark Theme');
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer text-xs font-medium"
+              title={isDark ? 'Switch to High-Contrast Light Theme (T)' : 'Switch to Deep Zinc Dark Theme (T)'}
+              aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              {isDark ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline">Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-zinc-600" />
+                  <span className="hidden md:inline">Dark</span>
+                </>
+              )}
+            </button>
+
             {/* Shortlist Filter & Exporter Action */}
             <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-0.5 rounded-xl">
               <button
@@ -449,14 +519,6 @@ export default function App() {
           isCalmState={!isSearchActive}
           totalSpecialists={MOCK_PROFILES.length}
         />
-
-        {/* Quick Filter Preset Bar */}
-        <div className="my-2">
-          <QuickFilterBar
-            activePresetId={activePresetId}
-            onSelectPreset={handleSelectPreset}
-          />
-        </div>
 
         {/* Results Header (Active Search Only) */}
         {isSearchActive && (
@@ -511,130 +573,60 @@ export default function App() {
           <div className="pb-16">
             {results.length > 0 ? (
               viewMode === 'split' ? (
-                /* Split-Pane Operations Command */
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start min-h-[580px]">
-                  {/* Left Column: Animated List */}
-                  <div className="lg:col-span-5 space-y-2 max-h-[720px] overflow-y-auto pr-1">
-                    <AnimatePresence mode="popLayout">
-                      {results.map((profile, index) => {
-                        const isSelected = selectedProfileId === profile.id;
-                        const isProfileBookmarked = isBookmarked(profile.id);
-                        const isCompared = compareIds.includes(profile.id);
-                        const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
+                isFocusMode ? (
+                  /* Focused Specialist Workspace (Enlarged & Centered for comfortable working) */
+                  <div className="max-w-5xl mx-auto w-full space-y-4 px-2 sm:px-4">
+                    {/* Crew Selector Navigation Strip */}
+                    <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-3 rounded-2xl backdrop-blur-md shadow-xl gap-3">
+                      <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none max-w-2xl">
+                        {results.map((profile, idx) => {
+                          const isSel = (activeSelectedProfile?.id || selectedProfileId) === profile.id;
+                          return (
+                            <button
+                              key={profile.id}
+                              type="button"
+                              onClick={() => setSelectedProfileId(profile.id)}
+                              className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl text-xs font-medium shrink-0 transition-all cursor-pointer ${
+                                isSel
+                                  ? 'bg-zinc-800 text-white border border-zinc-600 shadow-md font-semibold'
+                                  : 'bg-zinc-950/60 border border-zinc-850 text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-200'
+                              }`}
+                            >
+                              <img
+                                src={profile.avatar}
+                                alt={profile.name}
+                                referrerPolicy="no-referrer"
+                                className="w-5 h-5 rounded-full object-cover border border-zinc-700"
+                              />
+                              <span className="truncate max-w-[110px]">{profile.name}</span>
+                              <span className="font-mono text-[10px] opacity-60">#{idx + 1}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
 
-                        return (
-                          <motion.div
-                            layout
-                            initial={{ opacity: 0, y: 14, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.96 }}
-                            transition={{
-                              duration: 0.22,
-                              delay: Math.min(index * 0.02, 0.18),
-                              ease: [0.16, 1, 0.3, 1],
-                            }}
-                            key={profile.id}
-                            onClick={() => setSelectedProfileId(profile.id)}
-                            className={`group relative p-3.5 rounded-xl border transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
-                              isSelected
-                                ? 'bg-zinc-900/90 border-zinc-500 shadow-md ring-1 ring-zinc-500/30'
-                                : 'bg-zinc-900/40 hover:bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="relative shrink-0">
-                                <img
-                                  src={profile.avatar}
-                                  alt={profile.name}
-                                  referrerPolicy="no-referrer"
-                                  className="w-11 h-11 rounded-lg object-cover border border-zinc-800/90 group-hover:border-zinc-700 transition-colors"
-                                />
-                                {isAvailableNow && (
-                                  <span
-                                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-zinc-950"
-                                    title="Available immediately"
-                                  />
-                                )}
-                              </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setIsFocusMode(false)}
+                          className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                          title="Exit Focus Mode (F / Esc)"
+                        >
+                          <span>Exit Focus</span>
+                          <span className="font-mono text-[10px] text-zinc-400">Esc</span>
+                        </button>
+                      </div>
+                    </div>
 
-                              <div className="min-w-0 space-y-1 flex-1">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <h3 className={`font-semibold text-xs tracking-tight truncate ${isSelected ? 'text-blue-400' : 'text-zinc-100 group-hover:text-zinc-50'}`}>
-                                      <HighlightText text={profile.name} query={query} />
-                                    </h3>
-                                    {profile.isHighlyRecommended && (
-                                      <BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" title="Verified Specialist" />
-                                    )}
-                                  </div>
-
-                                  <span className={`text-[10px] font-mono shrink-0 ${isAvailableNow ? 'text-emerald-400 font-medium' : 'text-zinc-400'}`}>
-                                    {profile.dayRate ? `£${profile.dayRate}/d` : profile.availability.split(' ')[0]}
-                                  </span>
-                                </div>
-
-                                <p className="text-[11px] text-zinc-400 truncate font-normal">
-                                  <HighlightText text={profile.title} query={query} />
-                                </p>
-
-                                <div className="flex items-center gap-2 text-[10px] text-zinc-500 pt-0.5">
-                                  <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/50 text-zinc-300 font-medium text-[10px]">
-                                    {profile.department}
-                                  </span>
-                                  <span className="truncate">{profile.location.split(',')[0]}</span>
-                                  <span>•</span>
-                                  <span>{profile.yearsOfExperience}y exp</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Quick Actions */}
-                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCompare(profile)}
-                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                  isCompared
-                                    ? 'text-blue-400 bg-blue-950/60 border border-blue-700'
-                                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-                                }`}
-                                title={isCompared ? 'In comparison' : 'Add to compare'}
-                              >
-                                <Scale className="w-3.5 h-3.5" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={(e) => toggleBookmark(profile.id, e)}
-                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                  isProfileBookmarked
-                                    ? 'text-blue-400 bg-blue-950/40 border border-blue-800/40'
-                                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-                                }`}
-                                title={isProfileBookmarked ? 'Saved in shortlist' : 'Save specialist'}
-                              >
-                                {isProfileBookmarked ? (
-                                  <BookmarkCheck className="w-3.5 h-3.5 fill-blue-400" />
-                                ) : (
-                                  <Bookmark className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Right Column: Live Specialist Dossier */}
-                  <div className="lg:col-span-7 sticky top-20">
+                    {/* Centered Enlarged Specialist Dossier Card */}
                     <AnimatePresence mode="wait">
                       <motion.div
-                        key={activeSelectedProfile ? activeSelectedProfile.id : 'empty'}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
+                        key={activeSelectedProfile ? activeSelectedProfile.id : 'empty-focus'}
+                        initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.98, y: -10 }}
                         transition={{ duration: 0.2, ease: 'easeOut' }}
+                        className="w-full flex justify-center"
                       >
                         <SpecialistDossierPane
                           profile={activeSelectedProfile}
@@ -649,11 +641,167 @@ export default function App() {
                           documents={activeSelectedProfile ? getDocumentsForProfile(activeSelectedProfile.id) : []}
                           onAddDocument={(doc) => activeSelectedProfile && addDocument(activeSelectedProfile.id, doc)}
                           onRemoveDocument={(docId) => activeSelectedProfile && removeDocument(activeSelectedProfile.id, docId)}
+                          isFocusMode={true}
+                          onToggleFocusMode={() => setIsFocusMode(false)}
+                          onPrevProfile={handlePrevProfile}
+                          onNextProfile={handleNextProfile}
+                          profileIndex={currentSelectedIdx >= 0 ? currentSelectedIdx : 0}
+                          totalProfiles={results.length}
                         />
                       </motion.div>
                     </AnimatePresence>
                   </div>
-                </div>
+                ) : (
+                  /* Standard Split-Pane Operations Command */
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start min-h-[580px]">
+                    {/* Left Column: Animated List */}
+                    <div className="lg:col-span-5 space-y-2 max-h-[720px] overflow-y-auto pr-1">
+                      <AnimatePresence mode="popLayout">
+                        {results.map((profile, index) => {
+                          const isSelected = selectedProfileId === profile.id;
+                          const isProfileBookmarked = isBookmarked(profile.id);
+                          const isCompared = compareIds.includes(profile.id);
+                          const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
+
+                          return (
+                            <motion.div
+                              layout
+                              initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                              transition={{
+                                duration: 0.22,
+                                delay: Math.min(index * 0.02, 0.18),
+                                ease: [0.16, 1, 0.3, 1],
+                              }}
+                              key={profile.id}
+                              onClick={() => setSelectedProfileId(profile.id)}
+                              className={`group relative p-3.5 rounded-xl border transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
+                                isSelected
+                                  ? 'bg-zinc-900/90 border-zinc-500 shadow-md ring-1 ring-zinc-500/30'
+                                  : 'bg-zinc-900/40 hover:bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="relative shrink-0">
+                                  <img
+                                    src={profile.avatar}
+                                    alt={profile.name}
+                                    referrerPolicy="no-referrer"
+                                    className="w-11 h-11 rounded-lg object-cover border border-zinc-800/90 group-hover:border-zinc-700 transition-colors"
+                                  />
+                                  {isAvailableNow && (
+                                    <span
+                                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-zinc-950"
+                                      title="Available immediately"
+                                    />
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 space-y-1 flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <h3 className={`font-semibold text-xs tracking-tight truncate ${isSelected ? 'text-blue-400' : 'text-zinc-100 group-hover:text-zinc-50'}`}>
+                                        <HighlightText text={profile.name} query={query} />
+                                      </h3>
+                                      {profile.isHighlyRecommended && (
+                                        <BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" title="Verified Specialist" />
+                                      )}
+                                    </div>
+
+                                    <span className={`text-[10px] font-mono shrink-0 ${isAvailableNow ? 'text-emerald-400 font-medium' : 'text-zinc-400'}`}>
+                                      {profile.dayRate ? `£${profile.dayRate}/d` : profile.availability.split(' ')[0]}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-[11px] text-zinc-400 truncate font-normal">
+                                    <HighlightText text={profile.title} query={query} />
+                                  </p>
+
+                                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 pt-0.5">
+                                    <span className="px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/50 text-zinc-300 font-medium text-[10px]">
+                                      {profile.department}
+                                    </span>
+                                    <span className="truncate">{profile.location.split(',')[0]}</span>
+                                    <span>•</span>
+                                    <span>{profile.yearsOfExperience}y exp</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Quick Actions */}
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCompare(profile)}
+                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    isCompared
+                                      ? 'text-blue-400 bg-blue-950/60 border border-blue-700'
+                                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                                  }`}
+                                  title={isCompared ? 'In comparison' : 'Add to compare'}
+                                >
+                                  <Scale className="w-3.5 h-3.5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => toggleBookmark(profile.id, e)}
+                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    isProfileBookmarked
+                                      ? 'text-blue-400 bg-blue-950/40 border border-blue-800/40'
+                                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                                  }`}
+                                  title={isProfileBookmarked ? 'Saved in shortlist' : 'Save specialist'}
+                                >
+                                  {isProfileBookmarked ? (
+                                    <BookmarkCheck className="w-3.5 h-3.5 fill-blue-400" />
+                                  ) : (
+                                    <Bookmark className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Right Column: Live Specialist Dossier */}
+                    <div className="lg:col-span-7 sticky top-20">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={activeSelectedProfile ? activeSelectedProfile.id : 'empty'}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.2, ease: 'easeOut' }}
+                        >
+                          <SpecialistDossierPane
+                            profile={activeSelectedProfile}
+                            searchQuery={query}
+                            isBookmarked={activeSelectedProfile ? isBookmarked(activeSelectedProfile.id) : false}
+                            onToggleBookmark={toggleBookmark}
+                            onShowToast={showToast}
+                            isCompared={activeSelectedProfile ? compareIds.includes(activeSelectedProfile.id) : false}
+                            onToggleCompare={handleToggleCompare}
+                            onRequestMobilization={handleRequestMobilization}
+                            onPrintDossier={handlePrintDossier}
+                            documents={activeSelectedProfile ? getDocumentsForProfile(activeSelectedProfile.id) : []}
+                            onAddDocument={(doc) => activeSelectedProfile && addDocument(activeSelectedProfile.id, doc)}
+                            onRemoveDocument={(docId) => activeSelectedProfile && removeDocument(activeSelectedProfile.id, docId)}
+                            isFocusMode={false}
+                            onToggleFocusMode={() => setIsFocusMode(true)}
+                            onPrevProfile={handlePrevProfile}
+                            onNextProfile={handleNextProfile}
+                            profileIndex={currentSelectedIdx >= 0 ? currentSelectedIdx : 0}
+                            totalProfiles={results.length}
+                          />
+                        </motion.div>
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                )
               ) : viewMode === 'table' ? (
                 /* High-Density Spreadsheet Matrix */
                 <SpecialistTableView

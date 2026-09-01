@@ -19,6 +19,7 @@ const SHORTCUTS: ShortcutItem[] = [
   { key: 'Enter', description: 'Open full inspection dossier modal', category: 'Actions' },
   { key: 'S', description: 'Toggle candidate bookmark/shortlist', category: 'Actions' },
   { key: 'C', description: 'Copy specialist email to clipboard', category: 'Actions' },
+  { key: 'T', description: 'Toggle Deep Zinc / Light theme', category: 'General' },
   { key: 'Esc', description: 'Clear search / Close modal', category: 'General' },
   { key: '?', description: 'Open keyboard shortcuts sheet', category: 'General' },
 ];

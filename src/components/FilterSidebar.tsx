@@ -173,13 +173,13 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
       {/* Sidebar Header with Results Counter & Clear Action */}
       <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800/80">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+          <div className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700">
             <SlidersHorizontal className="w-4 h-4" />
           </div>
           <div>
             <h3 className="font-bold text-sm text-zinc-100">Filter Engine</h3>
             <p className="text-[11px] text-zinc-400 font-mono">
-              <span className="text-indigo-400 font-semibold">{totalFilteredCount}</span> of {totalCount} profiles match
+              <span className="text-zinc-200 font-semibold">{totalFilteredCount}</span> of {totalCount} profiles match
             </p>
           </div>
         </div>
@@ -188,7 +188,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           type="button"
           id="reset-all-filters-btn"
           onClick={onResetFilters}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-indigo-400 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-zinc-800/60"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-zinc-800/60"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           Reset
@@ -203,7 +203,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           className="w-full flex items-center justify-between text-xs font-bold text-zinc-300 hover:text-white uppercase tracking-wider cursor-pointer"
         >
           <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <Zap className="w-3.5 h-3.5 text-zinc-400" />
             Quick Presets
           </span>
           {expandedSections.presets ? (
@@ -221,13 +221,13 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                 type="button"
                 id={`preset-${preset.id}`}
                 onClick={() => onApplyPreset(preset)}
-                className="p-2.5 rounded-xl text-left bg-zinc-950/60 hover:bg-zinc-800/80 border border-zinc-800 hover:border-indigo-500/50 transition-all duration-150 group cursor-pointer"
+                className="p-2.5 rounded-xl text-left bg-zinc-950/60 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-600 transition-all duration-150 group cursor-pointer"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-zinc-200 group-hover:text-indigo-300">
+                  <span className="text-xs font-semibold text-zinc-200 group-hover:text-white">
                     {preset.name}
                   </span>
-                  <Zap className="w-3 h-3 text-zinc-600 group-hover:text-indigo-400" />
+                  <Zap className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400" />
                 </div>
                 <p className="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">
                   {preset.description}
@@ -246,10 +246,10 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
             onClick={() => toggleSection('skills')}
             className="flex items-center gap-1.5 text-xs font-bold text-zinc-200 uppercase tracking-wider cursor-pointer"
           >
-            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            <Layers className="w-3.5 h-3.5 text-zinc-400" />
             Skills & Stack
             {filters.selectedSkills.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold border border-indigo-500/30">
+              <span className="px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px] font-mono font-bold border border-zinc-700">
                 {filters.selectedSkills.length}
               </span>
             )}
@@ -263,7 +263,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
               onClick={() => onUpdateFilters((prev) => ({ ...prev, skillMatchMode: 'ANY' }))}
               className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${
                 filters.skillMatchMode === 'ANY'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-zinc-700 text-white shadow-xs'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
               title="Match ANY selected skill (OR mode)"
@@ -276,7 +276,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
               onClick={() => onUpdateFilters((prev) => ({ ...prev, skillMatchMode: 'ALL' }))}
               className={`px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all cursor-pointer ${
                 filters.skillMatchMode === 'ALL'
-                  ? 'bg-indigo-600 text-white shadow-xs'
+                  ? 'bg-zinc-700 text-white shadow-xs'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
               title="Match ALL selected skills simultaneously (AND mode)"
@@ -296,7 +296,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                 value={skillSearchQuery}
                 onChange={(e) => setSkillSearchQuery(e.target.value)}
                 placeholder="Search tech stack..."
-                className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/70"
+                className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
             </div>
 
@@ -309,7 +309,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                   onClick={() => setSelectedSkillCategory(cat)}
                   className={`px-2 py-0.5 rounded-md whitespace-nowrap transition-colors cursor-pointer ${
                     selectedSkillCategory === cat
-                      ? 'bg-zinc-800 text-indigo-300 font-semibold border border-indigo-500/30'
+                      ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700'
                       : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
@@ -330,7 +330,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     onClick={() => toggleSkill(skill)}
                     className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
                       isSelected
-                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm shadow-indigo-600/20 font-semibold'
+                        ? 'bg-zinc-800 text-white border-zinc-600 shadow-xs font-semibold'
                         : 'bg-zinc-950/60 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:text-white'
                     }`}
                   >
@@ -352,7 +352,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           className="w-full flex items-center justify-between text-xs font-bold text-zinc-200 uppercase tracking-wider cursor-pointer"
         >
           <span className="flex items-center gap-1.5">
-            <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
+            <GraduationCap className="w-3.5 h-3.5 text-zinc-400" />
             Experience Range
           </span>
           {expandedSections.experience ? (
@@ -385,10 +385,10 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           className="w-full flex items-center justify-between text-xs font-bold text-zinc-200 uppercase tracking-wider cursor-pointer"
         >
           <span className="flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+            <MapPin className="w-3.5 h-3.5 text-zinc-400" />
             Work Mode & Location
             {(filters.locations.length > 0 || filters.remoteTypes.length > 0) && (
-              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px] font-mono font-bold border border-zinc-700">
                 {filters.locations.length + filters.remoteTypes.length}
               </span>
             )}
@@ -414,7 +414,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     onClick={() => toggleRemoteType(type)}
                     className={`py-1.5 px-2 rounded-lg text-xs font-medium transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                        ? 'bg-zinc-800 text-white font-semibold shadow-xs'
                         : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
                     }`}
                   >
@@ -434,7 +434,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                   value={locationSearchQuery}
                   onChange={(e) => setLocationSearchQuery(e.target.value)}
                   placeholder="Filter locations..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/70"
+                  className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                 />
               </div>
 
@@ -449,11 +449,11 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                       onClick={() => toggleLocation(loc)}
                       className={`px-2.5 py-1 text-xs rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
                         isSelected
-                          ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50 font-semibold'
+                          ? 'bg-zinc-800 text-white border-zinc-600 font-semibold'
                           : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                       }`}
                     >
-                      {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
                       <span>{loc}</span>
                     </button>
                   );
@@ -472,10 +472,10 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           className="w-full flex items-center justify-between text-xs font-bold text-zinc-200 uppercase tracking-wider cursor-pointer"
         >
           <span className="flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+            <Building2 className="w-3.5 h-3.5 text-zinc-400" />
             Company & Alumni
             {filters.companies.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px] font-mono font-bold border border-zinc-700">
                 {filters.companies.length}
               </span>
             )}
@@ -496,7 +496,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                 value={companySearchQuery}
                 onChange={(e) => setCompanySearchQuery(e.target.value)}
                 placeholder="Search companies (Anthropic, Stripe...)"
-                className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/70"
+                className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
             </div>
 
@@ -511,11 +511,11 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     onClick={() => toggleCompany(company)}
                     className={`px-2.5 py-1 text-xs rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
                       isSelected
-                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50 font-semibold'
+                        ? 'bg-zinc-800 text-white border-zinc-600 font-semibold'
                         : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                     }`}
                   >
-                    {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
                     <span>{company}</span>
                   </button>
                 );
@@ -533,10 +533,10 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
           className="w-full flex items-center justify-between text-xs font-bold text-zinc-200 uppercase tracking-wider cursor-pointer"
         >
           <span className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            <Clock className="w-3.5 h-3.5 text-zinc-400" />
             Availability Status
             {filters.availability.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold">
+              <span className="px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px] font-mono font-bold border border-zinc-700">
                 {filters.availability.length}
               </span>
             )}
@@ -560,7 +560,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                   onClick={() => toggleAvailability(status)}
                   className={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between border transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-indigo-500/15 border-indigo-500/50 text-indigo-200 font-semibold'
+                      ? 'bg-zinc-800 border-zinc-600 text-white font-semibold'
                       : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                   }`}
                 >
@@ -568,7 +568,7 @@ export const FilterSidebar: React.FC<FilterSidebarProps> = ({
                     <span className={`w-2 h-2 rounded-full ring-2 ${dotColor}`} />
                     <span>{status}</span>
                   </div>
-                  {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                  {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
                 </button>
               );
             })}

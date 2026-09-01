@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SpecialistDocument } from '../types';
 import { CertificationBadge } from './CertificationBadge';
 import { DocumentVault } from './DocumentVault';
+import { CandidateSkillRadarChart } from './CandidateSkillRadarChart';
+import { computeCandidateSkillScores } from '../utils/skillRadarUtils';
 import {
   X,
   MapPin,
@@ -21,6 +24,12 @@ import {
   Send,
   Printer,
   FileCheck,
+  Sparkles,
+  Activity,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Award,
 } from 'lucide-react';
 
 interface ProfileDetailModalProps {
@@ -53,7 +62,11 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
   onRemoveDocument,
 }) => {
   const [copiedEmail, setCopiedEmail] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'documents'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'radar' | 'documents'>('profile');
+  const [isRadarExpanded, setIsRadarExpanded] = useState<boolean>(true);
+
+  const skillScores = profile ? computeCandidateSkillScores(profile) : [];
+  const avgScore = skillScores.length > 0 ? Math.round(skillScores.reduce((acc, curr) => acc + curr.value, 0) / skillScores.length) : 0;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -80,7 +93,7 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl text-zinc-100 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col overflow-hidden"
+        className="w-full max-w-3xl bg-zinc-900 border border-zinc-800 rounded-2xl text-zinc-100 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -127,6 +140,8 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
                   </span>
                   <span>•</span>
                   <span className="text-blue-400 font-medium">{profile.department}</span>
+                  <span>•</span>
+                  <span className="font-mono text-zinc-300">{profile.yearsOfExperience} yrs experience</span>
                 </div>
               </div>
             </div>
@@ -216,17 +231,31 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
           </div>
 
           {/* Subtabs */}
-          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800">
+          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800 flex-wrap">
             <button
               type="button"
               onClick={() => setActiveTab('profile')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'profile'
                   ? 'bg-zinc-800 text-white shadow-xs'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
+              <Layers className="w-3.5 h-3.5" />
               <span>Profile & History</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('radar')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'radar'
+                  ? 'bg-zinc-800 text-white shadow-xs'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Skills Radar</span>
             </button>
 
             <button
@@ -234,13 +263,13 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
               onClick={() => setActiveTab('documents')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'documents'
-                  ? 'bg-blue-950/80 border border-blue-700 text-blue-200 shadow-xs'
+                  ? 'bg-zinc-800 text-white shadow-xs'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <FileCheck className="w-3.5 h-3.5 text-blue-400" />
+              <FileCheck className="w-3.5 h-3.5 text-zinc-400" />
               <span>Compliance Documents</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-blue-900/60 text-blue-300 font-mono text-[10px]">
+              <span className="px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px]">
                 {documents.length}
               </span>
             </button>
@@ -257,6 +286,18 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
               onRemoveDocument={(docId) => onRemoveDocument?.(docId)}
               onShowToast={onShowToast || (() => {})}
             />
+          ) : activeTab === 'radar' ? (
+            <div className="space-y-4">
+              <CandidateSkillRadarChart profile={profile} size="lg" showLegend={true} />
+              <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800 text-xs text-zinc-400">
+                <span className="font-semibold text-zinc-200 block mb-1 font-mono text-[11px] uppercase">
+                  Offshore Competency Breakdown
+                </span>
+                <p>
+                  Visualizes normalized scores in <strong>Geotechnical</strong>, <strong>Environmental</strong>, and <strong>Data Analysis</strong>, along with specialized subsea survey, HSE, and Quality Control metrics.
+                </p>
+              </div>
+            </div>
           ) : (
             <>
               {/* Bio Overview */}
@@ -267,18 +308,103 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
                 <p className="text-zinc-300 leading-relaxed">{profile.bio}</p>
               </div>
 
+              {/* D3 Radar Chart Summary Card with Expand/Collapse Toggle */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5 font-mono">
+                    <Activity className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Competency Radar Analysis</span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      id="modal-toggle-radar-collapse-btn"
+                      onClick={() => setIsRadarExpanded(!isRadarExpanded)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-950/70 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer shadow-2xs"
+                      title={isRadarExpanded ? 'Collapse radar breakdown' : 'Expand radar breakdown'}
+                    >
+                      <span>{isRadarExpanded ? 'Collapse' : 'Expand'}</span>
+                      {isRadarExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('radar')}
+                      className="text-xs text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+                    >
+                      Full Radar →
+                    </button>
+                  </div>
+                </div>
+
+                <AnimatePresence initial={false} mode="wait">
+                  {isRadarExpanded ? (
+                    <motion.div
+                      key="modal-radar-chart-expanded"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <CandidateSkillRadarChart profile={profile} size="sm" showLegend={false} />
+                    </motion.div>
+                  ) : (
+                    <motion.button
+                      key="modal-radar-chart-collapsed"
+                      type="button"
+                      id="modal-expand-collapsed-radar-banner"
+                      onClick={() => setIsRadarExpanded(true)}
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                      className="w-full p-3 rounded-xl bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 flex items-center justify-between text-left transition-colors cursor-pointer group"
+                      title="Click to expand D3 competency radar chart"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-zinc-200 shrink-0">
+                          <Activity className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-zinc-300 group-hover:text-white truncate">
+                            Radar Breakdown Collapsed
+                          </p>
+                          <p className="text-[10px] text-zinc-500 font-mono">
+                            6 Competency Vectors • Click to show
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[11px] font-medium flex items-center gap-1">
+                          <Award className="w-3 h-3 text-zinc-400" />
+                          {avgScore}% Composite
+                        </span>
+                        <span className="text-xs text-blue-400 font-medium group-hover:underline flex items-center gap-0.5">
+                          <span>Show Radar</span>
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </span>
+                      </div>
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {/* Survey Disciplines */}
               {profile.surveyTypes && profile.surveyTypes.length > 0 && (
                 <div className="space-y-1.5">
                   <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Compass className="w-3.5 h-3.5 text-blue-400" />
+                    <Compass className="w-3.5 h-3.5 text-zinc-400" />
                     <span>Survey & Operations Disciplines</span>
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {profile.surveyTypes.map((type) => (
                       <span
                         key={type}
-                        className="px-2.5 py-1 rounded-lg bg-blue-950/40 border border-blue-800/40 text-blue-200 font-medium text-xs"
+                        className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium text-xs"
                       >
                         {type}
                       </span>
@@ -291,7 +417,7 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
               {profile.certifications && profile.certifications.length > 0 && (
                 <div className="space-y-1.5">
                   <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
                     <span>Offshore Safety & Marine Tickets</span>
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
@@ -325,7 +451,7 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
               {profile.featuredProjects && profile.featuredProjects.length > 0 && (
                 <div className="space-y-1.5">
                   <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                    <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                     <span>Featured Campaigns & Surveys</span>
                   </h3>
                   <div className="space-y-1">
@@ -334,7 +460,7 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
                         key={project}
                         className="p-2 rounded-lg bg-zinc-950/70 border border-zinc-850 text-zinc-300 text-xs flex items-center gap-2"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0" />
                         <span>{project}</span>
                       </div>
                     ))}
@@ -347,7 +473,7 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
                 {profile.pastCompanies && profile.pastCompanies.length > 0 && (
                   <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/60 space-y-1.5">
                     <div className="text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-blue-400" />
+                      <Building className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Past Operators & Clients</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -366,7 +492,7 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
                 {profile.education && (
                   <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/60 space-y-1.5">
                     <div className="text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+                      <GraduationCap className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Education & Academics</span>
                     </div>
                     <p className="text-zinc-300 text-xs">{profile.education}</p>
@@ -397,26 +523,53 @@ export const ProfileDetailModal: React.FC<ProfileDetailModalProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
               title="Open LinkedIn Profile (new tab)"
             >
-              <Linkedin className="w-3.5 h-3.5 text-[#0a66c2]" />
+              <Linkedin className="w-4 h-4 text-[#0a66c2]" />
               <span className="hidden sm:inline">LinkedIn</span>
             </a>
 
             <button
               type="button"
               onClick={handleCopyEmail}
-              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+              className={`relative px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all duration-200 cursor-pointer overflow-hidden ${
+                copiedEmail
+                  ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-xs ring-1 ring-emerald-500/30'
+                  : 'bg-zinc-800 hover:bg-zinc-750 border border-zinc-700/60 text-zinc-200 hover:text-white'
+              }`}
+              title="Copy email address to clipboard"
             >
-              {copiedEmail ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy Email</span>
-                </>
-              )}
+              <AnimatePresence mode="wait" initial={false}>
+                {copiedEmail ? (
+                  <motion.div
+                    key="copied"
+                    initial={{ opacity: 0, scale: 0.85, y: 2 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.85, y: -2 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="flex items-center gap-1.5"
+                  >
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: [0, 1.25, 1] }}
+                      transition={{ duration: 0.22, ease: 'backOut' }}
+                    >
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    </motion.span>
+                    <span className="font-medium text-emerald-300">Copied!</span>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="copy"
+                    initial={{ opacity: 0, scale: 0.85, y: 2 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.85, y: -2 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="flex items-center gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Copy Email</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </button>
 
             {onRequestMobilization ? (

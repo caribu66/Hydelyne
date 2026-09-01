@@ -35,12 +35,12 @@ export const StatsBar: React.FC<StatsBarProps> = ({
       {/* Count readout */}
       <div className="text-xs sm:text-sm font-semibold text-zinc-300 flex items-center gap-2">
         <span>
-          Showing <span className="text-indigo-400 font-bold font-mono">{filteredCount}</span> of{' '}
-          <span className="text-zinc-100 font-mono">{totalCount}</span> profiles
+          Showing <span className="text-zinc-100 font-bold font-mono">{filteredCount}</span> of{' '}
+          <span className="text-zinc-400 font-mono">{totalCount}</span> specialists
         </span>
         {filteredCount < totalCount && (
-          <span className="text-[11px] font-mono font-medium text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">
-            Active Filter Applied
+          <span className="text-[11px] font-mono font-medium text-zinc-300 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full">
+            Active Filter
           </span>
         )}
       </div>

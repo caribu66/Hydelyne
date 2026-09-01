@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SpecialistDocument } from '../types';
 import { HighlightText } from './HighlightText';
 import { CertificationBadge } from './CertificationBadge';
 import { DocumentVault } from './DocumentVault';
+import { CandidateSkillRadarChart } from './CandidateSkillRadarChart';
+import { computeCandidateSkillScores } from '../utils/skillRadarUtils';
 import {
   MapPin,
   Mail,
@@ -15,7 +18,6 @@ import {
   Compass,
   Building,
   GraduationCap,
-  Calendar,
   ShieldCheck,
   Scale,
   Send,
@@ -23,6 +25,14 @@ import {
   FileCheck,
   Maximize2,
   Minimize2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Activity,
+  Layers,
+  Award,
 } from 'lucide-react';
 
 interface SpecialistDossierPaneProps {
@@ -40,6 +50,10 @@ interface SpecialistDossierPaneProps {
   onRemoveDocument?: (docId: string) => void;
   isFocusMode?: boolean;
   onToggleFocusMode?: () => void;
+  onPrevProfile?: () => void;
+  onNextProfile?: () => void;
+  profileIndex?: number;
+  totalProfiles?: number;
 }
 
 export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
@@ -57,9 +71,17 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
   onRemoveDocument,
   isFocusMode = false,
   onToggleFocusMode,
+  onPrevProfile,
+  onNextProfile,
+  profileIndex,
+  totalProfiles,
 }) => {
   const [copiedEmail, setCopiedEmail] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dossier' | 'vault'>('dossier');
+  const [activeTab, setActiveTab] = useState<'dossier' | 'radar' | 'vault'>('dossier');
+  const [isRadarExpanded, setIsRadarExpanded] = useState<boolean>(true);
+
+  const skillScores = profile ? computeCandidateSkillScores(profile) : [];
+  const avgScore = skillScores.length > 0 ? Math.round(skillScores.reduce((acc, curr) => acc + curr.value, 0) / skillScores.length) : 0;
 
   if (!profile) {
     return (
@@ -69,7 +91,7 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
         </div>
         <h3 className="text-sm font-semibold text-zinc-300">No Specialist Selected</h3>
         <p className="text-xs text-zinc-500 max-w-xs mt-1">
-          Select any crew member from the list or press <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-400 font-mono">↑</kbd> <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-400 font-mono">↓</kbd> to inspect their dossier and compliance documents in centered focus mode.
+          Select any crew member from the list or press <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-400 font-mono">↑</kbd> <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] text-zinc-400 font-mono">↓</kbd> to inspect their dossier, D3 skill radar, and compliance documents in centered focus mode.
         </p>
       </div>
     );
@@ -86,14 +108,71 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
 
   return (
     <div
+      id="specialist-focused-card"
       className={`bg-zinc-900 border border-zinc-800 rounded-2xl text-zinc-100 flex flex-col overflow-hidden shadow-2xl transition-all duration-300 ${
         isFocusMode
-          ? 'w-full max-w-4xl mx-auto ring-1 ring-blue-500/20 shadow-blue-950/20'
+          ? 'w-full max-w-5xl mx-auto ring-1 ring-zinc-700 shadow-zinc-950/80 my-2'
           : 'h-full'
       }`}
     >
+      {/* Focus Mode Navigation Banner */}
+      {isFocusMode && (
+        <div className="bg-zinc-950/90 border-b border-zinc-800 px-6 py-3 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+            </span>
+            <span className="font-semibold text-zinc-200 uppercase tracking-wider font-mono text-[11px]">
+              Focused Specialist Workspace
+            </span>
+            {totalProfiles && totalProfiles > 1 && (
+              <span className="text-zinc-400 font-mono text-[11px]">
+                ({(profileIndex ?? 0) + 1} of {totalProfiles})
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onPrevProfile && (
+              <button
+                type="button"
+                onClick={onPrevProfile}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                title="Previous Specialist (Press Left Arrow)"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Prev</span>
+              </button>
+            )}
+            {onNextProfile && (
+              <button
+                type="button"
+                onClick={onNextProfile}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                title="Next Specialist (Press Right Arrow)"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onToggleFocusMode && (
+              <button
+                type="button"
+                onClick={onToggleFocusMode}
+                className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 hover:text-white flex items-center gap-1 font-medium transition-colors cursor-pointer ml-1"
+                title="Exit focus mode back to Split-Pane"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span>Exit Focus</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header Profile Section */}
-      <div className={`border-b border-zinc-800 bg-zinc-950/60 ${isFocusMode ? 'p-6 sm:p-7' : 'p-5'}`}>
+      <div className={`border-b border-zinc-800 bg-zinc-950/70 ${isFocusMode ? 'p-6 sm:p-7' : 'p-5'}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4 min-w-0">
             <div className="relative shrink-0">
@@ -102,7 +181,7 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
                 alt={profile.name}
                 referrerPolicy="no-referrer"
                 className={`rounded-2xl object-cover border border-zinc-700/80 shadow-lg transition-all ${
-                  isFocusMode ? 'w-18 h-18 sm:w-20 sm:h-20' : 'w-14 h-14'
+                  isFocusMode ? 'w-18 h-18 sm:w-22 sm:h-22' : 'w-14 h-14'
                 }`}
               />
               {isAvailableNow && (
@@ -126,11 +205,6 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
                     <span>Verified Consultant</span>
                   </span>
                 )}
-                {isFocusMode && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 text-[10px] font-mono">
-                    Focus Mode
-                  </span>
-                )}
               </div>
 
               <p className={`text-zinc-300 font-medium truncate ${isFocusMode ? 'text-sm sm:text-base' : 'text-xs'}`}>
@@ -144,6 +218,8 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
                 </span>
                 <span>•</span>
                 <span className="text-blue-400 font-medium">{profile.department}</span>
+                <span>•</span>
+                <span className="font-mono text-zinc-300">{profile.yearsOfExperience}y offshore exp</span>
               </div>
             </div>
           </div>
@@ -234,8 +310,8 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
           </div>
         </div>
 
-        {/* Tabs: Dossier vs Compliance Documents */}
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800/80">
+        {/* Navigation Tabs: Dossier, D3 Radar, Compliance Documents */}
+        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800/80 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveTab('dossier')}
@@ -247,7 +323,23 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
+            <Layers className="w-3.5 h-3.5 text-zinc-400" />
             <span>Candidate Dossier</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('radar')}
+            className={`px-3.5 py-1.5 rounded-xl font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+              isFocusMode ? 'text-xs sm:text-sm' : 'text-xs'
+            } ${
+              activeTab === 'radar'
+                ? 'bg-zinc-800 text-white shadow-xs'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Skills Radar</span>
           </button>
 
           <button
@@ -257,13 +349,13 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
               isFocusMode ? 'text-xs sm:text-sm' : 'text-xs'
             } ${
               activeTab === 'vault'
-                ? 'bg-blue-950/80 border border-blue-700 text-blue-200 shadow-xs'
+                ? 'bg-zinc-800 text-white shadow-xs'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <FileCheck className="w-3.5 h-3.5 text-blue-400" />
+            <FileCheck className="w-3.5 h-3.5 text-zinc-400" />
             <span>Compliance & Documents</span>
-            <span className="px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 font-mono text-[10px]">
+            <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px]">
               {documents.length}
             </span>
           </button>
@@ -271,7 +363,7 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
       </div>
 
       {/* Scrollable Dossier Content */}
-      <div className={`overflow-y-auto space-y-5 text-zinc-200 ${isFocusMode ? 'p-6 sm:p-8 max-h-[680px] text-sm' : 'p-5 flex-1 text-xs'}`}>
+      <div className={`overflow-y-auto space-y-5 text-zinc-200 ${isFocusMode ? 'p-6 sm:p-8 max-h-[720px] text-sm' : 'p-5 flex-1 text-xs'}`}>
         {activeTab === 'vault' ? (
           <DocumentVault
             profile={profile}
@@ -280,6 +372,22 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
             onRemoveDocument={(docId) => onRemoveDocument?.(docId)}
             onShowToast={onShowToast}
           />
+        ) : activeTab === 'radar' ? (
+          <div className="space-y-4">
+            <CandidateSkillRadarChart
+              profile={profile}
+              size={isFocusMode ? 'lg' : 'md'}
+              showLegend={true}
+            />
+            <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/70 text-xs text-zinc-400 space-y-1.5">
+              <span className="font-semibold text-zinc-200 block font-mono text-[11px] uppercase">
+                Methodology & Assessment Criteria
+              </span>
+              <p>
+                Calculated dynamically from verified offshore track records, certifications (BOSIET, GWO, STCW), and technical proficiencies in <strong className="text-zinc-300">Geotechnical</strong>, <strong className="text-zinc-300">Environmental</strong>, and <strong className="text-zinc-300">Data Analysis</strong>.
+              </p>
+            </div>
+          </div>
         ) : (
           <>
             {/* Executive Summary */}
@@ -292,43 +400,107 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
               </p>
             </div>
 
-            {/* Quick Document Snapshot Banner */}
-            {documents.length > 0 && (
-              <div
-                onClick={() => setActiveTab('vault')}
-                className="p-3.5 bg-zinc-950/70 hover:bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between cursor-pointer transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-800/80 flex items-center justify-center text-emerald-400">
-                    <FileCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-semibold text-zinc-200 text-xs sm:text-sm block group-hover:text-blue-400 transition-colors">
-                      {documents.length} Verified Compliance Documents on File
-                    </span>
-                    <span className="text-xs text-zinc-400">
-                      BOSIET, Medical, CV & Marine Accreditations verified
-                    </span>
-                  </div>
+            {/* Embedded D3 Radar Preview Card with Expand/Collapse Toggle */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                  <Activity className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Competency Radar Analysis</span>
+                </h4>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    id="toggle-radar-collapse-btn"
+                    onClick={() => setIsRadarExpanded(!isRadarExpanded)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-950/70 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer shadow-2xs"
+                    title={isRadarExpanded ? 'Collapse radar breakdown' : 'Expand radar breakdown'}
+                  >
+                    <span>{isRadarExpanded ? 'Collapse' : 'Expand'}</span>
+                    {isRadarExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('radar')}
+                    className="text-xs text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+                  >
+                    Full Tab →
+                  </button>
                 </div>
-                <span className="text-xs text-blue-400 font-semibold flex items-center gap-1">
-                  Open Vault →
-                </span>
               </div>
-            )}
+
+              <AnimatePresence initial={false} mode="wait">
+                {isRadarExpanded ? (
+                  <motion.div
+                    key="radar-chart-expanded"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <CandidateSkillRadarChart
+                      profile={profile}
+                      size={isFocusMode ? 'md' : 'sm'}
+                      showLegend={isFocusMode}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.button
+                    key="radar-chart-collapsed"
+                    type="button"
+                    id="expand-collapsed-radar-banner"
+                    onClick={() => setIsRadarExpanded(true)}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    className="w-full p-3 rounded-xl bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 flex items-center justify-between text-left transition-colors cursor-pointer group"
+                    title="Click to expand D3 competency radar chart"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-zinc-200 shrink-0">
+                        <Activity className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-zinc-300 group-hover:text-white truncate">
+                          Radar Breakdown Collapsed
+                        </p>
+                        <p className="text-[10px] text-zinc-500 font-mono">
+                          6 Vector Competency Axes • Click to show
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[11px] font-medium flex items-center gap-1">
+                        <Award className="w-3 h-3 text-zinc-400" />
+                        {avgScore}% Composite
+                      </span>
+                      <span className="text-xs text-blue-400 font-medium group-hover:underline flex items-center gap-0.5">
+                        <span>Show Radar</span>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Survey Disciplines */}
             {profile.surveyTypes && profile.surveyTypes.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                  <Compass className="w-3.5 h-3.5 text-blue-400" />
+                  <Compass className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Survey & Operations Focus</span>
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {profile.surveyTypes.map((type) => (
                     <span
                       key={type}
-                      className="px-3 py-1.5 rounded-xl bg-blue-950/40 border border-blue-800/40 text-blue-200 font-medium text-xs"
+                      className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium text-xs"
                     >
                       <HighlightText text={type} query={searchQuery} />
                     </span>
@@ -341,7 +513,7 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
             {profile.certifications && profile.certifications.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Valid Safety & Marine Certifications</span>
                 </h4>
                 <div className="flex flex-wrap gap-2">
@@ -375,7 +547,7 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
             {profile.pastCompanies && profile.pastCompanies.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                  <Building className="w-3.5 h-3.5 text-blue-400" />
+                  <Building className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Past Operators & Energy Clients</span>
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
@@ -395,7 +567,7 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
             {profile.education && (
               <div className="space-y-1.5 pt-1">
                 <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                  <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+                  <GraduationCap className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Academic Credentials</span>
                 </h4>
                 <p className="text-xs sm:text-sm text-zinc-300">{profile.education}</p>
@@ -409,7 +581,9 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
       <div className={`bg-zinc-950 border-t border-zinc-800 flex items-center justify-between gap-3 ${isFocusMode ? 'p-5 sm:p-6' : 'p-4'}`}>
         <div className="min-w-0">
           <span className="text-xs sm:text-sm text-zinc-300 font-mono block truncate">{profile.email}</span>
-          <span className="text-[11px] text-zinc-500">Press <kbd className="font-mono text-zinc-300">C</kbd> to copy email • <kbd className="font-mono text-zinc-300">F</kbd> toggle focus</span>
+          <span className="text-[11px] text-zinc-500">
+            Press <kbd className="font-mono text-zinc-300">C</kbd> to copy email • <kbd className="font-mono text-zinc-300">F</kbd> toggle focus
+          </span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -431,19 +605,46 @@ export const SpecialistDossierPane: React.FC<SpecialistDossierPaneProps> = ({
           <button
             type="button"
             onClick={handleCopyEmail}
-            className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs sm:text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            className={`relative px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium flex items-center gap-1.5 transition-all duration-200 cursor-pointer overflow-hidden ${
+              copiedEmail
+                ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-xs ring-1 ring-emerald-500/30'
+                : 'bg-zinc-800 hover:bg-zinc-750 border border-zinc-700/60 text-zinc-200 hover:text-white'
+            }`}
+            title="Copy email address to clipboard"
           >
-            {copiedEmail ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy</span>
-              </>
-            )}
+            <AnimatePresence mode="wait" initial={false}>
+              {copiedEmail ? (
+                <motion.div
+                  key="copied"
+                  initial={{ opacity: 0, scale: 0.85, y: 2 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, y: -2 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="flex items-center gap-1.5"
+                >
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.25, 1] }}
+                    transition={{ duration: 0.22, ease: 'backOut' }}
+                  >
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  </motion.span>
+                  <span className="font-medium text-emerald-300">Copied!</span>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="copy"
+                  initial={{ opacity: 0, scale: 0.85, y: 2 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, y: -2 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-200" />
+                  <span>Copy</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </button>
 
           {onRequestMobilization ? (

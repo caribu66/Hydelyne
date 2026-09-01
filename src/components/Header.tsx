@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Sparkles,
+  Compass,
   Bookmark,
   LayoutGrid,
   List,
@@ -48,16 +48,16 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onGoHome}
           className="flex items-center gap-3 cursor-pointer group select-none"
         >
-          <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-700/80 text-blue-400 shadow-xs group-hover:border-zinc-500 transition-colors">
-            <Sparkles className="w-4 h-4" />
+          <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-700/80 text-zinc-200 shadow-xs group-hover:border-zinc-500 transition-colors">
+            <Compass className="w-4 h-4 text-zinc-300" />
           </div>
 
           <div className="flex items-center gap-2">
             <span className="font-semibold text-base sm:text-lg tracking-tight text-zinc-100">
               Hydenlyne
             </span>
-            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-blue-950/60 text-blue-300 border border-blue-800/60">
-              Network
+            <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-300 border border-zinc-800">
+              Talent Matrix
             </span>
           </div>
         </div>
@@ -133,6 +133,28 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           )}
+
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            id="header-theme-toggle-btn"
+            onClick={onToggleTheme}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+            title={isDark ? 'Switch to High-Contrast Light Theme' : 'Switch to Deep Zinc Dark Theme'}
+            aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+          >
+            {isDark ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="hidden md:inline">Dark</span>
+              </>
+            )}
+          </button>
 
           {/* Filter Drawer Button */}
           <button

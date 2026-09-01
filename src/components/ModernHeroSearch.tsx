@@ -169,7 +169,7 @@ export const ModernHeroSearch: React.FC<ModernHeroSearchProps> = ({
                   }}
                   className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer border ${
                     isActive
-                      ? 'bg-blue-950/80 border-blue-700/80 text-blue-200 font-medium shadow-xs'
+                      ? 'bg-zinc-800 border-zinc-600 text-zinc-100 font-medium shadow-xs'
                       : 'bg-zinc-900/60 hover:bg-zinc-800/80 border-zinc-800/80 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 font-normal'
                   }`}
                 >
