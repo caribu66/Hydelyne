@@ -1,4 +1,5 @@
 """Test crew member GraphQL operations."""
+
 import pytest
 
 CREATE_CREW_MUTATION = """
@@ -32,6 +33,16 @@ query ListCrewMembers {
         id
         fullName
         email
+    }
+}
+"""
+
+UPDATE_CREW_MUTATION = """
+mutation UpdateCrewMember($id: String!, $fullName: String, $phone: String) {
+    updateCrewMember(id: $id, fullName: $fullName, phone: $phone) {
+        id
+        fullName
+        phone
     }
 }
 """
@@ -86,6 +97,30 @@ async def test_get_crew_member(client):
     data = response.json()["data"]["crewMember"]
     assert data["fullName"] == "Jane Doe"
     assert data["email"] == "jane@example.com"
+
+
+@pytest.mark.asyncio
+async def test_update_crew_member(client):
+    create_response = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CREW_MUTATION,
+            "variables": {"fullName": "Alex Storm", "email": "alex@example.com"},
+        },
+    )
+    crew_id = create_response.json()["data"]["createCrewMember"]["id"]
+
+    response = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_CREW_MUTATION,
+            "variables": {"id": crew_id, "fullName": "Alex J. Storm", "phone": "+44 7000 000000"},
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]["updateCrewMember"]
+    assert data["fullName"] == "Alex J. Storm"
+    assert data["phone"] == "+44 7000 000000"
 
 
 @pytest.mark.asyncio

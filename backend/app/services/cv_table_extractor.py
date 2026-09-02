@@ -12,6 +12,7 @@ header cell, and reconstructs them as structured records.  It does not
 replace the LLM extractor — it complements it by providing reliable,
 deterministic rows for the parts of the CV that are tables.
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,13 +24,25 @@ logger = logging.getLogger(__name__)
 
 
 SECTION_HEADERS = {
-    "training": re.compile(r"\bTRAINING(?:/QUALIFICATIONS)?\b|\bCERTIFICATIONS?\b|\bCERTIFICATES?\b", re.I),
+    "training": re.compile(
+        r"\bTRAINING(?:/QUALIFICATIONS)?\b|\bCERTIFICATIONS?\b|\bCERTIFICATES?\b", re.I
+    ),
     "geography": re.compile(r"\bGEOGRAPHICAL\s+EXPERIENCE\b|\bGEOGRAPHY\b", re.I),
     "systems": re.compile(r"\bSYSTEMS\s+EXPERIENCE\b", re.I),
     "projects": re.compile(r"\bRECENT\s+PROJECTS?\b|\bPROJECT\s+HISTORY\b", re.I),
     "personal": re.compile(r"\bPERSONAL\s+INFORMATION\b|\bPERSONAL\s+DETAILS\b", re.I),
     "expertise": re.compile(r"^\s*EXPERTISE\s*$", re.I),
+    "summary": re.compile(r"^\s*PROFESSIONAL\s+SUMMARY\s*$", re.I),
 }
+
+# The free-text "Skills & Competencies" sub-list sits inside the
+# PROFESSIONAL SUMMARY section, introduced by this exact label in the
+# template. Splitting on it is purely mechanical (find the line, take
+# everything after it) — no interpretation of what any bullet means.
+_SKILLS_SUBHEADER = re.compile(r"^\s*Skills\s*&\s*Competencies\s*:?\s*$", re.I)
+
+# A plausible CV title line: 2-6 space-separated word-like tokens, no digits.
+_NAME_LINE = re.compile(r"^[A-Za-z][A-Za-z.'\-]*(?:\s+[A-Za-z][A-Za-z.'\-]*){1,5}$")
 
 
 @dataclass
@@ -112,10 +125,19 @@ class CVTableExtraction:
     systems: list[SystemsRecord] = field(default_factory=list)
     training: list[TrainingRecord] = field(default_factory=list)
     projects: list[ProjectRecord] = field(default_factory=list)
+    full_name: Optional[str] = None
+    professional_summary: Optional[str] = None
+    skills: list[str] = field(default_factory=list)
 
     def as_extraction_payload(self) -> dict[str, Any]:
         """Return a dict shaped like the LLM extraction output."""
         payload: dict[str, Any] = {}
+        if self.full_name:
+            payload["full_name"] = self.full_name
+        if self.professional_summary:
+            payload["professional_summary"] = self.professional_summary
+        if self.skills:
+            payload["skills"] = self.skills
         if self.personal and self.personal.fields:
             payload["personal_information"] = self.personal.fields
         if self.expertise:
@@ -125,9 +147,7 @@ class CVTableExtraction:
                 item for record in self.geography for item in record.locations
             ]
         if self.systems:
-            payload["systems"] = [
-                item for record in self.systems for item in record.items
-            ]
+            payload["systems"] = [item for record in self.systems for item in record.items]
         if self.training:
             payload["training_qualifications"] = [
                 record.as_extraction_string() for record in self.training
@@ -151,7 +171,10 @@ class CVTableExtraction:
                         "client": project.client,
                         "project": None,
                         "project_type": project.survey_type,
-                        "location": project.vessel,
+                        # The template has no true "location" column, only
+                        # CONTRACTOR/VESSEL — leave location unset rather than
+                        # mislabeling vessel data as a location.
+                        "location": None,
                         "country": project.country,
                         "role": project.position,
                         "start_date": start_date,
@@ -177,6 +200,14 @@ def extract_cv_tables(pdf_path: str) -> CVTableExtraction:
 
     with pdfplumber.open(pdf_path) as pdf:
         page_tables = [(page, page.extract_tables() or []) for page in pdf.pages]
+        page_texts = [page.extract_text() or "" for page in pdf.pages]
+
+    if page_texts:
+        extraction.full_name = _extract_full_name(page_texts[0])
+        extraction.professional_summary, extraction.skills = _extract_free_text_sections(
+            "\n".join(page_texts)
+        )
+
     for page, tables in page_tables:
         for raw_table in tables:
             if not raw_table:
@@ -254,6 +285,90 @@ def _looks_like_header(cell: str) -> bool:
     return True
 
 
+def _extract_full_name(first_page_text: str) -> str | None:
+    """The template's name is always the first non-empty line, before any
+    section header. Validate it looks name-like rather than trusting it
+    blindly — if it doesn't, leave it unset so the document goes to review
+    instead of storing a wrong guess."""
+    for line in first_page_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(pattern.search(stripped) for pattern in SECTION_HEADERS.values()):
+            return None
+        if len(stripped) <= 60 and _NAME_LINE.match(stripped):
+            return _normalise_whitespace(stripped.title() if stripped.isupper() else stripped)
+        return None
+    return None
+
+
+def _extract_free_text_sections(full_text: str) -> tuple[str | None, list[str]]:
+    """Capture the PROFESSIONAL SUMMARY section verbatim: the narrative
+    paragraph as-is, and the "Skills & Competencies" bullets as a plain
+    list. Mechanical text splitting only — no interpretation of content."""
+    lines = full_text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if SECTION_HEADERS["summary"].search(line.strip()):
+            start = index + 1
+            break
+    if start is None:
+        return None, []
+
+    end = len(lines)
+    for index in range(start, len(lines)):
+        stripped = lines[index].strip()
+        if not stripped:
+            continue
+        if any(
+            name != "summary" and pattern.search(stripped)
+            for name, pattern in SECTION_HEADERS.items()
+        ):
+            end = index
+            break
+
+    section_lines = lines[start:end]
+
+    skills_start = None
+    for index, line in enumerate(section_lines):
+        if _SKILLS_SUBHEADER.match(line.strip()):
+            skills_start = index
+            break
+
+    if skills_start is None:
+        summary_lines = section_lines
+        skills_lines: list[str] = []
+    else:
+        summary_lines = section_lines[:skills_start]
+        skills_lines = section_lines[skills_start + 1 :]
+
+    summary_text = "\n".join(line.strip() for line in summary_lines if line.strip()).strip()
+    # A bullet that wraps across two PDF text lines has no bullet glyph on
+    # its continuation line — merge it into the previous entry instead of
+    # treating it as a new one.
+    skills: list[str] = []
+    for line in skills_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _BULLET_PREFIX.match(stripped) or not skills:
+            skills.append(_strip_bullet(stripped))
+        else:
+            skills[-1] = f"{skills[-1]} {stripped}"
+    return (summary_text or None), skills
+
+
+# This template's bullet glyph decodes to a Private Use Area codepoint
+# (U+E000-U+F8FF) from its icon font, not a standard bullet character —
+# confirmed against the real fixture (U+F0A7). Strip any PUA lead-in char
+# alongside ordinary bullet characters.
+_BULLET_PREFIX = re.compile(r"^[\u2022\u00b7\-*\ue000-\uf8ff]+\s*")
+
+
+def _strip_bullet(line: str) -> str:
+    return _BULLET_PREFIX.sub("", line).strip()
+
+
 def _looks_like_project_continuation(table: list[list[str | None]]) -> str | None:
     """Detect a headerless project continuation table by content heuristics."""
     year_re = re.compile(r"^\s*(19|20)\d{2}\b")
@@ -288,7 +403,11 @@ def _extract_expertise(table: list[list[str | None]]) -> list[str]:
             if not text or SECTION_HEADERS["expertise"].match(text):
                 continue
             for piece in re.split(r"[\n,;•·\u2022]+", text):
-                piece = piece.strip()
+                # The delimiter split above catches standard bullets between
+                # items, but this template's own bullet glyph is a Private
+                # Use Area character (see _strip_bullet) that can lead an
+                # item rather than separate two -- strip it too.
+                piece = _strip_bullet(piece.strip())
                 if piece and piece.lower() not in (i.lower() for i in items):
                     items.append(piece)
     return items
@@ -367,8 +486,12 @@ def _extract_training(
             TrainingRecord(
                 name=_normalise_whitespace(name, join_with_space=True),
                 place=_normalise_whitespace(cells[place_idx]) if place_idx < len(cells) else None,
-                completed=_normalise_whitespace(cells[completed_idx]) if completed_idx < len(cells) else None,
-                expiry=_normalise_whitespace(cells[expiry_idx]) if expiry_idx < len(cells) else None,
+                completed=_normalise_whitespace(cells[completed_idx])
+                if completed_idx < len(cells)
+                else None,
+                expiry=_normalise_whitespace(cells[expiry_idx])
+                if expiry_idx < len(cells)
+                else None,
             )
         )
     return out

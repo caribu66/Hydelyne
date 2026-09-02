@@ -68,9 +68,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-XSS-Protection", "1; mode=block")
-        response.headers.setdefault(
-            "Referrer-Policy", "strict-origin-when-cross-origin"
-        )
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         # CSP is intentionally conservative; allow self + fonts + data/inline where needed
         response.headers.setdefault(
             "Content-Security-Policy",
@@ -103,11 +101,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         try:
             if await cache_service.is_redis_available():
-                count = await cache_service.increment_rate_limit(
-                    key, self.window_seconds
-                )
+                count = await cache_service.increment_rate_limit(key, self.window_seconds)
                 if count and count > self.requests_per_minute:
                     from fastapi.responses import JSONResponse
+
                     return JSONResponse(
                         status_code=429,
                         content={
@@ -116,6 +113,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         },
                     )
         except Exception as e:
-            logger.warning(f"Rate limiting error: {e}")
+            # Fail-open with security degradation signal: blocking traffic
+            # because Redis is down would be a worse availability event than
+            # letting requests through unmetered. See ADR-0002.
+            logger.warning("security_degradation: rate limit lookup failed, failing open: %s", e)
 
         return await call_next(request)

@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import strawberry
 from fastapi import FastAPI, Request, Response
@@ -12,7 +11,6 @@ from app.api.dropbox import router as dropbox_router
 from app.api.health import router as health_router
 from app.api.search import router as search_router
 from app.config import get_settings
-from app.database import init_db
 from app.graphql.schema import Mutation, Query
 from app.graphql.validation import DepthValidationExtension, DisableIntrospection
 from app.middleware import (
@@ -102,17 +100,10 @@ async def lifespan(app: FastAPI):
     configure_logging()
     validate_prod_secrets()
     init_sentry()
-    # Run DB migrations (alembic) with fallback to create_all for dev sqlite
-    try:
-        await init_db()
-    except RuntimeError:
-        # init_db already raises on secret misuse, re-raise
-        raise
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).warning(f"DB init failed: {e}")
-        raise
+    # Migrations are a discrete deployment step (backend/Dockerfile entrypoint);
+    # the API assumes the schema is already current and will not start if it
+    # isn't. See ADR-0002 for the rationale and ``app.database.init_db`` for
+    # the SQLite dev/test helper.
     # Bootstrap admin user if configured
     try:
         from app.services.crew import bootstrap_admin
@@ -140,8 +131,17 @@ def create_app() -> FastAPI:
     )
 
     # CORS: allow localhost dev + configured frontend/app URLs + explicit list
-    cors_origins = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:3000", "http://127.0.0.1:5173"]
-    for url in [settings.APP_URL, getattr(settings, "FRONTEND_URL", ""), getattr(settings, "CORS_ORIGINS", "")]:
+    cors_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+    for url in [
+        settings.APP_URL,
+        getattr(settings, "FRONTEND_URL", ""),
+        getattr(settings, "CORS_ORIGINS", ""),
+    ]:
         if not url:
             continue
         # Support comma-separated lists (e.g., CORS_ORIGINS="https://a.com,https://b.com")

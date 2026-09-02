@@ -29,6 +29,9 @@ build/
 *.swp
 *.swo
 
+# AI tool working state (not project content)
+.kilo/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -43,7 +46,3 @@ data/documents/
 
 # Timestamped .env backups
 .env.bak.*
-
-# frontend/ is its own git repository (remote: caribu66/Hydelyne) and is
-# committed there, not here.
-frontend/

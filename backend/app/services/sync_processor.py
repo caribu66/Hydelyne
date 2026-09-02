@@ -31,7 +31,9 @@ def get_sync_engine():
                 db_url = candidate
             except ImportError:
                 db_url = db_url.replace("postgresql+asyncpg", "postgresql")
-                logger.warning("psycopg2 not installed, using default postgresql driver for sync engine")
+                logger.warning(
+                    "psycopg2 not installed, using default postgresql driver for sync engine"
+                )
         elif db_url.startswith("sqlite+aiosqlite"):
             db_url = db_url.replace("sqlite+aiosqlite", "sqlite")
         try:
@@ -100,40 +102,20 @@ class SyncDocumentProcessor:
                         classification_result = extraction_service.classify_document_sync(text)
                         doc.classification = classification_result.get("classification", "other")
                         session.commit()
-                        # Now extract with determined classification
-                        extraction_result = extraction_service.extract_document_sync(
-                            text, doc.classification
-                        )
 
+                    from app.services.cv_processing import CVProcessingService
+
+                    if doc.classification == "cv":
+                        # CVs never go through the LLM — see
+                        # CVProcessingService.extract_cv_deterministically
+                        # and backend/docs/consultant-knowledge-core.md.
+                        extraction_result = CVProcessingService.extract_cv_deterministically(
+                            extraction_path, doc.file_type, text
+                        )
                     else:
                         extraction_result = extraction_service.extract_document_sync(
                             text, doc.classification
                         )
-
-                    from app.services.cv_processing import CVProcessingService
-                    if doc.classification == "cv":
-                        # Deterministic table-aware extraction recovers
-                        # the structured sections of the CV (PERSONAL
-                        # INFO, TRAINING, GEOGRAPHY, SYSTEMS, RECENT
-                        # PROJECTS) by walking PDF tables directly.
-                        if doc.file_type == "pdf":
-                            try:
-                                from app.services.cv_table_extractor import (
-                                    extract_cv_tables,
-                                )
-                                table_payload = extract_cv_tables(extraction_path).as_extraction_payload()
-                                if table_payload:
-                                    extraction_result = CVProcessingService.merge_table_extraction(
-                                        extraction_result, table_payload
-                                    )
-                            except Exception as exc:
-                                logger.warning("Table extraction failed for %s: %s", extraction_path, exc)
-                        extracted_training = CVProcessingService.training_from_text(text)
-                        if extracted_training:
-                            extraction_result["training_qualifications"] = extracted_training
-                        extracted_systems = CVProcessingService.systems_from_text(text)
-                        if extracted_systems:
-                            extraction_result["systems"] = list(dict.fromkeys([*(extraction_result.get("systems") or []), *extracted_systems]))
 
                 status, _ = extraction_service.determine_review_status(extraction_result)
 
@@ -148,15 +130,29 @@ class SyncDocumentProcessor:
                 if doc.classification == "cv" and doc.crew_member_id:
                     import asyncio
 
+                    from app.database import dispose_engine
                     from app.services.cv_processing import cv_processing_service
 
-                    # This processor is called by synchronous Celery tasks;
-                    # run the async profile-enrichment service to completion.
-                    asyncio.run(cv_processing_service.process_cv_extraction(
-                        crew_member_id=doc.crew_member_id,
-                        extracted_data=extraction_result,
-                        document_id=document_id,
-                    ))
+                    async def _enrich_profile_and_release_engine() -> None:
+                        # This processor is called by synchronous Celery tasks;
+                        # run the async profile-enrichment service to completion,
+                        # then dispose the async engine before this event loop
+                        # closes. asyncio.run() opens a fresh loop every call, so
+                        # a long-lived worker process reusing the async engine
+                        # singleton across tasks fails on the second CV with
+                        # "attached to a different loop" — disposing releases the
+                        # singleton so the next task's asyncio.run() call gets a
+                        # fresh engine bound to its own fresh loop.
+                        try:
+                            await cv_processing_service.process_cv_extraction(
+                                crew_member_id=doc.crew_member_id,
+                                extracted_data=extraction_result,
+                                document_id=document_id,
+                            )
+                        finally:
+                            await dispose_engine()
+
+                    asyncio.run(_enrich_profile_and_release_engine())
 
                 # Do not expose a terminal document status until any CV fields
                 # have been committed.  The UI uses this state to refresh the

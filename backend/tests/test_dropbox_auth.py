@@ -1,4 +1,5 @@
 """Tests for Dropbox access-token refresh handling."""
+
 import httpx
 import pytest
 
@@ -23,12 +24,14 @@ def creds(monkeypatch):
 
 def _token_transport(calls, tokens=("access-1", "access-2"), expires_in=14400):
     """Mock transport that mints a new access token per refresh call."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
         issued = tokens[min(len(calls) - 1, len(tokens) - 1)]
         return httpx.Response(
             200, json={"access_token": issued, "token_type": "bearer", "expires_in": expires_in}
         )
+
     return httpx.MockTransport(handler)
 
 
@@ -39,6 +42,7 @@ def _patch_refresh_transport(monkeypatch, transport):
     tests build for the API side, so a shim is bound to the module's own
     ``httpx`` name instead.
     """
+
     class _HttpxShim:
         HTTPError = httpx.HTTPError
 
@@ -48,7 +52,6 @@ def _patch_refresh_transport(monkeypatch, transport):
             return httpx.AsyncClient(transport=transport, **kwargs)
 
     monkeypatch.setattr(dropbox_auth, "httpx", _HttpxShim)
-
 
 
 @pytest.mark.asyncio
@@ -116,6 +119,7 @@ async def test_expired_cache_triggers_refresh(creds, monkeypatch):
 @pytest.mark.asyncio
 async def test_refresh_failure_raises(creds, monkeypatch):
     """A revoked refresh token surfaces as DropboxAuthError, not a 200."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(400, json={"error": "invalid_grant"})
 

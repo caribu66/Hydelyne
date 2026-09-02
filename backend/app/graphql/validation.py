@@ -31,13 +31,21 @@ class DepthValidationExtension(SchemaExtension):
                         if depth > MAX_QUERY_DEPTH:
                             raise GraphQLError(
                                 f"Query depth {depth} exceeds maximum allowed depth of {MAX_QUERY_DEPTH}",
-                                extensions={"code": "QUERY_TOO_DEEP", "depth": depth, "max_depth": MAX_QUERY_DEPTH},
+                                extensions={
+                                    "code": "QUERY_TOO_DEEP",
+                                    "depth": depth,
+                                    "max_depth": MAX_QUERY_DEPTH,
+                                },
                             )
                         complexity = calculate_complexity(first.selection_set.selections)
                         if complexity > MAX_QUERY_COMPLEXITY:
                             raise GraphQLError(
                                 f"Query complexity {complexity} exceeds maximum allowed complexity of {MAX_QUERY_COMPLEXITY}",
-                                extensions={"code": "QUERY_TOO_COMPLEX", "complexity": complexity, "max_complexity": MAX_QUERY_COMPLEXITY},
+                                extensions={
+                                    "code": "QUERY_TOO_COMPLEX",
+                                    "complexity": complexity,
+                                    "max_complexity": MAX_QUERY_COMPLEXITY,
+                                },
                             )
         except GraphQLError:
             raise
@@ -96,21 +104,21 @@ def calculate_depth(selections: list, current_depth: int = 0) -> int:
     max_depth = current_depth
     for selection in selections:
         if hasattr(selection, "selection_set") and selection.selection_set:
-            nested_depth = calculate_depth(
-                selection.selection_set.selections, current_depth + 1
-            )
+            nested_depth = calculate_depth(selection.selection_set.selections, current_depth + 1)
             max_depth = max(max_depth, nested_depth)
     return max_depth
 
 
-def calculate_complexity(selections: list, depth: int = 0, field_cost: int = DEFAULT_FIELD_COST) -> int:
+def calculate_complexity(
+    selections: list, depth: int = 0, field_cost: int = DEFAULT_FIELD_COST
+) -> int:
     """Calculate the complexity score of a GraphQL query."""
     if not selections:
         return 0
 
     total = 0
     for selection in selections:
-        cost = field_cost * (NESTED_FIELD_MULTIPLIER ** depth)
+        cost = field_cost * (NESTED_FIELD_MULTIPLIER**depth)
         total += cost
 
         if hasattr(selection, "selection_set") and selection.selection_set:

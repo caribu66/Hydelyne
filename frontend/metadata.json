@@ -1,0 +1,6 @@
+{
+  "name": "Hydenlyne Talent & Survey Consultants",
+  "description": "Global marine environmental, geophysical, geotechnical, and offshore energy survey specialist search and deployment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

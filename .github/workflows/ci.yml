@@ -28,15 +28,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff pytest pytest-asyncio bandit pip-audit
+          pip install -r requirements-dev.txt
+          pip install -e .
 
       - name: Lint (ruff)
-        run: ruff check app/
+        run: |
+          ruff check app tests
+          ruff format --check app tests
 
       - name: Type check (mypy)
-        run: |
-          pip install mypy
-          mypy app/ --ignore-missing-imports --no-strict-optional || true
+        run: mypy app --ignore-missing-imports --no-strict-optional
 
       - name: SAST (bandit)
         run: bandit -r app/ -q
@@ -49,10 +50,7 @@ jobs:
           APP_ENV: development
           DATABASE_URL: sqlite+aiosqlite:///./test.db
           REDIS_URL: redis://localhost:6379/0
-        run: |
-          pip install -e .
-          python -m pytest tests/ -q
-        working-directory: .
+        run: python -m pytest tests -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -69,13 +67,19 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm run test
+
       - name: Build
         run: npm run build
+
+      - name: UI audit (strict)
+        run: npm run ui:audit:strict
 
       - name: Audit (npm audit)
         run: npm audit --audit-level=moderate

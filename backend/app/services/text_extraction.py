@@ -33,6 +33,7 @@ class TextExtractionService:
         """Extract text from PDF using pdfplumber."""
         try:
             import pdfplumber
+
             text_parts = []
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
@@ -48,6 +49,7 @@ class TextExtractionService:
         """Extract text from DOCX using python-docx."""
         try:
             from docx import Document
+
             doc = Document(file_path)
             text_parts = []
             for paragraph in doc.paragraphs:
@@ -97,6 +99,7 @@ class TextExtractionService:
         """Extract text from PDF synchronously."""
         try:
             import pdfplumber
+
             text_parts = []
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
@@ -112,6 +115,7 @@ class TextExtractionService:
         """Extract text from DOCX synchronously."""
         try:
             from docx import Document
+
             doc = Document(file_path)
             text_parts = []
             for paragraph in doc.paragraphs:

@@ -24,6 +24,10 @@ async def get_redis() -> aioredis.Redis:
             encoding="utf-8",
             decode_responses=True,
             max_connections=50,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            socket_keepalive=False,
+            health_check_interval=30,
         )
     return _redis_pool
 
@@ -35,6 +39,10 @@ class CacheService:
     CREW_LIST_TTL = timedelta(minutes=2)
     COMPLIANCE_TTL = timedelta(minutes=10)
     REPORT_TTL = timedelta(minutes=30)
+    # A safety net, not the primary consistency mechanism: explicit
+    # invalidation on profile edit / CV re-processing keeps this fresh in
+    # practice (see ConsultantKnowledgeService.summarize).
+    SUMMARY_TTL = timedelta(minutes=30)
 
     def __init__(self):
         self._redis: Optional[aioredis.Redis] = None

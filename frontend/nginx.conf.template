@@ -1,0 +1,29 @@
+server {
+    listen 80;
+    server_tokens off;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # __API_ORIGIN__ is substituted at build time from VITE_GRAPHQL_URL so the
+    # SPA is allowed to reach the GraphQL backend, which is a different origin
+    # from the one serving these files.
+    add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: https://images.unsplash.com https://api.dicebear.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self' __API_ORIGIN__ https://api.gemini.google.com; frame-ancestors 'self';" always;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /health {
+        return 200 "ok";
+        add_header Content-Type text/plain;
+    }
+}

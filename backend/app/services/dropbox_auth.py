@@ -133,9 +133,7 @@ class DropboxTokenProvider:
                     response.status_code,
                     tag,
                 )
-            raise DropboxAuthError(
-                f"Dropbox token refresh failed ({response.status_code}) {tag}"
-            )
+            raise DropboxAuthError(f"Dropbox token refresh failed ({response.status_code}) {tag}")
 
         payload = response.json()
         token = payload.get("access_token")

@@ -35,23 +35,31 @@ def crew_member_to_dto(model: CrewMemberModel) -> CrewMemberDTO:
             number=model.passport_number,
             expiry=model.passport_expiry,
             issuing_country=model.passport_issuing_country,
-        ) if model.passport_number or model.passport_expiry else None,
+        )
+        if model.passport_number or model.passport_expiry
+        else None,
         visa=VisaInfoDTO(
             type=model.visa_type,
             restrictions=model.visa_restrictions,
             expiry=model.visa_expiry,
-        ) if model.visa_type or model.visa_expiry else None,
+        )
+        if model.visa_type or model.visa_expiry
+        else None,
         medical=MedicalInfoDTO(
             status=model.medical_status,
             expiry=model.medical_expiry,
             provider=model.medical_provider,
-        ) if model.medical_status or model.medical_expiry else None,
+        )
+        if model.medical_status or model.medical_expiry
+        else None,
         insurance=InsuranceInfoDTO(
             provider=model.insurance_provider,
             policy_number=model.insurance_policy_number,
             coverage=model.insurance_coverage,
             expiry=model.insurance_expiry,
-        ) if model.insurance_provider or model.insurance_expiry else None,
+        )
+        if model.insurance_provider or model.insurance_expiry
+        else None,
         availability_status=model.availability_status or "available",
         availability_date=model.availability_date,
         profile_completeness_score=model.profile_completeness_score,

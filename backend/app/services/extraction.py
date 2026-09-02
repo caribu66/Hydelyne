@@ -44,7 +44,6 @@ IMPORTANT: Pay special attention to expiry dates. If unclear, set confidence bel
 
 Document to analyze:
 {document_text}""",
-
     "cv": """You are extracting structured data from a CV or resume for an energy industry consultant.
 
 The document may have sections like: PERSONAL INFORMATION, PROFESSIONAL SUMMARY, EXPERTISE, GEOGRAPHICAL EXPERIENCE, RECENT PROJECTS, CERTIFICATIONS, TRAINING/QUALIFICATIONS, SYSTEMS EXPERIENCE.
@@ -91,7 +90,6 @@ For work_history dates, if only years are given use YYYY-01-01. If a role is ong
 
 Document to analyze:
 {document_text}""",
-
     "identity": """You are extracting structured data from an identity document (passport, visa, or work permit).
 
 Return JSON:
@@ -114,7 +112,6 @@ Return JSON:
 
 Document to analyze:
 {document_text}""",
-
     "project": """You are extracting structured data from a project-related document.
 
 Return JSON:
@@ -138,7 +135,6 @@ Return JSON:
 
 Document to analyze:
 {document_text}""",
-
     "performance": """You are extracting structured data from a performance review or client feedback form.
 
 Return JSON:
@@ -161,7 +157,6 @@ Return JSON:
 
 Document to analyze:
 {document_text}""",
-
     "compliance": """You are extracting structured data from a compliance, insurance, or medical declaration form.
 
 Return JSON:
@@ -185,7 +180,6 @@ Return JSON:
 
 Document to analyze:
 {document_text}""",
-
     "classification": """Classify the following document into one of these categories:
 - certificate: Training certificates, safety certs, medical certs
 - cv: Resume, CV, curriculum vitae
@@ -269,7 +263,9 @@ class ExtractionService:
         prompt_template = EXTRACTION_PROMPTS.get(document_type, EXTRACTION_PROMPTS["certificate"])
         # Document text placeholder not needed for image; prompt already contains instructions
         prompt = prompt_template.format(document_text="[IMAGE]")
-        result = await ollama_client.extract(prompt, model=ollama_client.vision_model, images=[image_data])
+        result = await ollama_client.extract(
+            prompt, model=ollama_client.vision_model, images=[image_data]
+        )
         return self.parse_response(result)
 
     def extract_from_image_sync(
@@ -289,7 +285,9 @@ class ExtractionService:
             prompt = prompt.format(document_text="[IMAGE]")
         except Exception:
             pass
-        result = ollama_client.extract_sync(prompt, model=ollama_client.vision_model, images=[image_data])
+        result = ollama_client.extract_sync(
+            prompt, model=ollama_client.vision_model, images=[image_data]
+        )
         return self.parse_response(result)
 
     def determine_review_status(
@@ -315,7 +313,8 @@ class ExtractionService:
             return "needs_review", needs_review
 
         low_confidence_fields = [
-            f for f, s in confidence.items()
+            f
+            for f, s in confidence.items()
             if isinstance(s, (int, float)) and s < CONFIDENCE_AUTO_ACCEPT
         ]
 
@@ -340,7 +339,7 @@ class ExtractionService:
             end = response_text.rfind("}")
             if start != -1 and end != -1:
                 try:
-                    data = json.loads(response_text[start:end + 1])
+                    data = json.loads(response_text[start : end + 1])
                     return ExtractionService._normalize_extracted_payload(data)
                 except json.JSONDecodeError:
                     pass

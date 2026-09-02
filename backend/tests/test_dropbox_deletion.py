@@ -1,4 +1,5 @@
 """Tests for webhook-driven removal of records deleted inside Dropbox."""
+
 import uuid
 
 import pytest
@@ -6,7 +7,8 @@ from sqlalchemy import select
 
 from app.api.dropbox import process_dropbox_deletion
 from app.database import get_session_factory
-from app.models import CrewMember, Document as DocumentModel
+from app.models import CrewMember
+from app.models import Document as DocumentModel
 
 
 async def _make_document(crew_id: str, doc_id: str, dropbox_path: str) -> None:
@@ -51,9 +53,7 @@ async def test_deletion_removes_document_record():
 
     factory = get_session_factory()
     async with factory() as session:
-        result = await session.execute(
-            select(DocumentModel).where(DocumentModel.id == doc_id)
-        )
+        result = await session.execute(select(DocumentModel).where(DocumentModel.id == doc_id))
         assert result.scalar_one_or_none() is None
 
 
@@ -69,9 +69,7 @@ async def test_deletion_ignores_empty_path():
 
     factory = get_session_factory()
     async with factory() as session:
-        result = await session.execute(
-            select(DocumentModel).where(DocumentModel.id == doc_id)
-        )
+        result = await session.execute(select(DocumentModel).where(DocumentModel.id == doc_id))
         assert result.scalar_one_or_none() is not None
 
 
@@ -87,7 +85,5 @@ async def test_deletion_of_unknown_path_is_noop():
 
     factory = get_session_factory()
     async with factory() as session:
-        result = await session.execute(
-            select(DocumentModel).where(DocumentModel.id == doc_id)
-        )
+        result = await session.execute(select(DocumentModel).where(DocumentModel.id == doc_id))
         assert result.scalar_one_or_none() is not None

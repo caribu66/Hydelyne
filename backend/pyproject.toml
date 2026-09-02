@@ -33,3 +33,8 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-m 'not llm'"
+markers = [
+    "llm: exercises a real local Ollama model; slow and depends on model availability. Run with `pytest -m llm`.",
+    "integration: requires live PostgreSQL/Redis/Meilisearch/Qdrant services. Default suite excludes these markers.",
+]

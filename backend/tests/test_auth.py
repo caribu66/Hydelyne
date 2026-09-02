@@ -1,4 +1,5 @@
 """Security regression tests: auth + login cookie."""
+
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,10 +10,17 @@ async def test_login_returns_token_and_cookie(client, monkeypatch):
     """Login mutation should return the bearer token AND set an HttpOnly cookie."""
     monkeypatch.setattr(
         "app.services.crew.auth_service.authenticate",
-        AsyncMock(return_value={
-            "token": "test_session_token",
-            "user": {"id": "test-id", "full_name": "Test", "email": "test@example.com", "role": "admin"},
-        }),
+        AsyncMock(
+            return_value={
+                "token": "test_session_token",
+                "user": {
+                    "id": "test-id",
+                    "full_name": "Test",
+                    "email": "test@example.com",
+                    "role": "admin",
+                },
+            }
+        ),
     )
 
     response = await client.post(
@@ -48,7 +56,7 @@ async def test_unauthenticated_graphql_query_blocked(client, monkeypatch):
 
     response = await client.post(
         "/graphql",
-        json={"query": "{ crewMember(id: \"test\") { id fullName } }"},
+        json={"query": '{ crewMember(id: "test") { id fullName } }'},
     )
     assert response.status_code == 200  # GraphQL returns 200 even for errors
     body = response.json()
@@ -92,3 +100,71 @@ async def test_rest_unauthenticated_access_blocked(client, monkeypatch):
 
     response = await client.get("/api/documents/nonexistent-id/status")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_non_admin_blocked_from_create_crew_member(client, monkeypatch):
+    """Non-admin users must be FORBIDDEN from createCrewMember."""
+    import uuid as _uuid
+
+    from app.models import CrewMember
+
+    regular_user = CrewMember(
+        id=str(_uuid.uuid4()),
+        full_name="Regular User",
+        email="user@test.com",
+        role="user",
+    )
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=regular_user),
+    )
+
+    response = await client.post(
+        "/graphql",
+        json={
+            "query": """
+                mutation Create($fullName: String!) {
+                    createCrewMember(fullName: $fullName) { id fullName }
+                }
+            """,
+            "variables": {"fullName": "Should Be Blocked"},
+        },
+    )
+    body = response.json()
+    assert "errors" in body
+    assert any(e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_non_admin_blocked_from_upload_document_mutation(client, monkeypatch):
+    """Non-admin users must be FORBIDDEN from uploadDocument."""
+    import uuid as _uuid
+
+    from app.models import CrewMember
+
+    regular_user = CrewMember(
+        id=str(_uuid.uuid4()),
+        full_name="Regular User",
+        email="user@test.com",
+        role="user",
+    )
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=regular_user),
+    )
+
+    response = await client.post(
+        "/graphql",
+        json={
+            "query": """
+                mutation Upload($crewId: String!, $fileName: String!, $fileType: String!, $fileSize: Int!) {
+                    uploadDocument(crewId: $crewId, fileName: $fileName, fileType: $fileType, fileSize: $fileSize) { id }
+                }
+            """,
+            "variables": {"crewId": "x", "fileName": "x.pdf", "fileType": "application/pdf", "fileSize": 1},
+        },
+    )
+    body = response.json()
+    assert "errors" in body
+    assert any(e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"])

@@ -140,7 +140,9 @@ async def start_dropbox_listing(account_id: str) -> None:
                 await process_dropbox_entries(data.get("entries", []))
                 await save_dropbox_cursor(account_id, data.get("cursor"))
         else:
-            logger.error("Dropbox list_folder failed %s: %s", response.status_code, response.text[:500])
+            logger.error(
+                "Dropbox list_folder failed %s: %s", response.status_code, response.text[:500]
+            )
 
 
 async def continue_dropbox_listing(account_id: str, cursor: str) -> None:
@@ -212,9 +214,7 @@ async def process_dropbox_file(file_entry: dict) -> None:
 
     async with get_session_factory()() as session:
         existing = await session.execute(
-            select(DocumentModel).where(
-                DocumentModel.dropbox_path == file_path
-            )
+            select(DocumentModel).where(DocumentModel.dropbox_path == file_path)
         )
         doc = existing.scalar_one_or_none()
         if doc:
@@ -259,7 +259,9 @@ async def save_dropbox_cursor(account_id: str, cursor: Optional[str]) -> None:
 
 
 @router.post("/download/{document_id}")
-async def download_dropbox_file(document_id: str, request: Request, current_user=Depends(get_current_user_rest)):
+async def download_dropbox_file(
+    document_id: str, request: Request, current_user=Depends(get_current_user_rest)
+):
     """Download a file from Dropbox by document ID."""
     async with get_session_factory()() as session:
         stmt = select(DocumentModel).where(DocumentModel.id == document_id)
@@ -285,9 +287,7 @@ async def download_dropbox_file(document_id: str, request: Request, current_user
                 )
             except DropboxAuthError as exc:
                 logger.error("Dropbox auth unavailable for download: %s", exc)
-                raise HTTPException(
-                    status_code=503, detail="Dropbox storage is unavailable"
-                )
+                raise HTTPException(status_code=503, detail="Dropbox storage is unavailable")
             if response.status_code == 200:
                 return {"status": "downloaded", "size": len(response.content)}
             raise HTTPException(status_code=response.status_code, detail="Download failed")

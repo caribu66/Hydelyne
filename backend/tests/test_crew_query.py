@@ -1,4 +1,5 @@
 """Regression tests for resilient natural-language crew search."""
+
 from datetime import date
 from unittest.mock import AsyncMock
 
@@ -61,7 +62,9 @@ def test_controlled_typo_correction_is_visible_and_searchable():
     assert result["entities"]["medical_required"] is True
     assert result["entities"]["certification_keywords"] == ["IMCA"]
     assert {item["to"] for item in result["entities"]["corrections"]} >= {
-        "spanish", "medical", "survey"
+        "spanish",
+        "medical",
+        "survey",
     }
 
 
@@ -91,36 +94,50 @@ async def test_medical_query_finds_dedicated_medical_records(db_session):
 async def test_candidate_search_matrix(db_session):
     """Exercise the entity shapes the AI produces for common search prompts."""
     medic = CrewMember(
-        full_name="Search Matrix Medical", email="matrix-medical@example.com",
-        medical_status="fit", availability_status="available",
+        full_name="Search Matrix Medical",
+        email="matrix-medical@example.com",
+        medical_status="fit",
+        availability_status="available",
     )
     surveyor = CrewMember(
-        full_name="Search Matrix Survey", email="matrix-survey@example.com",
+        full_name="Search Matrix Survey",
+        email="matrix-survey@example.com",
         availability_status="available",
     )
     unavailable = CrewMember(
-        full_name="Search Matrix Unavailable", email="matrix-unavailable@example.com",
+        full_name="Search Matrix Unavailable",
+        email="matrix-unavailable@example.com",
         availability_status="unavailable",
     )
     db_session.add_all([medic, surveyor, unavailable])
     await db_session.flush()
     db_session.add(Certification(crew_member_id=surveyor.id, cert_type="BOSIET"))
-    db_session.add(WorkHistory(
-        crew_member_id=surveyor.id,
-        project_type="Offshore wind survey",
-        location="Aberdeen, Scotland",
-        responsibilities="Offshore hydrographic survey operations",
-    ))
+    db_session.add(
+        WorkHistory(
+            crew_member_id=surveyor.id,
+            project_type="Offshore wind survey",
+            location="Aberdeen, Scotland",
+            responsibilities="Offshore hydrographic survey operations",
+        )
+    )
     await db_session.commit()
 
     service = CrewQueryService()
     service._generate_response = AsyncMock(return_value="Candidates found.")
     searches = [
-        ("Who has medical experience?", {"medical_required": True, "certifications": ["OGUK Medical"]}, medic.id),
+        (
+            "Who has medical experience?",
+            {"medical_required": True, "certifications": ["OGUK Medical"]},
+            medic.id,
+        ),
         ("Find crew with BOSIET certification", {"certifications": ["BOSIET"]}, surveyor.id),
         ("Who has offshore wind experience?", {"project_type": "offshore"}, surveyor.id),
         ("Show specialists in Aberdeen", {"location": "Aberdeen"}, surveyor.id),
-        ("Find available crew with a medical", {"medical_required": True, "availability": "available"}, medic.id),
+        (
+            "Find available crew with a medical",
+            {"medical_required": True, "availability": "available"},
+            medic.id,
+        ),
         ("List unavailable specialists", {"availability": "unavailable"}, unavailable.id),
     ]
 

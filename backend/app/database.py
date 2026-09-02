@@ -50,6 +50,27 @@ def get_session_factory():
     return _session_factory
 
 
+async def dispose_engine() -> None:
+    """Dispose the async engine and drop the singleton so the next call to
+    get_engine()/get_session_factory() creates a fresh one.
+
+    Needed by callers that run a short-lived event loop via asyncio.run()
+    inside a long-lived process (e.g. a Celery worker calling the async
+    profile-enrichment service from a sync task). asyncpg connections are
+    bound to the event loop that created them; asyncio.run() opens a new
+    loop each call, so reusing the engine singleton across calls raises
+    "attached to a different loop" on the second and subsequent calls in
+    the same worker process. Must be awaited from within the same loop
+    that used the engine — disposal itself hits the same cross-loop error
+    otherwise.
+    """
+    global _engine, _session_factory
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
+    _session_factory = None
+
+
 async def get_db() -> AsyncSession:
     factory = get_session_factory()
     async with factory() as session:
@@ -60,41 +81,21 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
+    """Initialize the database schema.
+
+    This function is reserved for SQLite dev/test only. PostgreSQL production
+    deployments must run `alembic upgrade head` as a discrete step (see
+    ``backend/Dockerfile`` entrypoint); the API must not start against an
+    out-of-date PostgreSQL schema.
+    """
     from app.models import Certification, CrewMember, Document, Project, WorkHistory  # noqa: F401
-    # In production use alembic migrations; create_all is dev fallback for sqlite
-    if "sqlite" in settings.DATABASE_URL:
-        engine = get_engine()
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        return
 
-    # PostgreSQL path: run alembic upgrade head via async engine
-    try:
-        import asyncio
-        from pathlib import Path
+    if "sqlite" not in settings.DATABASE_URL:
+        raise RuntimeError(
+            "init_db() must not run against PostgreSQL. "
+            "Run `alembic upgrade head` as a separate deployment step."
+        )
 
-        from alembic.config import Config
-
-        from alembic import command
-
-        # alembic.ini is at backend/alembic.ini
-        backend_root = Path(__file__).resolve().parent.parent
-        alembic_ini = backend_root / "alembic.ini"
-        if alembic_ini.exists():
-            # Run in thread to avoid blocking event loop; alembic is sync
-            def _upgrade():
-                cfg = Config(str(alembic_ini))
-                cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
-                command.upgrade(cfg, "head")
-
-            await asyncio.to_thread(_upgrade)
-            return
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).warning(f"Alembic upgrade failed, falling back to create_all: {e}")
-
-    # Fallback if alembic not available
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

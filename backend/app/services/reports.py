@@ -107,7 +107,7 @@ class ReportService:
                 start = response_text.find("{")
                 end = response_text.rfind("}")
                 if start != -1 and end != -1:
-                    report_data = json.loads(response_text[start:end + 1])
+                    report_data = json.loads(response_text[start : end + 1])
                 else:
                     report_data = {
                         "summary": response_text[:500],

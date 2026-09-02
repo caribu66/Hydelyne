@@ -11,70 +11,13 @@ import sqlalchemy as sa
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import selectinload
 
+from app.domain.certifications import CERT_ALIASES, CERT_FAMILIES, normalize_cert_name
 from app.models import Certification as CertificationModel
 from app.models import CrewMember as CrewMemberModel
 from app.models import WorkHistory as WorkHistoryModel
 from app.services.ollama import ollama_client
 
 logger = logging.getLogger(__name__)
-
-CERT_NAME_MAP = {
-    "bosiet": "BOSIET",
-    "stcw": "STCW",
-    "oguk": "OGUK Medical",
-    "oguk medical": "OGUK Medical",
-    "gwo": "GWO Wind",
-    "gwo wind": "GWO Wind",
-    "nebosch": "NEBOSH Diploma",
-    "nebosh": "NEBOSH Diploma",
-    "iho": "IHO Cat A Hydrographer",
-    "iho cat a": "IHO Cat A Hydrographer",
-    "imca survey": "IMCA Survey QC",
-    "survey qc": "IMCA Survey QC",
-    "pamguard": "PAMGUARD Advanced",
-    "eod": "EOD Level 3",
-    "jncc": "JNCC MMO",
-    "mmo": "JNCC MMO",
-    "imca geotech": "IMCA Geotech",
-    "geotech": "IMCA Geotech",
-    "igp": "IOGP Geophysical Rep",
-    "iogp": "IOGP Geophysical Rep",
-    "geophysical rep": "IOGP Geophysical Rep",
-    "imca client rep": "IMCA Client Rep",
-    "client rep": "IMCA Client Rep",
-    "ncs safety": "NCS Safety",
-    "iso 45001": "ISO 45001 Lead Auditor",
-    "cpt": "CPT Testing",
-    "vibro": "Vibrocoring",
-    "uxo": "UXO QC",
-    "magnetometer": "Magnetometer",
-    "rov": "ROV Video Verification",
-    "seismic": "Seismic Data Processing",
-    "multibeam": "Multibeam Bathymetry",
-    "side scan": "Side Scan Sonar",
-    "qinsy": "QPS QINSy",
-    "qps": "QPS QINSy",
-    "foundation": "Foundation Engineering",
-    "hydrophone": "Hydrophone Arrays",
-    "harbour porpoise": "Harbour Porpoise Detection",
-    "pam": "PAMGUARD Advanced",
-    "hse": "HSE Advisory",
-    "safety case": "Safety Case Compliance",
-    "offshore medic": "Offshore Medic",
-    "huet": "HUET",
-    "ca-ebs": "CA-EBS",
-    "foet": "FOET",
-    "opito hda": "OPITO HDA",
-}
-
-# Broad credential families are common in a recruiter’s wording. They must
-# search their concrete certificate types rather than an imaginary exact type
-# such as "IMCA".
-CERTIFICATION_FAMILIES = {
-    "imca": "IMCA",
-    "opito": "OPITO",
-    "iogp": "IOGP",
-}
 
 NATIONALITY_ALIASES = {
     "british": "British",
@@ -104,10 +47,31 @@ NATIONALITY_ALIASES = {
 # Intentionally limited to controlled recruitment vocabulary. This avoids an
 # unsafe "best guess" correction of a person’s name or a compliance document.
 TYPO_VOCABULARY = {
-    "spanish", "medical", "medicals", "bosiet", "stcw", "imca", "iogp", "opito",
-    "hydrography", "hydrographer", "hydrographic", "seismic", "geotechnical",
-    "offshore", "available", "unavailable", "aberdeen", "survey", "wind", "uxo",
-    "pamguard", "nebosh", "geotech", "multibeam", "environmental",
+    "spanish",
+    "medical",
+    "medicals",
+    "bosiet",
+    "stcw",
+    "imca",
+    "iogp",
+    "opito",
+    "hydrography",
+    "hydrographer",
+    "hydrographic",
+    "seismic",
+    "geotechnical",
+    "offshore",
+    "available",
+    "unavailable",
+    "aberdeen",
+    "survey",
+    "wind",
+    "uxo",
+    "pamguard",
+    "nebosh",
+    "geotech",
+    "multibeam",
+    "environmental",
 }
 
 
@@ -129,16 +93,6 @@ def normalize_search_typos(query: str) -> tuple[str, list[dict[str, str]]]:
 
     return re.sub(r"[A-Za-z]+", replace_token, query), corrections
 
-
-def normalize_cert_name(name: str) -> str:
-    """Normalize extracted certification name to match database format."""
-    lower = name.lower().strip()
-    if lower in CERT_NAME_MAP:
-        return CERT_NAME_MAP[lower]
-    for key, value in CERT_NAME_MAP.items():
-        if key in lower or lower in key:
-            return value
-    return name.upper()
 
 CREW_QUERY_PROMPTS = {
     "intent_classification": """Classify the user's query about crew members into one of these intents:
@@ -179,7 +133,6 @@ IMPORTANT:
 - For "3 years of experience" set min_experience_years to 3. Set both minimum and maximum to 3 only when the user says "exactly 3 years".
 
 Query: {query}""",
-
     "search_response": """Based on the following crew search results, provide a helpful summary in 2-3 sentences.
 
 Query: {query}
@@ -188,21 +141,28 @@ Crew Results:
 {results}
 
 Provide a concise summary of matching crew members, highlighting their key qualifications and relevance to the query.""",
+    "summarize_response": """You are writing a short professional profile summary of a crew
+member, to be read by a client or project manager.
 
-    "summarize_response": """Create a professional summary of this crew member for a client or project manager.
+Write 2-4 flowing paragraphs of plain prose in your own words. Do not
+output JSON, bullet points, markdown headers, or a code block. Do not
+copy the raw data fields or their labels verbatim — describe the person
+naturally, the way you would introduce them to a colleague.
 
-Crew Member Data:
-{crew_data}
-
-Document Extractions:
-{document_data}
-
-Provide a comprehensive summary including:
+Cover, where the data supports it:
 - Key qualifications and certifications
 - Relevant experience highlights
 - Specializations
-- Availability status""",
+- Availability status
 
+Crew member data (reference only — do not copy this structure or its
+field names into your answer):
+{results}
+
+Document extractions (reference only):
+{document_data}
+
+Write the paragraph summary now:""",
     "compliance_response": """Analyze the compliance status and provide actionable insights.
 
 Query: {query}
@@ -215,7 +175,6 @@ Highlight:
 - Upcoming expirations (within 90 days)
 - Compliance percentage
 - Recommended actions""",
-
     "matching_response": """Rank and explain the best candidates for this project/role.
 
 Query: {query}
@@ -282,12 +241,26 @@ class CrewQueryService:
         lower_query = corrected_query.lower()
         if corrections:
             entities["corrections"] = corrections
-        has_medical_term = any(term in lower_query for term in (
-            "medical", "medicals", "medical fitness", "medical clearance", "fit to work",
-        ))
-        is_medical_compliance_query = has_medical_term and any(term in lower_query for term in (
-            "expired", "expiring", "renew", "renewal", "non-compliant",
-        ))
+        has_medical_term = any(
+            term in lower_query
+            for term in (
+                "medical",
+                "medicals",
+                "medical fitness",
+                "medical clearance",
+                "fit to work",
+            )
+        )
+        is_medical_compliance_query = has_medical_term and any(
+            term in lower_query
+            for term in (
+                "expired",
+                "expiring",
+                "renew",
+                "renewal",
+                "non-compliant",
+            )
+        )
 
         if has_medical_term and not is_medical_compliance_query:
             normalized["intent"] = "search"
@@ -297,10 +270,17 @@ class CrewQueryService:
                 certifications.append("OGUK Medical")
             entities["certifications"] = certifications
 
-            if any(term in lower_query for term in (
-                "current medical", "valid medical", "in-date medical", "in date medical",
-                "up to date medical", "medical ready",
-            )):
+            if any(
+                term in lower_query
+                for term in (
+                    "current medical",
+                    "valid medical",
+                    "in-date medical",
+                    "in date medical",
+                    "up to date medical",
+                    "medical ready",
+                )
+            ):
                 entities["medical_valid"] = True
 
         for alias, nationality in NATIONALITY_ALIASES.items():
@@ -309,7 +289,7 @@ class CrewQueryService:
                 break
 
         certification_keywords = list(entities.get("certification_keywords") or [])
-        for keyword, family in CERTIFICATION_FAMILIES.items():
+        for keyword, family in CERT_FAMILIES.items():
             if keyword in lower_query and family not in certification_keywords:
                 certification_keywords.append(family)
         if certification_keywords:
@@ -319,8 +299,17 @@ class CrewQueryService:
         # terms match tags, work history, responsibilities and credentials.
         detected_terms = list(entities.get("skills") or [])
         for term in (
-            "offshore", "hydrograph", "seismic", "geotechnical", "uxo", "wind",
-            "environmental", "pamguard", "multibeam", "pam", "mmo",
+            "offshore",
+            "hydrograph",
+            "seismic",
+            "geotechnical",
+            "uxo",
+            "wind",
+            "environmental",
+            "pamguard",
+            "multibeam",
+            "pam",
+            "mmo",
         ):
             if term in lower_query and term not in detected_terms:
                 detected_terms.append(term)
@@ -329,14 +318,22 @@ class CrewQueryService:
 
         if "aberdeen" in lower_query and not entities.get("location"):
             entities["location"] = "Aberdeen"
-        if "available" in lower_query and "unavailable" not in lower_query and not entities.get("availability"):
+        if (
+            "available" in lower_query
+            and "unavailable" not in lower_query
+            and not entities.get("availability")
+        ):
             entities["availability"] = "available"
         elif "unavailable" in lower_query and not entities.get("availability"):
             entities["availability"] = "unavailable"
 
         inferred_certifications = list(entities.get("certifications") or [])
-        for alias, certificate in CERT_NAME_MAP.items():
-            if " " not in alias and alias in lower_query and certificate not in inferred_certifications:
+        for alias, certificate in CERT_ALIASES.items():
+            if (
+                " " not in alias
+                and alias in lower_query
+                and certificate not in inferred_certifications
+            ):
                 inferred_certifications.append(certificate)
         if inferred_certifications:
             entities["certifications"] = inferred_certifications
@@ -368,43 +365,49 @@ class CrewQueryService:
         # dedicated crew field, so include both representations.
         if entities.get("medical_required"):
             if entities.get("medical_valid"):
-                filters.append(or_(
-                    and_(
-                        CrewMemberModel.medical_status.in_(("fit", "fit_with_restrictions")),
-                        CrewMemberModel.medical_expiry.is_not(None),
-                        CrewMemberModel.medical_expiry >= date.today(),
-                    ),
-                    CrewMemberModel.certifications.any(and_(
-                        CertificationModel.cert_type.ilike("%medical%"),
-                        CertificationModel.status.in_(("valid", "pending_verification")),
-                        or_(
-                            CertificationModel.expiry_date.is_(None),
-                            CertificationModel.expiry_date >= date.today(),
+                filters.append(
+                    or_(
+                        and_(
+                            CrewMemberModel.medical_status.in_(("fit", "fit_with_restrictions")),
+                            CrewMemberModel.medical_expiry.is_not(None),
+                            CrewMemberModel.medical_expiry >= date.today(),
                         ),
-                    )),
-                ))
+                        CrewMemberModel.certifications.any(
+                            and_(
+                                CertificationModel.cert_type.ilike("%medical%"),
+                                CertificationModel.status.in_(("valid", "pending_verification")),
+                                or_(
+                                    CertificationModel.expiry_date.is_(None),
+                                    CertificationModel.expiry_date >= date.today(),
+                                ),
+                            )
+                        ),
+                    )
+                )
             else:
-                filters.append(or_(
-                    CrewMemberModel.certifications.any(
-                        CertificationModel.cert_type.ilike("%medical%")
-                    ),
-                    CrewMemberModel.medical_status.is_not(None),
-                    CrewMemberModel.medical_expiry.is_not(None),
-                    CrewMemberModel.medical_provider.is_not(None),
-                ))
+                filters.append(
+                    or_(
+                        CrewMemberModel.certifications.any(
+                            CertificationModel.cert_type.ilike("%medical%")
+                        ),
+                        CrewMemberModel.medical_status.is_not(None),
+                        CrewMemberModel.medical_expiry.is_not(None),
+                        CrewMemberModel.medical_provider.is_not(None),
+                    )
+                )
 
         if entities.get("nationality"):
-            filters.append(
-                CrewMemberModel.nationality.ilike(f"%{entities['nationality']}%")
-            )
+            filters.append(CrewMemberModel.nationality.ilike(f"%{entities['nationality']}%"))
 
         if entities.get("min_experience_years") is not None:
             filters.append(
-                CrewMemberModel.experience_months >= int(float(entities["min_experience_years"]) * 12)
+                CrewMemberModel.experience_months
+                >= int(float(entities["min_experience_years"]) * 12)
             )
         if entities.get("max_experience_years") is not None:
             filters.append(
-                CrewMemberModel.experience_months <= int(float(entities["max_experience_years"]) * 12)
+                CrewMemberModel.experience_months
+                <= int(float(entities["max_experience_years"]) * 12)
             )
 
         # A credential family (such as IMCA) matches every concrete member of
@@ -428,8 +431,7 @@ class CrewQueryService:
                     cert for cert in normalized_certs if "medical" not in cert.lower()
                 ]
             family_keywords = {
-                str(keyword).upper()
-                for keyword in entities.get("certification_keywords") or []
+                str(keyword).upper() for keyword in entities.get("certification_keywords") or []
             }
             # An LLM may echo "IMCA" into certifications as well as the
             # family field. It is not an exact database certificate; leave
@@ -442,9 +444,7 @@ class CrewQueryService:
             # as "BOSIET and OGUK Medical".
             for cert_type in normalized_certs:
                 filters.append(
-                    CrewMemberModel.certifications.any(
-                        CertificationModel.cert_type == cert_type
-                    )
+                    CrewMemberModel.certifications.any(CertificationModel.cert_type == cert_type)
                 )
 
         # Skills become broad text search terms
@@ -473,25 +473,25 @@ class CrewQueryService:
         if search_terms:
             term_filters = []
             for term in search_terms:
-                term_filters.append(CrewMemberModel.full_name.ilike(f'%{term}%'))
-                term_filters.append(sa.cast(CrewMemberModel.tags, sa.String).ilike(f'%{term}%'))
-                term_filters.append(CrewMemberModel.internal_notes.ilike(f'%{term}%'))
+                term_filters.append(CrewMemberModel.full_name.ilike(f"%{term}%"))
+                term_filters.append(sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{term}%"))
+                term_filters.append(CrewMemberModel.internal_notes.ilike(f"%{term}%"))
                 # Work history fields
                 term_filters.append(
                     CrewMemberModel.work_history.any(
                         or_(
-                            WorkHistoryModel.project_type.ilike(f'%{term}%'),
-                            WorkHistoryModel.location.ilike(f'%{term}%'),
-                            WorkHistoryModel.responsibilities.ilike(f'%{term}%'),
-                            WorkHistoryModel.role.ilike(f'%{term}%'),
-                            WorkHistoryModel.client_name.ilike(f'%{term}%'),
+                            WorkHistoryModel.project_type.ilike(f"%{term}%"),
+                            WorkHistoryModel.location.ilike(f"%{term}%"),
+                            WorkHistoryModel.responsibilities.ilike(f"%{term}%"),
+                            WorkHistoryModel.role.ilike(f"%{term}%"),
+                            WorkHistoryModel.client_name.ilike(f"%{term}%"),
                         )
                     )
                 )
                 # Certification type names
                 term_filters.append(
                     CrewMemberModel.certifications.any(
-                        CertificationModel.cert_type.ilike(f'%{term}%')
+                        CertificationModel.cert_type.ilike(f"%{term}%")
                     )
                 )
                 # Also split multi-word terms for partial matching
@@ -501,11 +501,11 @@ class CrewQueryService:
                         if len(word) > 3:  # Skip short words
                             term_filters.append(
                                 CrewMemberModel.certifications.any(
-                                    CertificationModel.cert_type.ilike(f'%{word}%')
+                                    CertificationModel.cert_type.ilike(f"%{word}%")
                                 )
                             )
                             term_filters.append(
-                                sa.cast(CrewMemberModel.tags, sa.String).ilike(f'%{word}%')
+                                sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{word}%")
                             )
             filters.append(or_(*term_filters))
 
@@ -538,32 +538,42 @@ class CrewQueryService:
 
         results_data = []
         for crew in crew_list:
-            results_data.append({
-                "id": crew.id,
-                "name": crew.full_name,
-                "email": crew.email,
-                "availability": crew.availability_status,
-                "experience_years": round((crew.experience_months or 0) / 12, 1),
-                "nationality": crew.nationality,
-                "country_of_residence": crew.country_of_residence,
-                "languages": crew.languages or [],
-                "flying_point": crew.flying_point,
-                "education": crew.education,
-                "tags": crew.tags or [],
-                "training_qualifications": crew.training_qualifications or [],
-                "geographical_experience": crew.geographical_experience or [],
-                "systems_experience": crew.systems_experience or [],
-                "certifications": [c.cert_type for c in crew.certifications] if crew.certifications else [],
-                "work_locations": list(set(
-                    wh.location for wh in crew.work_history if wh.location
-                )) if crew.work_history else [],
-                "work_countries": list(set(
-                    wh.country for wh in crew.work_history if wh.country
-                )) if crew.work_history else [],
-                "project_types": list(set(
-                    wh.project_type for wh in crew.work_history if wh.project_type
-                )) if crew.work_history else [],
-            })
+            results_data.append(
+                {
+                    "id": crew.id,
+                    "name": crew.full_name,
+                    "email": crew.email,
+                    "availability": crew.availability_status,
+                    "experience_years": round((crew.experience_months or 0) / 12, 1),
+                    "nationality": crew.nationality,
+                    "country_of_residence": crew.country_of_residence,
+                    "languages": crew.languages or [],
+                    "flying_point": crew.flying_point,
+                    "education": crew.education,
+                    "tags": crew.tags or [],
+                    "training_qualifications": crew.training_qualifications or [],
+                    "geographical_experience": crew.geographical_experience or [],
+                    "systems_experience": crew.systems_experience or [],
+                    "certifications": [c.cert_type for c in crew.certifications]
+                    if crew.certifications
+                    else [],
+                    "work_locations": list(
+                        set(wh.location for wh in crew.work_history if wh.location)
+                    )
+                    if crew.work_history
+                    else [],
+                    "work_countries": list(
+                        set(wh.country for wh in crew.work_history if wh.country)
+                    )
+                    if crew.work_history
+                    else [],
+                    "project_types": list(
+                        set(wh.project_type for wh in crew.work_history if wh.project_type)
+                    )
+                    if crew.work_history
+                    else [],
+                }
+            )
 
         return {
             "intent": "search",
@@ -585,11 +595,13 @@ class CrewQueryService:
                 "summary": "Please specify a crew member name to summarize.",
             }
 
-        stmt = select(CrewMemberModel).options(
-            selectinload(CrewMemberModel.certifications),
-            selectinload(CrewMemberModel.documents),
-        ).where(
-            CrewMemberModel.full_name.ilike(f'%{crew_name}%')
+        stmt = (
+            select(CrewMemberModel)
+            .options(
+                selectinload(CrewMemberModel.certifications),
+                selectinload(CrewMemberModel.documents),
+            )
+            .where(CrewMemberModel.full_name.ilike(f"%{crew_name}%"))
         )
         result = await db_session.execute(stmt)
         crew = result.scalar_one_or_none()
@@ -601,6 +613,28 @@ class CrewQueryService:
                 "summary": f"No crew member found with name '{crew_name}'.",
             }
 
+        summary = await self.generate_crew_summary(crew, query=query)
+
+        return {
+            "intent": "summarize",
+            "query": query,
+            "crew_id": crew.id,
+            "crew_name": crew.full_name,
+            "summary": summary,
+        }
+
+    async def generate_crew_summary(
+        self, crew: CrewMemberModel, *, query: str | None = None
+    ) -> str:
+        """Build the crew_data/doc_data context and generate the narrative
+        summary for an already-resolved crew member.
+
+        Shared by the NL "summarize X" search path (_handle_summarize, which
+        still needs a fuzzy name lookup to resolve `crew` in the first
+        place) and the direct by-ID path
+        (ConsultantKnowledgeService.summarize), which doesn't. `crew` must
+        have certifications, work_history, and documents eager-loaded.
+        """
         crew_data = {
             "id": crew.id,
             "name": crew.full_name,
@@ -613,6 +647,7 @@ class CrewQueryService:
             "languages": crew.languages,
             "flying_point": crew.flying_point,
             "education": crew.education,
+            "professional_summary": crew.professional_summary,
             "experience_years": round((crew.experience_months or 0) / 12, 1),
             "availability": crew.availability_status,
             "passport_expiry": str(crew.passport_expiry) if crew.passport_expiry else None,
@@ -647,36 +682,36 @@ class CrewQueryService:
         doc_data = []
         for doc in crew.documents:
             if doc.extracted_data:
-                doc_data.append({
-                    "file": doc.file_name,
-                    "classification": doc.classification,
-                    "data": doc.extracted_data,
-                })
+                doc_data.append(
+                    {
+                        "file": doc.file_name,
+                        "classification": doc.classification,
+                        "data": doc.extracted_data,
+                    }
+                )
 
-        summary = await self._generate_response(
-            "summarize_response", query, json.dumps(crew_data, indent=2),
-            document_data=json.dumps(doc_data, indent=2) if doc_data else "No documents"
+        return await self._generate_response(
+            "summarize_response",
+            query or f"Summarize {crew.full_name}",
+            json.dumps(crew_data, indent=2),
+            prose=True,
+            document_data=json.dumps(doc_data, indent=2) if doc_data else "No documents",
         )
-
-        return {
-            "intent": "summarize",
-            "query": query,
-            "crew_id": crew.id,
-            "crew_name": crew.full_name,
-            "summary": summary,
-        }
 
     async def _handle_compliance(self, query: str, entities: dict, db_session) -> dict[str, Any]:
         """Handle compliance queries."""
         today = date.today()
         threshold = today + timedelta(days=90)
 
-        stmt = select(CrewMemberModel).options(selectinload(CrewMemberModel.certifications)).join(
-            CertificationModel
-        ).where(
-            or_(
-                CertificationModel.status == "expired",
-                CertificationModel.status == "expiring_soon",
+        stmt = (
+            select(CrewMemberModel)
+            .options(selectinload(CrewMemberModel.certifications))
+            .join(CertificationModel)
+            .where(
+                or_(
+                    CertificationModel.status == "expired",
+                    CertificationModel.status == "expiring_soon",
+                )
             )
         )
 
@@ -690,39 +725,51 @@ class CrewQueryService:
             for cert in crew.certifications:
                 if cert.expiry_date:
                     if cert.expiry_date < today:
-                        expired_certs.append({
-                            "type": cert.cert_type,
-                            "expiry": str(cert.expiry_date),
-                            "status": "expired",
-                        })
+                        expired_certs.append(
+                            {
+                                "type": cert.cert_type,
+                                "expiry": str(cert.expiry_date),
+                                "status": "expired",
+                            }
+                        )
                     elif cert.expiry_date <= threshold:
-                        expiring_certs.append({
-                            "type": cert.cert_type,
-                            "expiry": str(cert.expiry_date),
-                            "status": "expiring_soon",
-                        })
+                        expiring_certs.append(
+                            {
+                                "type": cert.cert_type,
+                                "expiry": str(cert.expiry_date),
+                                "status": "expiring_soon",
+                            }
+                        )
                 elif cert.status == "expired":
-                    expired_certs.append({
-                        "type": cert.cert_type,
-                        "expiry": "unknown",
-                        "status": "expired",
-                    })
+                    expired_certs.append(
+                        {
+                            "type": cert.cert_type,
+                            "expiry": "unknown",
+                            "status": "expired",
+                        }
+                    )
                 elif cert.status == "expiring_soon":
-                    expiring_certs.append({
-                        "type": cert.cert_type,
-                        "expiry": "unknown",
-                        "status": "expiring_soon",
-                    })
+                    expiring_certs.append(
+                        {
+                            "type": cert.cert_type,
+                            "expiry": "unknown",
+                            "status": "expiring_soon",
+                        }
+                    )
 
             if expired_certs or expiring_certs:
-                compliance_data.append({
-                    "id": crew.id,
-                    "name": crew.full_name,
-                    "expired": expired_certs,
-                    "expiring_soon": expiring_certs,
-                })
+                compliance_data.append(
+                    {
+                        "id": crew.id,
+                        "name": crew.full_name,
+                        "expired": expired_certs,
+                        "expiring_soon": expiring_certs,
+                    }
+                )
 
-        summary = await self._generate_response("compliance_response", query, json.dumps(compliance_data, indent=2))
+        summary = await self._generate_response(
+            "compliance_response", query, json.dumps(compliance_data, indent=2)
+        )
 
         return {
             "intent": "compliance",
@@ -752,16 +799,27 @@ class CrewQueryService:
             "summary": "I can help you search crew members, summarize profiles, check compliance, or match candidates to projects. What would you like to know?",
         }
 
-    async def _generate_response(self, prompt_key: str, query: str, results: str, **kwargs) -> str:
-        """Generate LLM response for the given prompt type."""
+    async def _generate_response(
+        self, prompt_key: str, query: str, results: str, *, prose: bool = False, **kwargs
+    ) -> str:
+        """Generate LLM response for the given prompt type.
+
+        prose=True (used by summarize_response) asks Ollama for
+        unconstrained text instead of its default JSON-decoding mode —
+        with JSON mode on, a narrative-prose prompt still gets valid JSON
+        back, just prose wrapped in an object like {"profile": "..."}, so
+        the raw-JSON-passthrough branch below is skipped for prose too.
+        """
         prompt_template = CREW_QUERY_PROMPTS.get(prompt_key, "")
         if not prompt_template:
             return results
 
         try:
             prompt = prompt_template.format(query=query, results=results, **kwargs)
-            result = await ollama_client.extract(prompt)
+            result = await ollama_client.extract(prompt, json_format=not prose)
             response = result.get("response", results)
+            if prose:
+                return response.strip()
             try:
                 json.loads(response)
                 return response

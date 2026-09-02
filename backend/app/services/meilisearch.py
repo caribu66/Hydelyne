@@ -24,6 +24,7 @@ class MeilisearchClient:
     def client(self):
         if self._client is None:
             import meilisearch
+
             self._client = meilisearch.Client(self.base_url, self.master_key)
         return self._client
 
@@ -31,6 +32,7 @@ class MeilisearchClient:
         """Check if Meilisearch is available."""
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{self.base_url}/health")
                 return response.status_code == 200
@@ -49,34 +51,40 @@ class MeilisearchClient:
                 self.client.create_index(CREW_MEMBERS_INDEX, {"primaryKey": "id"})
 
             crew_index = self.client.index(CREW_MEMBERS_INDEX)
-            crew_index.update_searchable_attributes([
-                "full_name",
-                "email",
-                "phone",
-                "nationality",
-                "country_of_residence",
-                "gender",
-                "languages",
-                "flying_point",
-                "education",
-                "tags",
-                "training_qualifications",
-                "geographical_experience",
-                "systems_experience",
-            ])
-            crew_index.update_filterable_attributes([
-                "availability_status",
-                "nationality",
-                "country_of_residence",
-                "gender",
-                "languages",
-                "tags",
-            ])
-            crew_index.update_sortable_attributes([
-                "created_at",
-                "availability_date",
-                "full_name",
-            ])
+            crew_index.update_searchable_attributes(
+                [
+                    "full_name",
+                    "email",
+                    "phone",
+                    "nationality",
+                    "country_of_residence",
+                    "gender",
+                    "languages",
+                    "flying_point",
+                    "education",
+                    "tags",
+                    "training_qualifications",
+                    "geographical_experience",
+                    "systems_experience",
+                ]
+            )
+            crew_index.update_filterable_attributes(
+                [
+                    "availability_status",
+                    "nationality",
+                    "country_of_residence",
+                    "gender",
+                    "languages",
+                    "tags",
+                ]
+            )
+            crew_index.update_sortable_attributes(
+                [
+                    "created_at",
+                    "availability_date",
+                    "full_name",
+                ]
+            )
 
             # Documents index
             try:
@@ -85,17 +93,21 @@ class MeilisearchClient:
                 self.client.create_index(DOCUMENTS_INDEX, {"primaryKey": "id"})
 
             doc_index = self.client.index(DOCUMENTS_INDEX)
-            doc_index.update_searchable_attributes([
-                "file_name",
-                "classification",
-                "extracted_data",
-            ])
-            doc_index.update_filterable_attributes([
-                "file_type",
-                "classification",
-                "extraction_status",
-                "crew_member_id",
-            ])
+            doc_index.update_searchable_attributes(
+                [
+                    "file_name",
+                    "classification",
+                    "extracted_data",
+                ]
+            )
+            doc_index.update_filterable_attributes(
+                [
+                    "file_type",
+                    "classification",
+                    "extraction_status",
+                    "crew_member_id",
+                ]
+            )
 
         try:
             await asyncio.to_thread(_sync_setup)

@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     API_KEY: str = ""
     OLLAMA_EXTRACTION_MODEL: str = "llama3.1:8b-instruct-q4_K_M"
     OLLAMA_VISION_MODEL: str = "llama3.2-11b-vision-instruct-q4_K_M"
+    OLLAMA_EMBEDDING_MODEL: str = "all-minilm"
+    # Off by default: Qdrant indexing/semantic search is validated but not yet
+    # wired into the default write/read path. See backend/docs/consultant-knowledge-core.md.
+    ENABLE_SEMANTIC_SEARCH: bool = False
     SESSION_MAX_AGE: int = 28800
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""

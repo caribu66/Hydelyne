@@ -42,4 +42,9 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
 
 USER appuser
 
+# The backend runs `alembic upgrade head` before exec'ing into uvicorn so the
+# API never serves traffic against an out-of-date schema. The worker, beat,
+# and flower services do not need migrations, so they set RUN_MIGRATIONS=false
+# (see docker-compose.yml).
+ENTRYPOINT ["sh", "-c", "if [ \"${RUN_MIGRATIONS:-true}\" = \"true\" ]; then alembic upgrade head; fi; exec \"$@\"", "--"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

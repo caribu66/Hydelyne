@@ -48,6 +48,9 @@ class CrewMember(Base):
     # rather than rounded years so candidate filters remain precise.
     experience_months: Mapped[Optional[int]] = mapped_column(Integer, index=True)
     education: Mapped[Optional[str]] = mapped_column(Text)
+    # Captured verbatim from the CV's PROFESSIONAL SUMMARY section by the
+    # deterministic extractor — free text, never AI-interpreted at ingestion.
+    professional_summary: Mapped[Optional[str]] = mapped_column(Text)
     # Countries and locations evidenced by source-linked work history.
     geographical_experience: Mapped[Optional[list]] = mapped_column(JSON)
     systems_experience: Mapped[Optional[list]] = mapped_column(JSON)
@@ -55,10 +58,16 @@ class CrewMember(Base):
     internal_notes: Mapped[Optional[str]] = mapped_column(Text)
     tags: Mapped[Optional[list]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=sa.func.now(), onupdate=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=sa.func.now(), onupdate=sa.func.now()
+    )
 
-    certifications = relationship("Certification", back_populates="crew_member", cascade="all, delete-orphan")
-    work_history = relationship("WorkHistory", back_populates="crew_member", cascade="all, delete-orphan")
+    certifications = relationship(
+        "Certification", back_populates="crew_member", cascade="all, delete-orphan"
+    )
+    work_history = relationship(
+        "WorkHistory", back_populates="crew_member", cascade="all, delete-orphan"
+    )
     documents = relationship("Document", back_populates="crew_member")
 
 
@@ -66,7 +75,9 @@ class Certification(Base):
     __tablename__ = "certifications"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    crew_member_id: Mapped[str] = mapped_column(String(36), ForeignKey("crew_members.id"), index=True)
+    crew_member_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("crew_members.id"), index=True
+    )
     cert_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     cert_number: Mapped[Optional[str]] = mapped_column(String(100))
     issuing_body: Mapped[Optional[str]] = mapped_column(String(255))
@@ -78,7 +89,9 @@ class Certification(Base):
     extracted_confidence: Mapped[Optional[float]] = mapped_column(Float)
     verification_status: Mapped[str] = mapped_column(String(20), default="unverified")
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=sa.func.now(), onupdate=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=sa.func.now(), onupdate=sa.func.now()
+    )
 
     crew_member = relationship("CrewMember", back_populates="certifications")
 
@@ -87,7 +100,9 @@ class WorkHistory(Base):
     __tablename__ = "work_history"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    crew_member_id: Mapped[str] = mapped_column(String(36), ForeignKey("crew_members.id"), index=True)
+    crew_member_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("crew_members.id"), index=True
+    )
     client_name: Mapped[Optional[str]] = mapped_column(String(255), index=True)
     project_name: Mapped[Optional[str]] = mapped_column(String(255))
     project_type: Mapped[Optional[str]] = mapped_column(String(255))
@@ -100,7 +115,9 @@ class WorkHistory(Base):
     status: Mapped[Optional[str]] = mapped_column(String(20))
     document_ref: Mapped[Optional[str]] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=sa.func.now(), onupdate=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=sa.func.now(), onupdate=sa.func.now()
+    )
 
     crew_member = relationship("CrewMember", back_populates="work_history")
 
@@ -122,14 +139,18 @@ class Project(Base):
     requirements: Mapped[Optional[dict]] = mapped_column(JSON)
     document_ref: Mapped[Optional[str]] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=sa.func.now(), onupdate=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=sa.func.now(), onupdate=sa.func.now()
+    )
 
 
 class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    crew_member_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("crew_members.id"), index=True)
+    crew_member_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("crew_members.id"), index=True
+    )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)

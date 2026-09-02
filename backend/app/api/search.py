@@ -65,7 +65,9 @@ async def search_documents(
 
 
 @router.post("/index/crew/{crew_id}")
-async def index_crew_member(crew_id: str, request: Request, current_user=Depends(get_current_user_rest)):
+async def index_crew_member(
+    crew_id: str, request: Request, current_user=Depends(get_current_user_rest)
+):
     """Index a crew member in Meilisearch."""
     from sqlalchemy import select
 

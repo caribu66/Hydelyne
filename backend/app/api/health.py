@@ -31,6 +31,7 @@ def _redacted_or_detail(detail: str) -> dict:
 
 async def _dependency_statuses() -> dict[str, str]:
     """Check service availability without returning credentials or payloads."""
+
     async def database() -> str:
         try:
             async with get_engine().connect() as conn:
@@ -50,6 +51,7 @@ async def _dependency_statuses() -> dict[str, str]:
     async def ollama() -> str:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
             return "healthy" if response.status_code == 200 else "unhealthy"
@@ -63,6 +65,7 @@ async def _dependency_statuses() -> dict[str, str]:
             return "unconfigured"
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await dropbox_request(
                     client,
@@ -158,6 +161,7 @@ async def ollama_health(
     """
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
             if response.status_code == 200:
@@ -168,9 +172,7 @@ async def ollama_health(
                 }
                 # Only expose model names in non-prod
                 if not _is_prod():
-                    body["models"] = [
-                        m.get("name") for m in response.json().get("models", [])
-                    ]
+                    body["models"] = [m.get("name") for m in response.json().get("models", [])]
                 return body
             raise Exception(f"Ollama returned status {response.status_code}")
     except Exception as e:
@@ -192,6 +194,7 @@ async def qdrant_health(
     """
     try:
         from qdrant_client import QdrantClient
+
         client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
         collections = client.get_collections()
         body = {
@@ -246,6 +249,7 @@ async def full_health_check(
 
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
             results["ollama"] = "healthy" if response.status_code == 200 else "unhealthy"
@@ -255,6 +259,7 @@ async def full_health_check(
 
     try:
         from qdrant_client import QdrantClient
+
         qdrant_client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
         qdrant_client.get_collections()
         results["qdrant"] = "healthy"

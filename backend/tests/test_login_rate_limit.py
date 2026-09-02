@@ -1,4 +1,5 @@
 """Security regression tests: login brute-force rate limiting."""
+
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,10 +16,12 @@ async def test_login_rate_limited_after_5_attempts(client, monkeypatch):
     """After 5 logins in 5 min, the 6th must return 429 RATE_LIMITED."""
     monkeypatch.setattr(
         "app.services.crew.auth_service.authenticate",
-        AsyncMock(return_value={
-            "token": "tok",
-            "user": {"id": "test-id", "full_name": "Test", "email": "test@example.com"},
-        }),
+        AsyncMock(
+            return_value={
+                "token": "tok",
+                "user": {"id": "test-id", "full_name": "Test", "email": "test@example.com"},
+            }
+        ),
     )
 
     call_count = {"n": 0}
@@ -27,7 +30,9 @@ async def test_login_rate_limited_after_5_attempts(client, monkeypatch):
         call_count["n"] += 1
         return call_count["n"]
 
-    monkeypatch.setattr("app.services.cache.cache_service.is_redis_available", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "app.services.cache.cache_service.is_redis_available", AsyncMock(return_value=True)
+    )
     monkeypatch.setattr("app.services.cache.cache_service.increment_rate_limit", fake_increment)
 
     statuses = []
@@ -59,13 +64,19 @@ async def test_login_rate_limit_not_triggered_when_redis_unavailable(client, mon
     """If Redis is down, login should still work (rate limit is best-effort)."""
     monkeypatch.setattr(
         "app.services.crew.auth_service.authenticate",
-        AsyncMock(return_value={
-            "token": "tok",
-            "user": {"id": "test-id", "full_name": "Test", "email": "test@example.com"},
-        }),
+        AsyncMock(
+            return_value={
+                "token": "tok",
+                "user": {"id": "test-id", "full_name": "Test", "email": "test@example.com"},
+            }
+        ),
     )
-    monkeypatch.setattr("app.services.cache.cache_service.is_redis_available", AsyncMock(return_value=False))
-    monkeypatch.setattr("app.services.cache.cache_service.increment_rate_limit", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "app.services.cache.cache_service.is_redis_available", AsyncMock(return_value=False)
+    )
+    monkeypatch.setattr(
+        "app.services.cache.cache_service.increment_rate_limit", AsyncMock(return_value=None)
+    )
 
     response = await client.post(
         "/graphql",

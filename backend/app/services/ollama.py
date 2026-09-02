@@ -18,17 +18,34 @@ class OllamaClient:
 
     def __init__(self):
         self.base_url = settings.OLLAMA_BASE_URL.rstrip("/")
-        self.extraction_model = getattr(settings, "OLLAMA_EXTRACTION_MODEL", "llama3.1:8b-instruct-q4_K_M")
-        self.vision_model = getattr(settings, "OLLAMA_VISION_MODEL", "llama3.2-11b-vision-instruct-q4_K_M")
-        self.report_model = getattr(settings, "OLLAMA_EXTRACTION_MODEL", "llama3.1:8b-instruct-q4_K_M")
+        self.extraction_model = getattr(
+            settings, "OLLAMA_EXTRACTION_MODEL", "llama3.1:8b-instruct-q4_K_M"
+        )
+        self.vision_model = getattr(
+            settings, "OLLAMA_VISION_MODEL", "llama3.2-11b-vision-instruct-q4_K_M"
+        )
+        self.report_model = getattr(
+            settings, "OLLAMA_EXTRACTION_MODEL", "llama3.1:8b-instruct-q4_K_M"
+        )
 
     async def extract(
         self,
         prompt: str,
         model: str | None = None,
         images: list[str] | None = None,
+        json_format: bool = True,
     ) -> dict:
-        """Run inference on Ollama with retry logic."""
+        """Run inference on Ollama with retry logic.
+
+        json_format=True (default) constrains Ollama's decoding to valid
+        JSON — needed for structured extraction/classification callers.
+        Pass json_format=False for narrative-prose responses (e.g. crew
+        summaries): with the constraint on, the model still emits valid
+        JSON as instructed, but wraps whatever prose it wanted to write in
+        an object like {"profile": "..."} rather than writing plain text,
+        regardless of what the prompt asks for — the constraint operates
+        below the prompt, at the token-sampling level.
+        """
         from asyncio import sleep
 
         import httpx
@@ -38,8 +55,9 @@ class OllamaClient:
             "model": selected_model,
             "prompt": prompt,
             "stream": False,
-            "format": "json",
         }
+        if json_format:
+            payload["format"] = "json"
         if images:
             payload["images"] = images
 
@@ -55,18 +73,14 @@ class OllamaClient:
                     return response.json()
             except httpx.TimeoutException as e:
                 last_exception = e
-                logger.warning(
-                    f"Ollama timeout (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
-                )
+                logger.warning(f"Ollama timeout (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
                 if attempt < MAX_RETRIES - 1:
-                    await sleep(RETRY_BACKOFF_FACTOR ** attempt)
+                    await sleep(RETRY_BACKOFF_FACTOR**attempt)
             except httpx.HTTPStatusError as e:
                 last_exception = e
-                logger.warning(
-                    f"Ollama HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
-                )
+                logger.warning(f"Ollama HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
                 if e.response.status_code >= 500 and attempt < MAX_RETRIES - 1:
-                    await sleep(RETRY_BACKOFF_FACTOR ** attempt)
+                    await sleep(RETRY_BACKOFF_FACTOR**attempt)
                 else:
                     raise
             except Exception as e:
@@ -131,18 +145,14 @@ class OllamaClient:
                     return response.json()
             except httpx.TimeoutException as e:
                 last_exception = e
-                logger.warning(
-                    f"Ollama timeout (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
-                )
+                logger.warning(f"Ollama timeout (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
                 if attempt < MAX_RETRIES - 1:
-                    sleep(RETRY_BACKOFF_FACTOR ** attempt)
+                    sleep(RETRY_BACKOFF_FACTOR**attempt)
             except httpx.HTTPStatusError as e:
                 last_exception = e
-                logger.warning(
-                    f"Ollama HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}"
-                )
+                logger.warning(f"Ollama HTTP error (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
                 if e.response.status_code >= 500 and attempt < MAX_RETRIES - 1:
-                    sleep(RETRY_BACKOFF_FACTOR ** attempt)
+                    sleep(RETRY_BACKOFF_FACTOR**attempt)
                 else:
                     raise
             except Exception as e:

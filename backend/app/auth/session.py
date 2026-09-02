@@ -63,7 +63,12 @@ def verify_session_token(token: str) -> Optional[tuple[str, Optional[str]]]:
 
 
 async def is_token_revoked(jti: Optional[str]) -> bool:
-    """Check whether a token id has been revoked in Redis."""
+    """Check whether a token id has been revoked in Redis.
+
+    Fail-closed: if Redis is unreachable or errors, the token is treated as
+    revoked. Logging out a compromised session must never silently succeed
+    because the revocation store is down. See ADR-0002.
+    """
     if not jti:
         return False
     try:
@@ -71,15 +76,18 @@ async def is_token_revoked(jti: Optional[str]) -> bool:
 
         key = f"session_revoked:{jti}"
         return await cache_service.get(key) is not None
-    except Exception:
-        return False
+    except Exception as e:
+        logger.warning("security_degradation: revocation lookup failed, failing closed: %s", e)
+        return True
 
 
 async def revoke_session_token(token: str) -> bool:
     """Add a token's jti to the Redis revocation blocklist.
 
     Called by the logout mutation to make stateless itsdangerous
-    tokens revocable server-side.
+    tokens revocable server-side. If Redis is unreachable the revocation is
+    not persisted; the caller should surface this to the client (the cookie
+    is still cleared locally) and we log a security event.
     """
     try:
         from datetime import timedelta
@@ -93,5 +101,6 @@ async def revoke_session_token(token: str) -> bool:
         key = f"session_revoked:{jti}"
         # Expire the blocklist entry at the token's natural expiry
         return await cache_service.set(key, "revoked", ttl=timedelta(seconds=MAX_SESSION_AGE))
-    except Exception:
+    except Exception as e:
+        logger.warning("security_degradation: revoke_session_token failed: %s", e)
         return False

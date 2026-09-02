@@ -1,19 +1,42 @@
 """Test configuration and fixtures."""
+
 # ruff: noqa: E402 - imports below intentionally follow test-DB setup
 import os
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+# Set env vars before any app.* import so settings pick them up. ``get_settings``
+# is called at import time in ``app.config``, ``app.database``, ``app.main`` and
+# ``app.auth.session``; without these overrides the test would inherit whatever
+# the host environment happens to have.
+os.environ.setdefault("APP_ENV", "development")
+os.environ.setdefault(
+    "DATABASE_URL", os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///./test.db")
+)
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("SESSION_SECRET_KEY", "test_secret_key_at_least_32_chars_long_xx")
 
-import app.auth.decorators as auth_decorators
-from app.database import Base, get_db
-from app.main import app
-from app.models import CrewMember
-from app.services.crew import auth_service
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+import app.auth.decorators as auth_decorators  # noqa: E402
+from app.database import Base, get_db  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models import CrewMember  # noqa: E402
+from app.services.cache import cache_service  # noqa: E402
+from app.services.crew import auth_service  # noqa: E402
+from app.services.upload import document_upload_service  # noqa: E402
+from app.services.upload import settings as upload_settings
+from app.tasks.document_tasks import (  # noqa: E402
+    process_document_extraction,
+    process_dropbox_document,
+)
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -40,6 +63,33 @@ _dummy_user = CrewMember(
 auth_service.get_user_from_token = AsyncMock(return_value=_dummy_user)
 auth_decorators._extract_token = lambda request: "test-token"
 
+# Uploads must never hit the real Dropbox account: even with live credentials
+# configured in .env, tests fall back to local-cache-only storage.
+document_upload_service.dropbox_available = False
+upload_settings.REQUIRE_DROPBOX_STORAGE = False
+
+# .delay() publishes to the real Celery/Redis broker, which requires auth this
+# environment's REDIS_URL doesn't carry. That doesn't fail fast: kombu retries
+# the connection with no timeout, so any upload test blocks forever instead of
+# hitting the `except Exception` around the call site in app/api/documents.py.
+process_document_extraction.delay = MagicMock()
+process_dropbox_document.delay = MagicMock()
+
+# Meilisearch indexing (create/update/delete crew member) makes a real network
+# call by default; the test environment has no Meilisearch server reachable,
+# and the client's own try/except would otherwise just eat a connection-
+# timeout on every crew mutation test. Mock it so tests are fast and so
+# individual tests can assert it was called with the expected document.
+from app.services.meilisearch import meilisearch_client
+
+meilisearch_client.index_crew_member = AsyncMock(return_value={"task_uid": 0})
+meilisearch_client.delete_crew_member = AsyncMock(return_value=True)
+
+# Default Redis availability to False so no test calls a real Redis by accident.
+# Individual tests can monkeypatch cache_service.is_redis_available / specific
+# methods to exercise Redis-backed behavior (see test_login_rate_limit.py).
+cache_service.is_redis_available = AsyncMock(return_value=False)
+
 # Patch app's DB globals to use test DB so all `get_session_factory` calls use test DB
 import app.database as app_db
 
@@ -51,8 +101,14 @@ import asyncio
 
 
 async def _init_test_db():
+    # Wipe any rows left over from prior runs: TEST_DATABASE_URL points at a
+    # file on disk, and `create_all` alone is a no-op on tables that already
+    # exist, so leftover data silently accumulates across runs and can push
+    # a test's own rows out of ranked/limited search results.
     async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+
 
 try:
     asyncio.get_event_loop().run_until_complete(_init_test_db())
@@ -60,10 +116,17 @@ except RuntimeError:
     # Already in event loop (pytest-asyncio will handle)
     pass
 
+
 @pytest_asyncio.fixture(autouse=True)
 async def _ensure_tables():
+    # Clear every table's rows (not just create_all, which is a no-op on
+    # tables that already exist) so one test's committed rows can't feed
+    # another's queries — e.g. a ranked/limited search silently swallowing a
+    # just-inserted row behind leftover rows an earlier test committed.
+    # A row-level delete is far cheaper than drop_all/create_all per test.
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
     yield
 
 

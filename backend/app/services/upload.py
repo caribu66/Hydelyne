@@ -50,9 +50,7 @@ def safe_path_component(value: str, label: str = "path_component") -> str:
     if not value or not isinstance(value, str):
         raise ValueError(f"Invalid {label}: must be a non-empty string")
     if not SAFE_PATH_RE.match(value):
-        raise ValueError(
-            f"Invalid {label}: contains forbidden characters"
-        )
+        raise ValueError(f"Invalid {label}: contains forbidden characters")
     if ".." in value:
         raise ValueError(f"Invalid {label}: traversal sequence not allowed")
     if len(value) > MAX_PATH_COMPONENT_LEN:
@@ -98,7 +96,9 @@ class DocumentUploadService:
             self.cache_path.mkdir(parents=True, exist_ok=True)
         self.dropbox_available = token_provider.configured
 
-    def validate_file(self, file: UploadFile, file_content: Optional[bytes] = None) -> tuple[bool, str]:
+    def validate_file(
+        self, file: UploadFile, file_content: Optional[bytes] = None
+    ) -> tuple[bool, str]:
         """Validate file type (extension + optional magic bytes).
 
         If *file_content* is provided, its first 16 bytes are checked against
@@ -138,9 +138,7 @@ class DocumentUploadService:
         """
         safe_crew_id = safe_path_component(crew_id, "crew_id")
         safe_classification = (
-            safe_path_component(classification, "classification")
-            if classification
-            else None
+            safe_path_component(classification, "classification") if classification else None
         )
         document_id = str(uuid.uuid4())
         safe_filename = storage_filename(file.filename)
@@ -214,7 +212,11 @@ class DocumentUploadService:
         """Upload file to Dropbox. Returns Dropbox path or None on failure."""
         safe_crew_id = safe_path_component(crew_id, "crew_id")
         safe_filename = safe_path_component(filename, "filename")
-        folder = safe_path_component(classification, "classification") if classification else "uncategorized"
+        folder = (
+            safe_path_component(classification, "classification")
+            if classification
+            else "uncategorized"
+        )
         dropbox_path = f"/hydenlyne/{safe_crew_id}/documents/{folder}/{document_id}_{safe_filename}"
 
         try:
@@ -225,12 +227,14 @@ class DocumentUploadService:
                     "https://content.dropboxapi.com/2/files/upload",
                     headers={
                         "Content-Type": "application/octet-stream",
-                        "Dropbox-API-Arg": json_module.dumps({
-                            "path": dropbox_path,
-                            "mode": "add",
-                            "autorename": True,
-                            "mute": False,
-                        }),
+                        "Dropbox-API-Arg": json_module.dumps(
+                            {
+                                "path": dropbox_path,
+                                "mode": "add",
+                                "autorename": True,
+                                "mute": False,
+                            }
+                        ),
                     },
                     content=file_content,
                     timeout=60.0,

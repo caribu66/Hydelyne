@@ -32,6 +32,7 @@ class AuditService:
         """
         async with get_session_factory()() as session:
             from sqlalchemy import select
+
             stmt = select(DocumentModel).where(DocumentModel.id == document_id)
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()
@@ -76,6 +77,7 @@ class AuditService:
         """
         async with get_session_factory()() as session:
             from sqlalchemy import select
+
             stmt = select(DocumentModel).where(DocumentModel.id == document_id)
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()
@@ -111,6 +113,7 @@ class AuditService:
         """
         async with get_session_factory()() as session:
             from sqlalchemy import select
+
             stmt = select(DocumentModel).where(DocumentModel.id == document_id)
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()

@@ -1,4 +1,5 @@
 """Security regression tests: path traversal prevention."""
+
 import io
 
 import pytest
@@ -8,6 +9,7 @@ from app.services.upload import DocumentUploadService, safe_path_component
 # ---------------------------------------------------------------------------
 # safe_path_component unit tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "value",
@@ -57,6 +59,7 @@ def test_safe_path_component_accepts_dashed_name():
 # _get_local_cache_path traversal tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def upload_service():
     return DocumentUploadService()
@@ -90,6 +93,7 @@ def test_get_local_cache_path_rejects_slash_in_components(upload_service):
 # get_file must not serve arbitrary local files (traversal sink)
 # ---------------------------------------------------------------------------
 
+
 def test_get_file_rejects_traversal(upload_service):
     """get_file must NOT fall back to reading arbitrary local paths."""
     result = upload_service.get_file("../../../etc/passwd")
@@ -110,10 +114,13 @@ def test_get_file_rejects_dotdot_filename(upload_service):
 # REST upload endpoint: crew_id traversal -> 400
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_upload_with_traversal_crew_id_rejected(client):
     """Upload with a traversal crew_id must be rejected."""
-    test_file = io.BytesIO(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\nxref\n0 1\n0000000000 65535 f \n%%EOF")
+    test_file = io.BytesIO(
+        b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\nxref\n0 1\n0000000000 65535 f \n%%EOF"
+    )
     for bad_crew_id in ["../../etc", "..%2fpasswd", "/etc/passwd", "a/../../b"]:
         response = await client.post(
             "/api/documents/upload",

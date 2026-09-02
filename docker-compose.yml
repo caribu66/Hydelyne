@@ -135,6 +135,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      RUN_MIGRATIONS: "false"
     volumes:
       - ./backend:/app:z
       - document_storage:/app/data/documents
@@ -164,6 +165,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_pass}
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_ENV: ${APP_ENV:-development}
+      RUN_MIGRATIONS: "false"
     volumes:
       - ./backend:/app:z
       - document_storage:/app/data/documents
@@ -195,6 +197,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      RUN_MIGRATIONS: "false"
     depends_on:
       db:
         condition: service_healthy
@@ -211,6 +214,7 @@ services:
     environment:
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
       FLOWER_BASIC_AUTH: ${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-flower_pass}
+      RUN_MIGRATIONS: "false"
     depends_on:
       - redis
       - celery_worker

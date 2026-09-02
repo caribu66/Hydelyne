@@ -15,6 +15,20 @@ QDRANT_COLLECTION = "documents"
 VECTOR_SIZE = 384
 
 
+def document_indexable_text(document) -> str:
+    """The text embedded for a Document: prefer its structured extraction,
+    fall back to classification/file name. Shared by the embedding-indexing
+    Celery task and ConsultantKnowledgeService.similar_documents so both
+    embed the same document the same way."""
+    import json as _json
+
+    if document.extracted_data:
+        return _json.dumps(document.extracted_data, default=str)
+    if document.classification:
+        return f"{document.classification} document {document.file_name}"
+    return document.file_name
+
+
 class QdrantService:
     """Service for vector search using Qdrant."""
 
@@ -151,7 +165,7 @@ class QdrantService:
 
             response = httpx.post(
                 f"{settings.OLLAMA_BASE_URL}/api/embeddings",
-                json={"model": "all-minilm", "prompt": text[:2048]},
+                json={"model": settings.OLLAMA_EMBEDDING_MODEL, "prompt": text[:2048]},
                 timeout=30.0,
             )
             if response.status_code == 200:

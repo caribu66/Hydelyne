@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -31,6 +31,13 @@ async def preview_cv(
     This is intentionally a preview only: it never stores the uploaded bytes
     or creates database metadata. The subsequent document upload remains the
     single operation that writes the approved CV to Dropbox.
+
+    No LLM call — uses the same deterministic PDF-table extractor as the
+    main CV pipeline (see backend/docs/consultant-knowledge-core.md). This
+    template never carries email/phone at all, so those two are always
+    None here; the operator fills them in by hand. A non-PDF CV also
+    returns empty fields (the table parser is PDF-only) rather than
+    falling back to AI.
     """
     content = await file.read(50 * 1024 * 1024 + 1)
     is_valid, error_msg = document_upload_service.validate_file(file, content)
@@ -39,6 +46,8 @@ async def preview_cv(
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File exceeds maximum size of 52428800 bytes")
 
+    empty_result = {"full_name": None, "email": None, "phone": None, "nationality": None}
+
     suffix = Path(file.filename or "cv.pdf").suffix.lower()
     temp_path = None
     try:
@@ -46,21 +55,19 @@ async def preview_cv(
             temp_file.write(content)
             temp_path = temp_file.name
 
-        from app.services.extraction import extraction_service
-        from app.services.text_extraction import text_extraction_service
-
         file_type = document_upload_service.get_file_type(file.filename or "cv.pdf")
-        cv_text = await asyncio.to_thread(
-            text_extraction_service.extract_text_sync, temp_path, file_type
-        )
-        extracted = await asyncio.to_thread(
-            extraction_service.extract_document_sync, cv_text, "cv"
-        )
+        if file_type != "pdf":
+            return empty_result
+
+        from app.services.cv_table_extractor import extract_cv_tables
+
+        table_extraction = await asyncio.to_thread(extract_cv_tables, temp_path)
+        personal = table_extraction.personal.fields if table_extraction.personal else {}
         return {
-            "full_name": extracted.get("full_name"),
-            "email": extracted.get("email"),
-            "phone": extracted.get("phone"),
-            "nationality": extracted.get("nationality"),
+            "full_name": table_extraction.full_name,
+            "email": None,
+            "phone": None,
+            "nationality": personal.get("NATIONALITY"),
         }
     except Exception:
         logger.exception("CV preview extraction failed")
@@ -125,7 +132,8 @@ async def upload_document(
                 dropbox_path=dropbox_path,
                 classification=classification,
                 extraction_status="pending",
-                uploaded_by=getattr(current_user, "id", None) or getattr(current_user, "email", None),
+                uploaded_by=getattr(current_user, "id", None)
+                or getattr(current_user, "email", None),
             )
             session.add(doc)
             await session.commit()
@@ -191,7 +199,9 @@ async def download_document(
 
 
 @router.get("/{document_id}/status")
-async def get_document_status(document_id: str, request: Request, current_user=Depends(get_current_user_rest)):
+async def get_document_status(
+    document_id: str, request: Request, current_user=Depends(get_current_user_rest)
+):
     """Get document processing status."""
     async with get_session_factory()() as session:
         from sqlalchemy import select
@@ -228,8 +238,12 @@ async def delete_document(
         # Do not leave a recoverable Dropbox original behind when its database
         # record is removed.  Keep the record if remote deletion fails.
         if doc.storage_type == "dropbox":
-            if not doc.dropbox_path or not await document_upload_service.delete_from_dropbox(doc.dropbox_path):
-                raise HTTPException(status_code=502, detail="Dropbox deletion failed; document was retained")
+            if not doc.dropbox_path or not await document_upload_service.delete_from_dropbox(
+                doc.dropbox_path
+            ):
+                raise HTTPException(
+                    status_code=502, detail="Dropbox deletion failed; document was retained"
+                )
 
         # The upload service restricts local deletion to its own cache path.
         document_upload_service.delete_file(doc.storage_path)

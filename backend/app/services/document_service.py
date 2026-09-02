@@ -110,9 +110,7 @@ class DocumentService:
                     local_path, doc.classification or "certificate"
                 )
             else:
-                text = await text_extraction_service.extract_text(
-                    local_path, doc.file_type
-                )
+                text = await text_extraction_service.extract_text(local_path, doc.file_type)
 
                 if not doc.classification:
                     classification_result = await extraction_service.classify_document(text)
@@ -125,38 +123,21 @@ class DocumentService:
                             db_doc.classification = doc.classification
                             await session.commit()
 
+                if doc.classification == "cv":
+                    # CVs never go through the LLM — see
+                    # CVProcessingService.extract_cv_deterministically
+                    # and backend/docs/consultant-knowledge-core.md.
+                    from app.services.cv_processing import CVProcessingService
+
+                    extraction_result = CVProcessingService.extract_cv_deterministically(
+                        local_path, doc.file_type, text
+                    )
+                else:
                     extraction_result = await extraction_service.extract_document(
                         text=text,
                         document_type=doc.classification or "other",
                         is_image=False,
                     )
-                else:
-                    extraction_result = await extraction_service.extract_document(
-                        text=text,
-                        document_type=doc.classification,
-                        is_image=False,
-                    )
-
-                if doc.classification == "cv":
-                    from app.services.cv_processing import CVProcessingService
-                    if doc.file_type == "pdf":
-                        try:
-                            from app.services.cv_table_extractor import (
-                                extract_cv_tables,
-                            )
-                            table_payload = extract_cv_tables(local_path).as_extraction_payload()
-                            if table_payload:
-                                extraction_result = CVProcessingService.merge_table_extraction(
-                                    extraction_result, table_payload
-                                )
-                        except Exception as exc:
-                            logger.warning("Table extraction failed for %s: %s", local_path, exc)
-                    extracted_training = CVProcessingService.training_from_text(text)
-                    if extracted_training:
-                        extraction_result["training_qualifications"] = extracted_training
-                    extracted_systems = CVProcessingService.systems_from_text(text)
-                    if extracted_systems:
-                        extraction_result["systems"] = list(dict.fromkeys([*(extraction_result.get("systems") or []), *extracted_systems]))
 
             review_status, needs_review = extraction_service.determine_review_status(
                 extraction_result

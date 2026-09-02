@@ -1,4 +1,5 @@
 """Security regression tests: upload magic-byte validation."""
+
 import io
 
 import pytest
@@ -78,7 +79,13 @@ async def test_upload_docx_with_wrong_magic_bytes_rejected(client):
     response = await client.post(
         "/api/documents/upload",
         data={"crew_id": "test-crew-id"},
-        files={"file": ("evil.docx", test_file, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "evil.docx",
+                test_file,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
     assert response.status_code == 400
 

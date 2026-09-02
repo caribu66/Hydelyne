@@ -103,6 +103,7 @@ class CrewMember:
     profile_completeness_score: Optional[float] = None
     years_of_experience: Optional[float] = None
     education: Optional[str] = None
+    professional_summary: Optional[str] = None
     geographical_experience: Optional[str] = None
     systems_experience: Optional[str] = None
     training_qualifications: Optional[str] = None

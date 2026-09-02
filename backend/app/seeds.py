@@ -8,6 +8,7 @@ Usage:
 
 Only runs when APP_ENV != "production" to avoid contaminating real data.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -197,7 +198,9 @@ async def seed_all() -> int:
     return created
 
 
-async def seed_user(email: str, password: str, full_name: str = "Ops User", role: str = "user") -> CrewMember:
+async def seed_user(
+    email: str, password: str, full_name: str = "Ops User", role: str = "user"
+) -> CrewMember:
     """Create a non-admin login user (idempotent by email)."""
     from app.auth.session import hash_password
 

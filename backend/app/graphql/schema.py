@@ -9,6 +9,8 @@ from typing import Optional
 
 import strawberry
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from strawberry import Info
 
 from app.auth.decorators import require_admin, require_auth
@@ -54,8 +56,8 @@ from app.models import Project as ProjectModel
 from app.models import WorkHistory as WorkHistoryModel
 from app.services.crew import auth_service, certification_service, crew_service
 from app.services.document_service import document_service
-from app.services.upload import document_upload_service
 from app.services.reports import report_service
+from app.services.upload import document_upload_service
 
 
 def _dto_to_graphql_crew_member(dto: CrewMemberCreateDTO) -> CrewMember:
@@ -63,7 +65,7 @@ def _dto_to_graphql_crew_member(dto: CrewMemberCreateDTO) -> CrewMember:
     return CrewMember(
         id=str(uuid.uuid4()),
         full_name=dto.full_name,
-        email=dto.email if hasattr(dto, 'email') else None,
+        email=dto.email if hasattr(dto, "email") else None,
     )
 
 
@@ -104,11 +106,20 @@ def _model_to_graphql_crew_member(model: CrewMemberModel) -> CrewMember:
         availability_status=model.availability_status,
         availability_date=str(model.availability_date) if model.availability_date else None,
         profile_completeness_score=model.profile_completeness_score,
-        years_of_experience=round(model.experience_months / 12, 1) if model.experience_months is not None else None,
+        years_of_experience=round(model.experience_months / 12, 1)
+        if model.experience_months is not None
+        else None,
         education=model.education,
-        geographical_experience=json.dumps(model.geographical_experience) if model.geographical_experience else None,
-        systems_experience=json.dumps(model.systems_experience) if model.systems_experience else None,
-        training_qualifications=json.dumps(model.training_qualifications) if model.training_qualifications else None,
+        professional_summary=model.professional_summary,
+        geographical_experience=json.dumps(model.geographical_experience)
+        if model.geographical_experience
+        else None,
+        systems_experience=json.dumps(model.systems_experience)
+        if model.systems_experience
+        else None,
+        training_qualifications=json.dumps(model.training_qualifications)
+        if model.training_qualifications
+        else None,
         work_history=[_model_to_graphql_work_history(w) for w in (model.work_history or [])],
         certifications=[_model_to_graphql_certification(c) for c in (model.certifications or [])],
         internal_notes=model.internal_notes,
@@ -116,6 +127,25 @@ def _model_to_graphql_crew_member(model: CrewMemberModel) -> CrewMember:
         created_at=str(model.created_at),
         updated_at=str(model.updated_at),
     )
+
+
+async def _reload_crew_with_relations(session: AsyncSession, crew_id: str) -> CrewMemberModel:
+    """Re-fetch a crew member with work_history/certifications eager-loaded.
+
+    `_model_to_graphql_crew_member` accesses these relationships synchronously;
+    without selectinload here that lazy-loads outside the async greenlet
+    context and raises `MissingGreenlet`.
+    """
+    stmt = (
+        select(CrewMemberModel)
+        .options(
+            selectinload(CrewMemberModel.work_history),
+            selectinload(CrewMemberModel.certifications),
+        )
+        .where(CrewMemberModel.id == crew_id)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one()
 
 
 def _model_to_graphql_certification(model: CertificationModel) -> Certification:
@@ -160,7 +190,9 @@ def _model_to_graphql_document(model: DocumentModel) -> DocumentType:
         extraction_status=model.extraction_status,
         extracted_text=model.extracted_text,
         extracted_data=json.dumps(model.extracted_data) if model.extracted_data else None,
-        extraction_confidence=json.dumps(model.extraction_confidence) if model.extraction_confidence else None,
+        extraction_confidence=json.dumps(model.extraction_confidence)
+        if model.extraction_confidence
+        else None,
         uploaded_by=model.uploaded_by,
         uploaded_at=str(model.uploaded_at),
         version_number=model.version_number,
@@ -241,6 +273,15 @@ class Query:
 
     @strawberry.field
     @require_auth
+    async def crew_summary(self, info: Info, crew_id: str) -> str:
+        from app.services.consultant_knowledge import consultant_knowledge_service
+
+        factory = get_session_factory()
+        async with factory() as session:
+            return await consultant_knowledge_service.summarize(crew_id, db_session=session)
+
+    @strawberry.field
+    @require_auth
     async def document(self, info: Info, id: str) -> Optional[DocumentType]:
         doc = await document_service.get_document(id)
         return _model_to_graphql_document(doc) if doc else None
@@ -263,11 +304,14 @@ class Query:
     @strawberry.field
     @require_auth
     async def query_crew(self, info: Info, query: str) -> CrewQueryResponse:
-        from app.services.crew_query import crew_query_service
+        from app.services.consultant_knowledge import consultant_knowledge_service
 
         factory = get_session_factory()
         async with factory() as session:
-            result = await crew_query_service.process_query(query, session)
+            search_result = await consultant_knowledge_service.search(
+                query, db_session=session, mode="auto"
+            )
+        result = search_result.raw or {}
 
         return CrewQueryResponse(
             intent=result.get("intent", "general"),
@@ -365,9 +409,7 @@ class Query:
                 }
             else:  # PERFORMANCE
                 # Note: performance data lives in document extracted_data; summarize what we have
-                stmt = select(DocumentModel).where(
-                    DocumentModel.classification == "performance"
-                )
+                stmt = select(DocumentModel).where(DocumentModel.classification == "performance")
                 result = await session.execute(stmt)
                 perf_docs = result.scalars().all()
                 data = {
@@ -384,9 +426,7 @@ class Query:
 
         # Optionally enrich with LLM via report_service; fall back to deterministic summary
         try:
-            ai_report = await report_service.generate_report(
-                report_type.value, data, filter_dict
-            )
+            ai_report = await report_service.generate_report(report_type.value, data, filter_dict)
             return Report(
                 id=ai_report.get("id") or str(uuid.uuid4()),
                 report_type=report_type.value,
@@ -502,7 +542,7 @@ class Mutation:
         return True
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def create_crew_member(
         self,
         info: Info,
@@ -532,11 +572,16 @@ class Mutation:
             crew = dto_to_crew_member_model(dto)
             session.add(crew)
             await session.commit()
-            await session.refresh(crew)
-            return _model_to_graphql_crew_member(crew)
+            crew = await _reload_crew_with_relations(session, crew.id)
+            graphql_crew = _model_to_graphql_crew_member(crew)
+
+        from app.services.consultant_knowledge import consultant_knowledge_service
+
+        await consultant_knowledge_service.index_crew_member(crew)
+        return graphql_crew
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def update_crew_member(
         self,
         info: Info,
@@ -592,8 +637,17 @@ class Mutation:
             if dto.availability_status is not None:
                 crew.availability_status = dto.availability_status
             await session.commit()
-            await session.refresh(crew)
-            return _model_to_graphql_crew_member(crew)
+            crew = await _reload_crew_with_relations(session, crew.id)
+            graphql_crew = _model_to_graphql_crew_member(crew)
+
+        from app.services.cache import cache_service
+        from app.services.consultant_knowledge import consultant_knowledge_service
+
+        await consultant_knowledge_service.index_crew_member(crew)
+        # The AI summary is generated from these same fields — a stale
+        # cached summary after an edit would show outdated facts.
+        await cache_service.delete(cache_service._make_key("summary", crew.id))
+        return graphql_crew
 
     @strawberry.mutation
     @require_admin
@@ -624,7 +678,12 @@ class Mutation:
             # Keep all metadata when Dropbox cannot confirm deletion.
             for document in documents:
                 if document.storage_type == "dropbox":
-                    if not document.dropbox_path or not await document_upload_service.delete_from_dropbox(document.dropbox_path):
+                    if (
+                        not document.dropbox_path
+                        or not await document_upload_service.delete_from_dropbox(
+                            document.dropbox_path
+                        )
+                    ):
                         raise ValueError(
                             f"Could not delete Dropbox file for {document.file_name}; crew member was retained"
                         )
@@ -635,21 +694,27 @@ class Mutation:
             await session.commit()
 
         # Cache removal is best-effort and happens only after the database
-        # transaction has succeeded.  Any leftover cache is harmless and no
-        # longer addressable through the application.
+        # transaction has succeeded. The "summary" and "compliance" keys are
+        # addressable directly by crew_id via crewSummary/complianceStatus,
+        # independent of whether the crew record still exists — a stale hit
+        # there would keep serving a deleted person's data until its TTL
+        # expires, so they must be cleared explicitly rather than assumed
+        # unreachable.
         for document in documents:
             document_upload_service.delete_file(document.storage_path)
 
         from app.services.cache import cache_service
-        from app.services.meilisearch import meilisearch_client
+        from app.services.consultant_knowledge import consultant_knowledge_service
 
         await cache_service.delete(cache_service._make_key("crew", id))
+        await cache_service.delete(cache_service._make_key("summary", id))
+        await cache_service.delete(cache_service._make_key("compliance", id))
         await cache_service.invalidate_pattern("hydenlyne:crew_list:*")
-        await meilisearch_client.delete_crew_member(id)
+        await consultant_knowledge_service.remove_from_index(id)
         return True
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def upload_document(
         self,
         info: Info,
@@ -665,7 +730,9 @@ class Mutation:
         _settings = get_settings()
         safe_crew_id = safe_path_component(crew_id, "crew_id")
         doc_id = str(uuid.uuid4())
-        storage_path = f"{_settings.DOCUMENT_STORAGE_PATH}/{safe_crew_id}/{doc_id}_{Path(file_name).name}"
+        storage_path = (
+            f"{_settings.DOCUMENT_STORAGE_PATH}/{safe_crew_id}/{doc_id}_{Path(file_name).name}"
+        )
 
         dto = DocumentCreateDTO(
             crew_member_id=safe_crew_id,
@@ -687,7 +754,7 @@ class Mutation:
         return _model_to_graphql_document(doc)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def confirm_extraction(
         self,
         info: Info,
@@ -700,7 +767,7 @@ class Mutation:
         return _model_to_graphql_document(confirmed)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def reprocess_document(self, info: Info, document_id: str) -> DocumentType:
         factory = get_session_factory()
         async with factory() as session:
@@ -715,7 +782,7 @@ class Mutation:
             return _model_to_graphql_document(doc)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def confirm_document_match(
         self,
         info: Info,
@@ -728,7 +795,7 @@ class Mutation:
         return _model_to_graphql_document(doc)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def add_certification(
         self,
         info: Info,
@@ -740,6 +807,7 @@ class Mutation:
         expiry_date: Optional[str] = None,
     ) -> Certification:
         from datetime import date
+
         dto = CertificationCreateDTO(
             crew_member_id=crew_id,
             cert_type=cert_type.value,
@@ -759,7 +827,7 @@ class Mutation:
         return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def update_certification(
         self,
         info: Info,
@@ -800,7 +868,7 @@ class Mutation:
             return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def create_project(
         self,
         info: Info,
@@ -822,7 +890,7 @@ class Mutation:
             return _model_to_graphql_project(project)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def update_project(
         self,
         info: Info,
@@ -843,7 +911,7 @@ class Mutation:
             return _model_to_graphql_project(project)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def assign_crew_to_project(
         self,
         info: Info,
@@ -863,7 +931,7 @@ class Mutation:
             return _model_to_graphql_project(project)
 
     @strawberry.mutation
-    @require_auth
+    @require_admin
     async def upload_cv_and_extract(
         self,
         info: Info,
@@ -935,7 +1003,9 @@ class Mutation:
                 "message/rfc822": "eml",
                 "application/vnd.ms-outlook": "msg",
             }
-            extract_type = mime_to_type.get(file_type, file_type.split("/")[-1] if "/" in file_type else file_type)
+            extract_type = mime_to_type.get(
+                file_type, file_type.split("/")[-1] if "/" in file_type else file_type
+            )
             raw_text = text_extraction_service.extract_text_sync(storage_path, extract_type)
             extraction_result = extraction_service.extract_document_sync(raw_text, "cv")
             extracted_data = extraction_result
@@ -957,6 +1027,7 @@ class Mutation:
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"CV extraction failed for {doc_id}: {e}")
 

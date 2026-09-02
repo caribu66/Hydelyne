@@ -47,9 +47,13 @@ class AuthService:
                 # timing oracle, but require explicit env flag to allow passwordless
                 # login in development only. Default: deny.
                 from app.config import get_settings as _gs
+
                 if _gs().APP_ENV != "development":
                     return None
-                logger.warning("AuthService.authenticate: no password_hash column, allowing dev login for %s", email)
+                logger.warning(
+                    "AuthService.authenticate: no password_hash column, allowing dev login for %s",
+                    email,
+                )
 
             token = create_session_token(user.id)
             return {
@@ -73,11 +77,15 @@ class AuthService:
 
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(CrewMember).options(
-                selectinload(CrewMember.certifications),
-                selectinload(CrewMember.work_history),
-                selectinload(CrewMember.documents),
-            ).where(CrewMember.id == user_id)
+            stmt = (
+                select(CrewMember)
+                .options(
+                    selectinload(CrewMember.certifications),
+                    selectinload(CrewMember.work_history),
+                    selectinload(CrewMember.documents),
+                )
+                .where(CrewMember.id == user_id)
+            )
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
@@ -111,11 +119,16 @@ class CrewService:
         """List crew members with optional filters."""
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(CrewMember).options(
-                selectinload(CrewMember.certifications),
-                selectinload(CrewMember.work_history),
-                selectinload(CrewMember.documents),
-            ).limit(limit).offset(offset)
+            stmt = (
+                select(CrewMember)
+                .options(
+                    selectinload(CrewMember.certifications),
+                    selectinload(CrewMember.work_history),
+                    selectinload(CrewMember.documents),
+                )
+                .limit(limit)
+                .offset(offset)
+            )
 
             if availability:
                 stmt = stmt.where(CrewMember.availability_status == availability)
@@ -178,14 +191,16 @@ class CrewService:
                     "total": len(certs),
                     "valid": sum(1 for c in certs if c.status == "valid"),
                     "expiring_soon": sum(
-                        1 for c in certs
-                        if c.expiry_date and c.expiry_date <= today + timedelta(days=30) and c.expiry_date >= today
+                        1
+                        for c in certs
+                        if c.expiry_date
+                        and c.expiry_date <= today + timedelta(days=30)
+                        and c.expiry_date >= today
                     ),
-                    "expired": sum(
-                        1 for c in certs
-                        if c.expiry_date and c.expiry_date < today
+                    "expired": sum(1 for c in certs if c.expiry_date and c.expiry_date < today),
+                    "pending_verification": sum(
+                        1 for c in certs if c.verification_status == "unverified"
                     ),
-                    "pending_verification": sum(1 for c in certs if c.verification_status == "unverified"),
                 }
 
         return await cache_service.get_or_set(

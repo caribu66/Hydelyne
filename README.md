@@ -42,8 +42,10 @@ podman-compose logs -f backend
 # - Flower (Celery): http://localhost:5555/flower
 ```
 
-Schema migrations run automatically on backend startup (`alembic upgrade head`
-from the FastAPI lifespan hook); there is no separate migration step.
+Schema migrations run as a discrete deployment step: the backend container's
+entrypoint invokes `alembic upgrade head` before `uvicorn` starts. There is
+no `create_all` fallback in the production path; the API will not start if the
+schema is out of date.
 
 ### Services
 
@@ -162,12 +164,12 @@ hydenlyne-crew-dms/
 │   │   └── auth/           # Session management
 │   ├── tests/              # Test suite
 │   └── requirements.txt
-├── frontend/
+├── frontend/                  # React + Vite, served by nginx (part of this repo)
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
-│   │   ├── pages/          # Route pages
-│   │   ├── lib/            # Utilities (Apollo client, etc.)
-│   │   └── generated/      # GraphQL codegen output
+│   │   ├── hooks/          # Data-fetching and UI hooks
+│   │   ├── lib/            # Apollo client, GraphQL queries, mappers
+│   │   └── App.tsx
 │   └── package.json
 ├── docker-compose.yml
 └── .env.example
@@ -222,8 +224,14 @@ cd frontend && npm run lint && npm run build
 
 - [Secret Rotation](SECRET_ROTATION.md) — what each secret protects and the
   blast radius of rotating it
-
-The architecture and data-model plan lives outside this repository, at
-`~/.local/share/kilo/plans/1788202713989-hydenlyne-crew-dms.md`, so it does not
-travel with a clone. `AI_BUILD_GUIDE.md` and `EXTRACTION_PROMPTS.md` were
-previously linked here but have never existed in the tree.
+- [AI engineering contract](AGENTS.md) — mandatory rules for AI-assisted work
+- [Architecture](docs/ARCHITECTURE.md) — system ownership, dependency direction,
+  data flows, and known legacy exceptions
+- [Engineering standards](docs/ENGINEERING_STANDARDS.md) — quality gates,
+  security, testing, review, and definition of done
+- [Architecture audit](docs/AUDIT_2026-09-02.md) — prioritized current-state
+  findings and remediation sequence
+- [ADR template](docs/decisions/0000-template.md) — record consequential
+  architecture decisions
+- [Consultant knowledge core](backend/docs/consultant-knowledge-core.md) —
+  consultant ingestion, retrieval, indexing, and semantic-search decisions

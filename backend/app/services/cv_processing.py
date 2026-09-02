@@ -1,4 +1,5 @@
 """Service to process extracted CV data and populate crew member profile."""
+
 from __future__ import annotations
 
 import logging
@@ -10,43 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import get_session_factory
+from app.domain.certifications import CERT_ALIASES
 from app.models import Certification, CrewMember, WorkHistory
 
 logger = logging.getLogger(__name__)
-
-CV_CERT_MAPPINGS = {
-    "mmo": "JNCC MMO",
-    "pam": "PAMGUARD Advanced",
-    "qps": "QPS QINSy",
-    "qinsy": "QPS QINSy",
-    "multibeam": "Multibeam Bathymetry",
-    "side scan": "Side Scan Sonar",
-    "magnetometer": "Magnetometer",
-    "rov": "ROV Video Verification",
-    "cpt": "CPT Testing",
-    "seismic": "Seismic Data Processing",
-    "hse": "HSE Advisory",
-    "bosiet": "BOSIET",
-    "stcw": "STCW",
-    "oguk": "OGUK Medical",
-    "nebosh": "NEBOSH Diploma",
-    "iho": "IHO Cat A Hydrographer",
-    "iogp": "IOGP Geophysical Rep",
-    "imca": "IMCA Survey QC",
-    "gwo": "GWO Wind",
-    "eod": "EOD Level 3",
-    "uxo": "UXO QC",
-    "ncs": "NCS Safety",
-    "iso 45001": "ISO 45001 Lead Auditor",
-    "vibrocoring": "Vibrocoring",
-    "hydrography": "IHO Cat A Hydrographer",
-    "hydrographer": "IHO Cat A Hydrographer",
-    "geophysical": "IOGP Geophysical Rep",
-    "geophysicist": "IOGP Geophysical Rep",
-    "environmental": "JNCC MMO",
-    "client rep": "IMCA Client Rep",
-    "foundation": "Foundation Engineering",
-}
 
 
 class CVProcessingService:
@@ -85,11 +53,21 @@ class CVProcessingService:
                 return {"error": "Crew member not found"}
 
             self._update_crew_fields(crew_member, extracted_data, result_summary)
-            await self._create_certifications(session, crew_member, extracted_data, document_id, result_summary)
-            await self._create_work_history(session, crew_member, extracted_data, document_id, result_summary)
+            await self._create_certifications(
+                session, crew_member, extracted_data, document_id, result_summary
+            )
+            await self._create_work_history(
+                session, crew_member, extracted_data, document_id, result_summary
+            )
 
             crew_member.profile_completeness_score = self._calculate_completeness(crew_member)
             await session.commit()
+
+        from app.services.cache import cache_service
+
+        # A newly-processed or re-processed CV changes the exact data an AI
+        # summary would describe — a stale cached one would show outdated facts.
+        await cache_service.delete(cache_service._make_key("summary", crew_member_id))
 
         return result_summary
 
@@ -103,10 +81,7 @@ class CVProcessingService:
         # A CV-only import creates a deliberately recognisable placeholder.
         # Replace it only with a name actually extracted from the CV; never
         # overwrite a name an operator already supplied.
-        if (
-            data.get("full_name")
-            and crew_member.full_name.strip().lower() == "pending cv import"
-        ):
+        if data.get("full_name") and crew_member.full_name.strip().lower() == "pending cv import":
             crew_member.full_name = data["full_name"]
             summary["fields_updated"].append("full_name")
 
@@ -137,9 +112,13 @@ class CVProcessingService:
         languages = data.get("languages")
         if languages and not crew_member.languages:
             if isinstance(languages, list):
-                crew_member.languages = [str(item).strip() for item in languages if str(item).strip()]
+                crew_member.languages = [
+                    str(item).strip() for item in languages if str(item).strip()
+                ]
             elif isinstance(languages, str):
-                crew_member.languages = [item.strip() for item in re.split(r",|;", languages) if item.strip()]
+                crew_member.languages = [
+                    item.strip() for item in re.split(r",|;", languages) if item.strip()
+                ]
             if crew_member.languages:
                 summary["fields_updated"].append("languages")
 
@@ -166,6 +145,11 @@ class CVProcessingService:
             crew_member.education = education
             summary["fields_updated"].append("education")
 
+        professional_summary = data.get("professional_summary")
+        if professional_summary and not crew_member.professional_summary:
+            crew_member.professional_summary = professional_summary
+            summary["fields_updated"].append("professional_summary")
+
         experience_months = self._experience_months(data)
         if experience_months and (crew_member.experience_months or 0) < experience_months:
             crew_member.experience_months = experience_months
@@ -185,7 +169,11 @@ class CVProcessingService:
 
         systems = self._systems_experience(data)
         if systems:
-            existing_systems = crew_member.systems_experience if isinstance(crew_member.systems_experience, list) else []
+            existing_systems = (
+                crew_member.systems_experience
+                if isinstance(crew_member.systems_experience, list)
+                else []
+            )
             merged_systems = list(dict.fromkeys([*existing_systems, *systems]))
             if merged_systems != existing_systems:
                 crew_member.systems_experience = merged_systems
@@ -193,7 +181,11 @@ class CVProcessingService:
 
         training = self._training_qualifications(data)
         if training:
-            existing_training = crew_member.training_qualifications if isinstance(crew_member.training_qualifications, list) else []
+            existing_training = (
+                crew_member.training_qualifications
+                if isinstance(crew_member.training_qualifications, list)
+                else []
+            )
             merged_training = list(dict.fromkeys([*existing_training, *training]))
             if merged_training != existing_training:
                 crew_member.training_qualifications = merged_training
@@ -263,8 +255,14 @@ class CVProcessingService:
     @staticmethod
     def _systems_experience(data: dict[str, Any]) -> list[str]:
         """Collect explicit software/equipment/system names from a CV."""
-        values = [value.strip() for value in (data.get("systems") or []) if isinstance(value, str) and value.strip()]
-        pattern = re.compile(r"\b(PAMGuard|ADD(?:\s+Lofitech)?|QGIS|Microsoft Office(?: Suite)?)\b", re.I)
+        values = [
+            value.strip()
+            for value in (data.get("systems") or [])
+            if isinstance(value, str) and value.strip()
+        ]
+        pattern = re.compile(
+            r"\b(PAMGuard|ADD(?:\s+Lofitech)?|QGIS|Microsoft Office(?: Suite)?)\b", re.I
+        )
         for value in data.get("skills") or []:
             if isinstance(value, str):
                 match = pattern.search(value)
@@ -281,7 +279,11 @@ class CVProcessingService:
                 if isinstance(item, str) and item.strip():
                     values.append(item.strip())
                 elif isinstance(item, dict):
-                    parts = [str(item.get(key)).strip() for key in ("degree", "field", "institution", "year") if item.get(key)]
+                    parts = [
+                        str(item.get(key)).strip()
+                        for key in ("degree", "field", "institution", "year")
+                        if item.get(key)
+                    ]
                     if parts:
                         values.append(" — ".join(parts))
         for value in data.get("training_qualifications") or data.get("certifications") or []:
@@ -297,7 +299,10 @@ class CVProcessingService:
         for raw_line in text.splitlines():
             line = raw_line.strip(" \t-•")
             upper = line.upper()
-            if re.search(r"\b(TRAINING|QUALIFICATIONS|CERTIFICATIONS)\b", upper) and len(line) < 100:
+            if (
+                re.search(r"\b(TRAINING|QUALIFICATIONS|CERTIFICATIONS)\b", upper)
+                and len(line) < 100
+            ):
                 active = True
                 continue
             if active and line and re.fullmatch(r"[A-Z][A-Z /&-]{3,}", line):
@@ -366,13 +371,71 @@ class CVProcessingService:
                 if value:
                     existing = list(merged.get(key) or [])
                     merged[key] = list(dict.fromkeys([*existing, *value]))
+            elif key in {"full_name", "professional_summary"}:
+                if value:
+                    merged[key] = value
+            elif key == "skills":
+                if value:
+                    existing = list(merged.get("skills") or [])
+                    merged["skills"] = list(dict.fromkeys([*existing, *value]))
         return merged
+
+    @staticmethod
+    def extract_cv_deterministically(
+        extraction_path: str, file_type: str, text: str
+    ) -> dict[str, Any]:
+        """Build a CV's extraction_result with no LLM call at all.
+
+        All CVs in this system come from one fixed template, and the
+        deterministic PDF-table parser (cv_table_extractor.py) already
+        outperforms the LLM on it. A CV that doesn't fit the template
+        (non-PDF, or the parser finds nothing recognizable) is NOT sent to
+        the LLM as a fallback — it is flagged for manual review instead.
+        See backend/docs/consultant-knowledge-core.md.
+        """
+        table_payload: dict[str, Any] = {}
+        if file_type == "pdf":
+            try:
+                from app.services.cv_table_extractor import extract_cv_tables
+
+                table_payload = extract_cv_tables(extraction_path).as_extraction_payload()
+            except Exception as exc:
+                logger.warning(
+                    "Deterministic CV extraction failed for %s: %s", extraction_path, exc
+                )
+                table_payload = {}
+
+        if not table_payload.get("personal_information") and not table_payload.get("work_history"):
+            # A confidence score below CONFIDENCE_REVIEW_THRESHOLD routes
+            # through determine_review_status the same way a low-confidence
+            # LLM field would — no LLM call happens here, this only reuses
+            # that existing review-routing mechanism.
+            return {
+                "document_type": "cv",
+                "extraction_method": "deterministic_failed",
+                "confidence": {"all": 0.0},
+            }
+
+        extraction_result = CVProcessingService.merge_table_extraction({}, table_payload)
+        extracted_training = CVProcessingService.training_from_text(text)
+        if extracted_training:
+            extraction_result["training_qualifications"] = extracted_training
+        extracted_systems = CVProcessingService.systems_from_text(text)
+        if extracted_systems:
+            extraction_result["systems"] = list(
+                dict.fromkeys([*(extraction_result.get("systems") or []), *extracted_systems])
+            )
+        extraction_result["extraction_method"] = "deterministic"
+        return extraction_result
 
     @staticmethod
     def systems_from_text(text: str) -> list[str]:
         """Recover the complete SYSTEMS EXPERIENCE section from CV text."""
         values: list[str] = []
-        keywords = re.compile(r"mseis|passive acoustic|navigation|orca|seapronav|fugro|pamguard|lofitech|seal scarer|camera|binocular|laptop|garmin|microsoft|office|qgis|linux|windows", re.I)
+        keywords = re.compile(
+            r"mseis|passive acoustic|navigation|orca|seapronav|fugro|pamguard|lofitech|seal scarer|camera|binocular|laptop|garmin|microsoft|office|qgis|linux|windows",
+            re.I,
+        )
         active = False
         for raw_line in text.splitlines():
             line = re.sub(r"\s+", " ", raw_line).strip(" \t-•")
@@ -380,7 +443,10 @@ class CVProcessingService:
             if re.search(r"\bSYSTEMS EXPERIENCE\b", upper) and len(line) < 100:
                 active = True
                 continue
-            if active and re.fullmatch(r"(EXPERIENCE|EDUCATION|TRAINING|QUALIFICATIONS|CERTIFICATIONS|REFERENCES|EXPERTISE)", upper):
+            if active and re.fullmatch(
+                r"(EXPERIENCE|EDUCATION|TRAINING|QUALIFICATIONS|CERTIFICATIONS|REFERENCES|EXPERTISE)",
+                upper,
+            ):
                 break
             if active and line and len(line) > 2 and keywords.search(line):
                 values.append(line)
@@ -402,13 +468,13 @@ class CVProcessingService:
         certs_to_add = set()
         for spec in data.get("specializations", []):
             spec_lower = spec.lower().strip()
-            for key, cert_type in CV_CERT_MAPPINGS.items():
+            for key, cert_type in CERT_ALIASES.items():
                 if key in spec_lower:
                     certs_to_add.add(cert_type)
 
         for skill in data.get("skills", []):
             skill_lower = skill.lower().strip()
-            for key, cert_type in CV_CERT_MAPPINGS.items():
+            for key, cert_type in CERT_ALIASES.items():
                 if key in skill_lower:
                     certs_to_add.add(cert_type)
 
@@ -416,7 +482,7 @@ class CVProcessingService:
         for cert in [*data.get("certifications", []), *training_values]:
             if isinstance(cert, str):
                 cert_lower = cert.lower().strip()
-                for key, cert_type in CV_CERT_MAPPINGS.items():
+                for key, cert_type in CERT_ALIASES.items():
                     if key in cert_lower:
                         certs_to_add.add(cert_type)
 
@@ -451,7 +517,9 @@ class CVProcessingService:
                     existing.expiry_date = expiry_date
 
     @classmethod
-    def _certification_dates(cls, cert_type: str, data: dict[str, Any]) -> tuple[date | None, date | None]:
+    def _certification_dates(
+        cls, cert_type: str, data: dict[str, Any]
+    ) -> tuple[date | None, date | None]:
         """Return explicit completion/expiry dates for a certification."""
         aliases = {
             "JNCC MMO": ("jncc", "mmo", "marine mammal", "protected species observer"),
@@ -467,8 +535,22 @@ class CVProcessingService:
         }.get(cert_type, (cert_type.lower(),))
         expiry_map = data.get("certification_expiry_dates") or {}
         issue_map = data.get("certification_issue_dates") or {}
-        expiry = next((value for key, value in expiry_map.items() if any(alias in str(key).lower() for alias in aliases)), None)
-        issue = next((value for key, value in issue_map.items() if any(alias in str(key).lower() for alias in aliases)), None)
+        expiry = next(
+            (
+                value
+                for key, value in expiry_map.items()
+                if any(alias in str(key).lower() for alias in aliases)
+            ),
+            None,
+        )
+        issue = next(
+            (
+                value
+                for key, value in issue_map.items()
+                if any(alias in str(key).lower() for alias in aliases)
+            ),
+            None,
+        )
         for line in data.get("training_qualifications") or []:
             if not isinstance(line, str) or not any(alias in line.lower() for alias in aliases):
                 continue
@@ -495,7 +577,9 @@ class CVProcessingService:
         # A document may be reprocessed after an extraction-model upgrade.
         # Its prior work-history rows are already the record for this source;
         # never add a second set merely because wording changed.
-        if document_id and any(record.document_ref == document_id for record in crew_member.work_history):
+        if document_id and any(
+            record.document_ref == document_id for record in crew_member.work_history
+        ):
             return
 
         existing_work = {

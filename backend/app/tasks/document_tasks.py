@@ -4,10 +4,27 @@ import logging
 
 from sqlalchemy import and_, select
 
+from app.config import get_settings
 from app.services.sync_processor import sync_processor
 from app.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+def _maybe_queue_embeddings(document_id: str) -> None:
+    """Dispatch semantic-search indexing, gated behind ENABLE_SEMANTIC_SEARCH.
+
+    Off by default: Qdrant indexing is validated but not yet earned a
+    default-on switch. See backend/docs/consultant-knowledge-core.md (Phase 3).
+    """
+    if not get_settings().ENABLE_SEMANTIC_SEARCH:
+        return
+    try:
+        index_document_embeddings.delay(document_id)
+    except Exception as exc:
+        # Semantic indexing is additive; never let a broker hiccup here fail
+        # extraction, which already succeeded by this point.
+        logger.warning(f"Could not queue embedding indexing for {document_id}: {exc}")
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=10)
@@ -23,6 +40,7 @@ def process_document_extraction(self, document_id: str) -> dict:
     try:
         logger.info(f"Processing document extraction: {document_id}")
         result = sync_processor.process(document_id)
+        _maybe_queue_embeddings(document_id)
         return result
     except Exception as exc:
         logger.error(f"Extraction failed for {document_id}: {exc}")
@@ -42,6 +60,7 @@ def process_dropbox_document(self, document_id: str) -> dict:
     try:
         logger.info(f"Processing Dropbox document: {document_id}")
         result = sync_processor.process(document_id)
+        _maybe_queue_embeddings(document_id)
         return result
     except Exception as exc:
         logger.error(f"Dropbox processing failed for {document_id}: {exc}")
@@ -110,20 +129,11 @@ def index_document_embeddings(document_id: str) -> dict:
             if not doc:
                 return {"document_id": document_id, "status": "failed", "error": "not found"}
 
-            # Determine indexable text: prefer extracted_data, fallback to file_name/classification
-            import json as _json
-
-            indexable_text = None
-            if doc.extracted_data:
-                indexable_text = _json.dumps(doc.extracted_data, default=str)
-            elif doc.classification:
-                indexable_text = f"{doc.classification} document {doc.file_name}"
-            else:
-                indexable_text = doc.file_name
-
             import asyncio
 
-            from app.services.qdrant import qdrant_service
+            from app.services.qdrant import document_indexable_text, qdrant_service
+
+            indexable_text = document_indexable_text(doc)
 
             ok = asyncio.run(
                 qdrant_service.index_document(

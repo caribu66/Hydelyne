@@ -31,6 +31,7 @@ class AuthorizationError(Exception):
 
 def require_auth(func):
     """Decorator to require authentication for a resolver."""
+
     @wraps(func)
     async def wrapper(self, info: Info, *args, **kwargs):
         request = info.context.get("request")
@@ -58,6 +59,7 @@ def require_auth(func):
 
 def require_admin(func):
     """Decorator to require admin role for a resolver."""
+
     @wraps(func)
     async def wrapper(self, info: Info, *args, **kwargs):
         request = info.context.get("request")
@@ -95,6 +97,7 @@ def require_admin(func):
 
 
 # ---- REST (FastAPI) auth dependencies ----
+
 
 async def get_current_user_rest(request: Request):
     """FastAPI dependency to enforce auth on REST endpoints."""
