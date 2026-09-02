@@ -1,0 +1,49 @@
+# Environment
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+backend/data/documents/*
+!backend/data/documents/.gitkeep
+# Runtime document cache at the project root (mirrors backend/data/documents)
+data/documents/
+*.db
+*.sqlite
+
+# Timestamped .env backups
+.env.bak.*
+
+# frontend/ is its own git repository (remote: caribu66/Hydelyne) and is
+# committed there, not here.
+frontend/

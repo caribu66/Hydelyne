@@ -1,0 +1,267 @@
+services:
+  db:
+    image: docker.io/library/postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hydenlyne}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hydenlyne_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-hydenlyne}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hydenlyne}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-dev_redis_pass}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_redis_pass}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: docker.io/qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # The qdrant image ships neither curl nor wget.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    # Not published on the host: only the backend and the Celery workers talk to
+    # it, over the compose network.  This leaves any host-side Ollama alone.
+    environment:
+      OLLAMA_MODELS: /models
+      OLLAMA_FLASH_ATTENTION: "1"
+    volumes:
+      # Reuse the models already on disk (~28GB) instead of pulling them again.
+      # Read-only, so the container serves them but never mutates the store.
+      - ${OLLAMA_MODELS_PATH:-${HOME}/.ollama/models}:/models:ro
+      - ollama_data:/root/.ollama
+    devices:
+      # CDI passthrough (see /etc/cdi/nvidia.yaml).  Falls back to CPU if the
+      # device is unavailable at run time.
+      - nvidia.com/gpu=all
+    security_opt:
+      # The NVIDIA device nodes and the large read-only model bind mount are not
+      # SELinux-relabelled; disabling the label check is the standard approach
+      # and avoids relabelling 28GB of blobs.
+      - label=disable
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hydenlyne}:${POSTGRES_PASSWORD:-hydenlyne_pass}@db:5432/${POSTGRES_DB:-hydenlyne}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      MEILI_HOST: meilisearch
+      MEILI_PORT: 7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_pass}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_ENV: ${APP_ENV:-development}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      # Dev mounts — comment out for prod (use baked image)
+      - ./backend:/app:z
+      - document_storage:/app/data/documents
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  celery_worker:
+    build: ./backend
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=default --concurrency=4
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hydenlyne}:${POSTGRES_PASSWORD:-hydenlyne_pass}@db:5432/${POSTGRES_DB:-hydenlyne}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      MEILI_HOST: meilisearch
+      MEILI_PORT: 7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_pass}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_ENV: ${APP_ENV:-development}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - ./backend:/app:z
+      - document_storage:/app/data/documents
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  celery_gpu_worker:
+    build: ./backend
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=gpu --concurrency=1
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hydenlyne}:${POSTGRES_PASSWORD:-hydenlyne_pass}@db:5432/${POSTGRES_DB:-hydenlyne}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      MEILI_HOST: meilisearch
+      MEILI_PORT: 7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_pass}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_ENV: ${APP_ENV:-development}
+    volumes:
+      - ./backend:/app:z
+      - document_storage:/app/data/documents
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  celery_beat:
+    build: ./backend
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hydenlyne}:${POSTGRES_PASSWORD:-hydenlyne_pass}@db:5432/${POSTGRES_DB:-hydenlyne}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_pass}
+      APP_ENV: ${APP_ENV:-development}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  flower:
+    build: ./backend
+    command: celery -A app.tasks.celery_app flower --port=5555 --url_prefix=flower --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-flower_pass}
+    ports:
+      - "5555:5555"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      FLOWER_BASIC_AUTH: ${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-flower_pass}
+    depends_on:
+      - redis
+      - celery_worker
+      - celery_beat
+
+  meilisearch:
+    image: docker.io/getmeili/meilisearch:v1.10.0
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+    volumes:
+      - meilisearch_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_GRAPHQL_URL: ${VITE_GRAPHQL_URL:-http://localhost:8000/graphql}
+        VITE_ENABLE_DEMO_MODE: ${VITE_ENABLE_DEMO_MODE:-false}
+    ports:
+      - "5173:80"
+    environment:
+      # Runtime env is baked at build via ARG; keep for compose parity
+      VITE_GRAPHQL_URL: ${VITE_GRAPHQL_URL:-http://localhost:8000/graphql}
+      VITE_ENABLE_DEMO_MODE: ${VITE_ENABLE_DEMO_MODE:-false}
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Dev mounts — comment out for prod
+    # volumes:
+    #   - ./frontend:/app
+    #   - /app/node_modules
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx listens on IPv4 only and localhost
+      # resolves to ::1 first inside the container.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  ollama_data:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  document_storage:
+  meilisearch_data:

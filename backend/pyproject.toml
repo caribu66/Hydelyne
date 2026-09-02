@@ -1,0 +1,35 @@
+[project]
+name = "hydenlyne-crew-dms-backend"
+version = "1.0.0"
+description = "Hydenlyne Crew Document Management Platform - Backend"
+requires-python = ">=3.11"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# Gate: E (style errors), F (real bugs), W (warnings), I (import order).
+# B/UP/ASYNC intentionally deferred — codebase has legacy churn that deserves
+# a separate, reviewable modernization pass, not an unblocking cleanup.
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["strawberry.*", "sqlalchemy.*", "alembic.*", "celery.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]

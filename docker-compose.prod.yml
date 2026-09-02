@@ -1,0 +1,37 @@
+# Production override: drop internal port publishes.
+# Internal services (db, redis, qdrant, meilisearch, flower) must NOT be
+# reachable from the host — only `backend` and `frontend` are exposed behind
+# the reverse proxy.
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  db:
+    ports: []
+
+  redis:
+    ports: []
+
+  qdrant:
+    ports: []
+
+  meilisearch:
+    ports: []
+
+  flower:
+    ports: []
+
+  backend:
+    ports:
+      - "8000:8000"
+    # No dev volume mounts in prod — use baked image
+    volumes: []
+
+  celery_worker:
+    volumes: []
+
+  celery_gpu_worker:
+    volumes: []
+
+  frontend:
+    ports:
+      - "5173:80"
