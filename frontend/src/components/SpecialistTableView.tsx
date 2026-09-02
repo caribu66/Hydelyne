@@ -139,7 +139,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
       {/* Table Toolbar Controls */}
       <div className="flex items-center justify-between px-1 text-xs text-secondary">
         <div className="flex items-center gap-2">
-          <span>Showing {sortedProfiles.length} specialists in table matrix</span>
+          <span>Showing {sortedProfiles.length} contractors in table matrix</span>
           {sortField && (
             <span className="text-xs font-mono text-accent">
               (Sorted by {sortField} {sortDirection})
@@ -186,13 +186,13 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
       {/* Main Table Structure */}
       <div className="scan-matrix-scroll w-full max-h-[min(760px,calc(100vh-250px))] overflow-auto border border-border-subtle rounded-[14px] bg-surface/40 shadow-xs">
         <table className="w-full text-left text-xs text-secondary border-collapse">
-          <caption className="sr-only">Specialist screening matrix</caption>
+          <caption className="sr-only">Contractor screening matrix</caption>
           <thead className="sticky top-0 z-10 bg-canvas/95 text-xs text-secondary uppercase font-semibold border-b border-border-subtle tracking-wider select-none backdrop-blur-sm">
             <tr>
               {onToggleCompare && <th className="py-3 px-3 w-10 text-center">Cmp</th>}
               <th aria-sort={sortField === 'name' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-4">
                 <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
-                  <span>Specialist</span>
+                  <span>Contractor</span>
                   {renderSortIndicator('name')}
                 </button>
               </th>

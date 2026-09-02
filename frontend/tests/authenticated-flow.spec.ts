@@ -32,6 +32,13 @@ async function authenticate(page: Page, theme: 'dark' | 'light' = 'dark') {
 }
 
 async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: typeof crewMember } = {}) {
+  await page.route('**/health/services', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ services: { database: 'healthy', redis: 'healthy', dropbox: 'healthy', ollama: 'healthy' } }),
+    });
+  });
   await page.route('**/graphql', async (route) => {
     const body = route.request().postDataJSON() as { query?: string };
     const query = body.query ?? '';
@@ -89,7 +96,7 @@ test.describe('authenticated specialist workspace', () => {
     await mockCrewApi(page);
     await page.goto('/');
 
-    const search = page.getByRole('textbox', { name: 'Search specialists' });
+    const search = page.getByRole('textbox', { name: 'Search contractors' });
     await expect(search).toBeVisible();
     await search.fill('hydrography');
     await expect(page.getByRole('button', { name: /View Alex Morgan dossier/ })).toBeVisible();
@@ -121,22 +128,22 @@ test.describe('authenticated specialist workspace', () => {
       content: document.documentElement.scrollWidth,
     }));
     expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
-    await expect(page.getByRole('textbox', { name: 'Search specialists' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Search contractors' })).toBeVisible();
   });
 
-  test('opens the themed add-specialist workflow as an accessible dialog', async ({ page }) => {
+  test('opens the themed add-contractor workflow as an accessible dialog', async ({ page }) => {
     await authenticate(page);
     await mockCrewApi(page);
     await page.goto('/');
 
-    await page.getByRole('button', { name: 'Add specialist' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add specialist' });
+    await page.getByRole('button', { name: 'Add contractor' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add contractor' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('Full name')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Add specialist', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Add contractor', exact: true })).toBeDisabled();
     const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(accessibility.violations).toEqual([]);
-    await dialog.getByRole('button', { name: 'Add specialist', exact: true }).scrollIntoViewIfNeeded();
+    await dialog.getByRole('button', { name: 'Add contractor', exact: true }).scrollIntoViewIfNeeded();
     const dimensions = await dialog.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
     expect(dimensions.clientHeight).toBeLessThanOrEqual(dimensions.scrollHeight);
     await page.keyboard.press('Escape');
@@ -149,15 +156,15 @@ test.describe('authenticated specialist workspace', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'More filters' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Filter specialists' });
+    const dialog = page.getByRole('dialog', { name: 'Filter contractors' });
     await expect(dialog).toBeVisible();
     const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(accessibility.violations).toEqual([]);
     await dialog.getByRole('button', { name: 'Available immediately' }).click();
-    await dialog.getByRole('button', { name: /Show 1 specialists/ }).click();
-    await expect(page.getByLabel('Active specialist filters')).toContainText('Available immediately');
+    await dialog.getByRole('button', { name: /Show 1 contractor/ }).click();
+    await expect(page.getByLabel('Active contractor filters')).toContainText('Available immediately');
     await page.getByRole('button', { name: /Remove Status filter/ }).click();
-    await expect(page.getByLabel('Active specialist filters')).toHaveCount(0);
+    await expect(page.getByLabel('Active contractor filters')).toHaveCount(0);
   });
 
   test('exposes accessible names throughout the mobilization request', async ({ page }) => {

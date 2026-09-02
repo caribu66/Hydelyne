@@ -146,7 +146,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   {profile.isHighlyRecommended && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-accent-soft/80 border border-border-strong/60 text-xs text-accent font-medium">
                       <BadgeCheck className="w-3.5 h-3.5 text-accent" />
-                      <span>Verified Specialist</span>
+                      <span>Verified Contractor</span>
                     </span>
                   )}
                 </div>
@@ -189,7 +189,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   onClick={() => onPrintDossier(profile)}
                   aria-label={`Print ${profile.name} profile`}
                   className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised/80 border border-border-strong text-secondary hover:text-primary transition-colors cursor-pointer"
-                  title="Print specialist profile"
+                  title="Print contractor profile"
                 >
                   <Printer className="w-4 h-4" />
                 </button>
@@ -201,7 +201,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   onClick={() => setIsDeleteConfirmOpen(true)}
                   aria-label={`Delete ${profile.name}`}
                   className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border border-danger-border/80 bg-danger-soft/40 text-danger hover:bg-danger-soft/60 hover:text-danger transition-colors cursor-pointer"
-                  title="Delete specialist"
+                  title="Delete contractor"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -228,7 +228,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close specialist profile"
+                aria-label="Close contractor profile"
                 className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Close"
               >
@@ -351,7 +351,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               {/* Bio Overview */}
               <div className="space-y-1.5">
                 <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs">
-                  Specialist Overview
+                  Contractor Overview
                 </h3>
                 <p className="text-secondary leading-relaxed">{profile.bio}</p>
               </div>
@@ -619,7 +619,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
         <div className="flex flex-col items-stretch gap-3 border-t border-border-subtle bg-canvas p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0">
             <span className="text-xs text-secondary font-mono block truncate">{profile.email}</span>
-            <span className="text-xs text-secondary">Hydenlyne Verified Specialist Network</span>
+            <span className="text-xs text-secondary">Hydenlyne Verified Contractor Network</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
@@ -693,7 +693,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 className="min-h-11 px-3.5 py-2 rounded-[10px] border border-danger-border bg-danger-soft/50 hover:bg-danger-soft/70 text-danger hover:text-primary text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete specialist</span>
+                <span>Delete contractor</span>
               </button>
             )}
 
@@ -723,7 +723,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
       <ConfirmDialog
         open={isDeleteConfirmOpen}
         title={`Delete ${profile.name}?`}
-        description="This permanently removes the specialist, their certifications, work history, and managed documents. This cannot be undone."
+        description="This permanently removes the contractor, their certifications, work history, and managed documents. This cannot be undone."
         confirmLabel={isDeleting ? 'Deleting…' : 'Delete permanently'}
         onConfirm={() => void handleDeleteCrew()}
         onCancel={() => !isDeleting && setIsDeleteConfirmOpen(false)}

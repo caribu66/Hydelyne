@@ -82,7 +82,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Hydenlyne_Specialist_Comparison_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Hydenlyne_Contractor_Comparison_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -113,7 +113,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
             </div>
             <div>
               <h2 id="compare-modal-title" className="text-base font-semibold text-primary flex items-center gap-2">
-                Compare specialists
+                Compare contractors
                 <span className="text-xs font-mono font-normal px-2 py-0.5 rounded-full bg-surface-raised text-secondary">
                   {compareProfiles.length} of 4 selected
                 </span>
@@ -128,7 +128,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              aria-label="Print specialist comparison"
+              aria-label="Print contractor comparison"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-xs font-medium text-secondary hover:text-primary transition-colors cursor-pointer"
               title="Print comparison table"
             >
@@ -138,7 +138,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
             <button
               type="button"
               onClick={handleExportCSV}
-              aria-label="Export specialist comparison as CSV"
+              aria-label="Export contractor comparison as CSV"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-xs font-medium text-secondary hover:text-primary transition-colors cursor-pointer"
               title="Download CSV report"
             >
@@ -160,9 +160,9 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
         {compareProfiles.length === 0 ? (
           <div className="p-12 text-center text-secondary space-y-3">
             <Scale className="w-10 h-10 text-muted mx-auto" />
-            <h3 className="text-sm font-medium text-primary">No specialists selected for comparison</h3>
+            <h3 className="text-sm font-medium text-primary">No contractors selected for comparison</h3>
             <p className="text-xs text-secondary max-w-sm mx-auto">
-              Select 2 to 4 specialists from the results or shortlist to compare their credentials side-by-side.
+              Select 2 to 4 contractors from the results or shortlist to compare their credentials side-by-side.
             </p>
           </div>
         ) : (
@@ -401,8 +401,8 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
             {compareProfiles.length < 4 && availableToAdd.length > 0 && (
               <div className="p-4 rounded-[10px] bg-canvas/40 border border-dashed border-border-subtle flex items-center justify-between gap-3">
                 <div className="text-xs text-secondary">
-                  <span className="font-semibold text-primary block">Add another specialist to this comparison</span>
-                  Compare up to 4 specialists simultaneously.
+                  <span className="font-semibold text-primary block">Add another contractor to this comparison</span>
+                  Compare up to 4 contractors simultaneously.
                 </div>
                 <div className="flex items-center gap-2">
                   <select
@@ -416,7 +416,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                     }}
                     defaultValue=""
                   >
-                    <option value="" disabled>Select a specialist to add...</option>
+                    <option value="" disabled>Select a contractor to add...</option>
                     {availableToAdd.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.title.slice(0, 30)}... - £{p.dayRate || 800}/d)

@@ -3,8 +3,8 @@
 ## Language
 
 - Product name: “Hydenlyne”.
-- People in the network are “specialists”.
-- Saved specialists belong to the “shortlist”.
+- People in the network are “contractors”.
+- Saved contractors belong to the “shortlist”.
 - Side-by-side review is “compare”.
 - Deployment contact is a “mobilization request”.
 - Use concise sentence case for labels and messages.

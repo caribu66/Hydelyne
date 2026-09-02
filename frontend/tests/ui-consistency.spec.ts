@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 test.describe('UI consistency', () => {
   test('public shell has no horizontal overflow', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Find the right specialist for the next campaign.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Find the right contractor for the next campaign.' })).toBeVisible();
     const dimensions = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
       content: document.documentElement.scrollWidth,
@@ -20,7 +20,7 @@ test.describe('UI consistency', () => {
 
   test('sign-in dialog meets automated accessibility checks', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('textbox', { name: 'Sign in to search specialists' }).click();
+    await page.getByRole('textbox', { name: 'Sign in to search contractors' }).click();
     await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible();
     const results = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(results.violations).toEqual([]);

@@ -52,7 +52,7 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
 
             <div>
               <span className="text-xs font-semibold text-primary block">
-                {compareProfiles.length} Specialist{compareProfiles.length === 1 ? '' : 's'} Selected
+                {compareProfiles.length} contractor{compareProfiles.length === 1 ? '' : 's'} selected
               </span>
               <span className="text-xs text-secondary font-mono">
                 {compareProfiles.length < 2 ? 'Select 1 more to compare' : 'Ready for side-by-side analysis'}

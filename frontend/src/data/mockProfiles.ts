@@ -4,7 +4,7 @@ export const MOCK_PROFILES: UserProfile[] = [
   {
     id: 'p-1',
     name: 'Dr. Alistair MacIntyre',
-    title: 'Lead Marine Mammal Observer (MMO) & PAM Specialist',
+    title: 'Lead Marine Mammal Observer (MMO) & PAM Contractor',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces&q=80',
     company: 'Hydenlyne Consultancy Network',
     department: 'Marine Environmental',
@@ -56,7 +56,7 @@ export const MOCK_PROFILES: UserProfile[] = [
   {
     id: 'p-3',
     name: 'Gareth Evans',
-    title: 'Offshore Wind Geotechnical & Site Investigation Specialist',
+    title: 'Offshore Wind Geotechnical & Site Investigation Contractor',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=faces&q=80',
     company: 'Hydenlyne Consultancy Network',
     department: 'Geotechnical & Subsea',
@@ -201,7 +201,7 @@ export const MOCK_PROFILES: UserProfile[] = [
   {
     id: 'p-9',
     name: 'Henrik Vestergaard',
-    title: 'In-Field Seismic Data Processing QC & Imaging Specialist',
+    title: 'In-Field Seismic Data Processing QC & Imaging Contractor',
     avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&h=200&fit=crop&crop=faces&q=80',
     company: 'Hydenlyne Consultancy Network',
     department: 'Geophysical & Survey QC',
@@ -225,7 +225,7 @@ export const MOCK_PROFILES: UserProfile[] = [
   {
     id: 'p-10',
     name: 'Emma Thornton',
-    title: 'Senior Marine Environmental Consultant & EIA Specialist',
+    title: 'Senior Marine Environmental Consultant & EIA Contractor',
     avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=faces&q=80',
     company: 'Hydenlyne Consultancy Network',
     department: 'Marine Environmental',
@@ -298,7 +298,7 @@ export const MOCK_PROFILES: UserProfile[] = [
   {
     id: 'p-13',
     name: 'Matteo Rossi',
-    title: 'Lead Subsea Navigation & Positioning QC Specialist',
+    title: 'Lead Subsea Navigation & Positioning QC Contractor',
     avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=200&h=200&fit=crop&crop=faces&q=80',
     company: 'Hydenlyne Consultancy Network',
     department: 'Geophysical & Survey QC',
@@ -402,7 +402,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
   {
     id: 'preset-mmo-pam',
     name: 'JNCC MMO & PAM Operators',
-    description: 'Accredited marine mammal & passive acoustic monitoring specialists',
+    description: 'Accredited marine mammal & passive acoustic monitoring contractors',
     filters: {
       departments: ['Marine Environmental'],
       selectedSkills: ['JNCC MMO Certified', 'PAMGUARD'],

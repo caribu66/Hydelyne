@@ -14,7 +14,7 @@ export function useTheme() {
     } catch {
       // Fallback
     }
-    return 'dark'; // Default: Deep Zinc Dark
+    return 'dark'; // Default theme
   });
 
   const setTheme = useCallback((newTheme: ThemeMode) => {

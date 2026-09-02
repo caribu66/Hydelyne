@@ -44,13 +44,8 @@ import {
   Table,
   Compass,
   ArrowUpRight,
-  Command,
   BadgeCheck,
-  Download,
   Scale,
-  Sun,
-  Moon,
-  LogOut,
   AlertTriangle,
   X,
   UserPlus,
@@ -107,7 +102,6 @@ export default function App() {
   const { initialized: authInitialized, isAuthenticated, user, logout, refreshSession } = useAuth();
   const canManageDocuments = user?.role === 'admin';
   const [deleteCrewMember] = useMutation(DELETE_CREW_MEMBER);
-  const [authSessionKey, setAuthSessionKey] = useState(0);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const [modalProfile, setModalProfile] = useState<UserProfile | null>(null);
@@ -234,7 +228,7 @@ export default function App() {
     aiQueryActive,
   });
 
-  // Focused Workspace mode for working comfortably on a crew member
+  // Focused Workspace mode for working comfortably on a contractor
   const [isFocusMode, setIsFocusMode] = useState(false);
 
   const showToast = useCallback((msg: string) => {
@@ -274,7 +268,7 @@ export default function App() {
     if (e) e.stopPropagation();
     if (!requireAuth()) return;
     const profile = allProfiles.find((p) => p.id === id);
-    const name = profile ? profile.name.split(' ')[0] : 'Specialist';
+    const name = profile ? profile.name.split(' ')[0] : 'Contractor';
     const currentlyBookmarked = isBookmarked(id);
     rawToggleBookmark(id);
     showToast(currentlyBookmarked ? `Removed ${name} from shortlist` : `Saved ${name} to shortlist`);
@@ -297,7 +291,7 @@ export default function App() {
         return prev.filter((id) => id !== profile.id);
       }
       if (prev.length >= 4) {
-        showToast('You can compare up to 4 specialists at once');
+        showToast('You can compare up to 4 contractors at once');
         return prev;
       }
       showToast(`Added ${profile.name.split(' ')[0]} to comparison`);
@@ -425,184 +419,6 @@ export default function App() {
           </button>
 
           {/* Right Nav */}
-          <div className="hidden">
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Compare Matrix Trigger Button */}
-            {compareIds.length > 0 && isAuthenticated && (
-              <button
-                type="button"
-                onClick={() => setIsCompareModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-accent-soft/80 border border-border-strong text-accent hover:text-primary text-xs font-semibold transition-colors cursor-pointer"
-                title="Compare specialists side-by-side"
-              >
-                <Scale className="w-3.5 h-3.5" />
-                <span>Compare ({compareIds.length})</span>
-              </button>
-            )}
-
-            {isSearchActive && isAuthenticated && (
-              /* View Mode Switcher */
-              <div className="flex items-center bg-surface border border-border-subtle p-0.5 rounded-[10px] text-xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('split')}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                    viewMode === 'split'
-                      ? 'bg-surface-raised text-primary font-medium shadow-xs'
-                      : 'text-muted hover:text-secondary'
-                  }`}
-                  title="Split Command View"
-                  aria-label="Split command view"
-                  aria-pressed={viewMode === 'split'}
-                >
-                  <Columns className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Split</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-surface-raised text-primary font-medium shadow-xs'
-                      : 'text-muted hover:text-secondary'
-                  }`}
-                  title="Cards View"
-                  aria-label="Cards view"
-                  aria-pressed={viewMode === 'grid'}
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Cards</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setViewMode('table')}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                    viewMode === 'table'
-                      ? 'bg-surface-raised text-primary font-medium shadow-xs'
-                      : 'text-muted hover:text-secondary'
-                  }`}
-                  title="Matrix View"
-                  aria-label="Table view"
-                  aria-pressed={viewMode === 'table'}
-                >
-                  <Table className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Matrix</span>
-                </button>
-              </div>
-            )}
-
-             {/* Shortcuts Guide Button */}
-            <button
-              type="button"
-              onClick={() => setIsShortcutsOpen(true)}
-                className="min-h-10 min-w-10 p-2 rounded-[10px] bg-surface border border-border-subtle text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
-              title="Keyboard shortcuts (?)"
-              aria-label="Open keyboard shortcuts"
-            >
-              <Command className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Add Crew Member Button */}
-            {isAuthenticated && (
-              <button
-                type="button"
-                onClick={() => setIsAddCrewMemberOpen(true)}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer shrink-0"
-                title="Add a specialist to the network"
-                aria-label="Add specialist"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Add specialist</span>
-              </button>
-            )}
-
-            {/* Theme Toggle Button */}
-            <button
-              type="button"
-              id="app-theme-toggle-btn"
-              onClick={handleToggleTheme}
-              className="inline-flex min-h-10 items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary hover:text-primary transition-colors cursor-pointer text-xs font-medium shrink-0"
-              title={isDark ? 'Switch to High-Contrast Light Theme (T)' : 'Switch to Deep Zinc Dark Theme (T)'}
-              aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-            >
-              {isDark ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-warning" />
-                  <span className="hidden md:inline">Light</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-muted" />
-                  <span className="hidden md:inline">Dark</span>
-                </>
-              )}
-            </button>
-
-            {/* Shortlist Filter & Exporter Action */}
-            <div className="flex items-center gap-1 bg-surface border border-border-subtle p-0.5 rounded-[10px] shrink-0">
-              <button
-                type="button"
-                onClick={() => isAuthenticated ? setShowSavedOnly(!showSavedOnly) : requestLogin()}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  showSavedOnly
-                    ? 'bg-action text-on-action font-semibold'
-                    : 'text-secondary hover:text-primary'
-                }`}
-                title={showSavedOnly ? 'Show all results' : 'Filter by shortlist'}
-              >
-                <Bookmark className={`w-3.5 h-3.5 ${showSavedOnly ? 'fill-on-action' : ''}`} />
-                <span className="hidden xs:inline">Shortlist</span>
-                <span className="text-xs text-secondary font-mono">({shortlistCount})</span>
-              </button>
-
-              {shortlistCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setIsExportShortlistOpen(true)}
-                  className="p-1 rounded-lg text-secondary hover:text-accent hover:bg-surface-raised transition-colors cursor-pointer"
-                  title="Export / View Shortlist"
-                  aria-label="Export or view shortlist"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            </div>
-
-            {/* User + Authentication */}
-            <div className="flex items-center gap-1.5 ml-1 pl-2 sm:gap-2 sm:ml-0 sm:pl-3 border-l border-border-subtle shrink-0">
-            {isAuthenticated ? <div className="hidden sm:flex items-center gap-2 rounded-[10px] border border-border-subtle bg-surface/60 px-2 py-1">
-              <span className="text-xs text-secondary max-w-[120px] truncate" title={user?.email}>
-                {user?.email}
-              </span>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="p-2 rounded-[10px] bg-surface border border-border-subtle text-secondary hover:text-danger hover:border-danger-border/60 transition-colors cursor-pointer"
-                title="Sign out"
-                aria-label="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div> : (
-              <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-[10px] bg-action px-3 py-1.5 text-xs font-semibold text-on-action transition-colors hover:bg-action-hover cursor-pointer">
-                Sign in
-              </button>
-            )}
-            {isAuthenticated && (
-              <span
-                className="sm:hidden max-w-[132px] truncate rounded-lg bg-surface/60 px-2 py-1.5 text-xs text-secondary"
-                title={user?.email || undefined}
-              >
-                {user?.email}
-              </span>
-            )}
-            </div>
-            <span className="hidden" data-auth-session-key={authSessionKey} />
-          </div>
           <div className="flex items-center gap-2 shrink-0">
             {isAuthenticated && (
               <span className="hidden max-w-[180px] truncate text-xs text-secondary sm:inline" title={user?.email}>
@@ -615,14 +431,14 @@ export default function App() {
               </button>
             )}
             {isAuthenticated && (
-              <button type="button" onClick={() => setIsAddCrewMemberOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Add specialist" title="Add a specialist to the network">
+              <button type="button" onClick={() => setIsAddCrewMemberOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Add contractor" title="Add a contractor to the network">
                 <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Add specialist</span>
+                <span className="hidden sm:inline">Add contractor</span>
               </button>
             )}
             {user?.role === 'admin' && <ServiceStatus />}
             {isAuthenticated && (
-              <button type="button" onClick={() => setShowSavedOnly(!showSavedOnly)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${showSavedOnly ? 'border-border-strong bg-action text-on-action' : 'border-border-subtle bg-surface text-secondary hover:border-border-strong hover:bg-surface-raised hover:text-primary'}`} aria-pressed={showSavedOnly} title={showSavedOnly ? 'Show all specialists' : 'View shortlist'}>
+              <button type="button" onClick={() => setShowSavedOnly(!showSavedOnly)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${showSavedOnly ? 'border-border-strong bg-action text-on-action' : 'border-border-subtle bg-surface text-secondary hover:border-border-strong hover:bg-surface-raised hover:text-primary'}`} aria-pressed={showSavedOnly} title={showSavedOnly ? 'Show all contractors' : 'View shortlist'}>
                 <Bookmark className={`h-3.5 w-3.5 ${showSavedOnly ? 'fill-on-action' : ''}`} aria-hidden="true" />
                 <span className="hidden sm:inline">Shortlist</span>
                 <span className="font-mono text-xs">({shortlistCount})</span>
@@ -656,13 +472,13 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main id="main-content" className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-start px-4 sm:px-6" aria-label="Specialist network workspace">
+      <main id="main-content" className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-start px-4 sm:px-6" aria-label="Contractor network workspace">
         {/* Live-data required banner (prod, no demo fallback) */}
         {isAuthenticated && !profilesLoading && !isLive && !demoActive && (
           <div className="mt-4 rounded-[14px] border border-danger-border/60 bg-danger-soft/30 px-4 py-3 flex items-start gap-3" role="alert">
             <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h2 className="text-sm font-semibold text-danger">Live specialist data unavailable</h2>
+              <h2 className="text-sm font-semibold text-danger">Live contractor data unavailable</h2>
               <p className="text-xs text-danger/80 mt-0.5">
                 The backend returned no data{profilesError ? ` (${profilesError})` : ''}. Demo profiles
                 are disabled in this build — sign in and confirm the API is reachable.
@@ -705,7 +521,7 @@ export default function App() {
           <div className="ui-panel mb-3 flex flex-col gap-3 px-3 py-2.5 text-xs text-secondary sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 flex-wrap" aria-live="polite">
               <span>
-                Found <strong className="text-primary font-semibold">{results.length}</strong> {results.length === 1 ? 'specialist' : 'specialists'}
+                Found <strong className="text-primary font-semibold">{results.length}</strong> {results.length === 1 ? 'contractor' : 'contractors'}
               </span>
               {isResultsUpdating && (
                 <span className="inline-flex items-center gap-1.5 text-muted">
@@ -755,7 +571,7 @@ export default function App() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
-                aria-label="Sort specialists"
+                aria-label="Sort contractors"
                 className="ui-control min-w-0 flex-1 px-2.5 text-xs font-medium text-secondary sm:flex-none"
               >
                 <option value="relevance">Sort: Relevance & Match</option>
@@ -788,7 +604,7 @@ export default function App() {
 
         {/* Results Area */}
         {isSearchActive && (
-          <div className="pb-16" role="region" aria-busy={profilesLoading || aiQueryLoading} aria-label="Specialist search results">
+          <div className="pb-16" role="region" aria-busy={profilesLoading || aiQueryLoading} aria-label="Contractor search results">
             {aiQueryActive && showAISummary && (
               <CrewQuerySummary
                 data={aiQueryData}
@@ -802,7 +618,7 @@ export default function App() {
             ) : results.length > 0 ? (
               viewMode === 'split' ? (
                 isFocusMode ? (
-                  /* Focused Specialist Workspace (Enlarged & Centered for comfortable working) */
+                  /* Focused Contractor Workspace (Enlarged & Centered for comfortable working) */
                   <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-canvas/95 px-2 py-3 sm:p-4 backdrop-blur-sm">
                     {/* Crew Selector Navigation Strip */}
                     <div className="w-full max-w-6xl mx-auto flex items-center justify-between bg-surface/90 border border-border-subtle p-2.5 sm:p-3 rounded-[14px] backdrop-blur-md shadow-xl gap-3 shrink-0">
@@ -847,7 +663,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Centered Enlarged Specialist Dossier Card */}
+                    {/* Centered Enlarged Contractor dossier Card */}
                     <AnimatePresence mode="wait">
                       <motion.div
                         key={activeSelectedProfile ? activeSelectedProfile.id : 'empty-focus'}
@@ -893,7 +709,7 @@ export default function App() {
                   /* Standard Split-Pane Operations Command */
                   <div className="scan-workspace grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch min-h-0 md:min-h-[520px] py-2 sm:py-3">
                     {/* Left Column: Animated List */}
-                    <section aria-label="Specialist search results" className="md:col-span-5 min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2">
+                    <section aria-label="Contractor search results" className="md:col-span-5 min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2">
                       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
                         <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Results</span>
                         <span className="font-mono text-xs text-muted">Select to view dossier</span>
@@ -958,7 +774,7 @@ export default function App() {
                                         <HighlightText text={profile.name} query={committedQuery} />
                                       </h3>
                                       {profile.isHighlyRecommended && (
-                                        <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
+                                        <span title="Verified Contractor"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                                       )}
                                     </div>
 
@@ -1019,7 +835,7 @@ export default function App() {
                       </AnimatePresence>
                     </section>
 
-                    {/* Right Column: Live Specialist Dossier */}
+                    {/* Right Column: Live Contractor dossier */}
                     <div className="hidden md:col-span-7 md:block min-h-0 h-full overflow-hidden md:sticky md:top-20">
                       <div className="mb-2 flex items-center justify-between px-1 md:hidden">
                         <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Selected dossier</span>
@@ -1141,7 +957,7 @@ export default function App() {
                                     <HighlightText text={profile.name} query={committedQuery} />
                                   </h3>
                                   {profile.isHighlyRecommended && (
-                                    <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
+                                    <span title="Verified Contractor"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                                   )}
                                 </div>
                                 <p className="text-xs text-secondary truncate font-light">
@@ -1264,7 +1080,7 @@ export default function App() {
                   <p className="text-xs text-muted max-w-sm mx-auto">
                     {committedQuery.trim()
                       ? <>Nothing in the network matches <span className="text-secondary">“{committedQuery.trim()}”</span> yet. Try a broader role, skill, or region.</>
-                      : 'No active specialists match the selected filters. Try widening your search.'}
+                      : 'No active contractors match the selected filters. Try widening your search.'}
                   </p>
                 </div>
                 <button
@@ -1374,12 +1190,12 @@ export default function App() {
         }}
       />
 
-      {/* Add Specialist Modal */}
+      {/* Add Contractor Modal */}
       <AddCrewMemberModal
         isOpen={isAddCrewMemberOpen}
         onClose={() => setIsAddCrewMemberOpen(false)}
         onSuccess={() => {
-          showToast('Specialist added successfully');
+          showToast('Contractor added successfully');
           refetchProfiles();
         }}
       />
@@ -1404,7 +1220,6 @@ export default function App() {
           isModal
           onCancel={() => setIsLoginOpen(false)}
           onSuccess={() => {
-            setAuthSessionKey((k) => k + 1);
             setIsLoginOpen(false);
             void refreshSession();
           }}

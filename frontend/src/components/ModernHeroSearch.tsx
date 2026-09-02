@@ -87,7 +87,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
           <div className="text-center space-y-4 mb-10 w-full animate-in fade-in slide-in-from-bottom-3 duration-500">
             {/* Editorial Title */}
             <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08] font-semibold tracking-[-0.025em] text-primary font-sans">
-              Find the right specialist for the next campaign.
+              Find the right contractor for the next campaign.
             </h1>
 
             {/* Enterprise Subtitle */}
@@ -126,7 +126,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               rows={1}
               placeholder={isAuthenticated ? 'Ask in plain English — e.g. “Who has medical experience?”' : 'Sign in to search the private network'}
               readOnly={!isAuthenticated}
-              aria-label={isAuthenticated ? 'Search specialists' : 'Sign in to search specialists'}
+              aria-label={isAuthenticated ? 'Search contractors' : 'Sign in to search contractors'}
               className="w-full bg-transparent text-primary placeholder:text-muted focus:outline-none text-base sm:text-lg font-light resize-none leading-relaxed antialiased"
               spellCheck="false"
             />
@@ -157,7 +157,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
                   : 'bg-surface-raised/80 text-muted cursor-not-allowed'
               }`}
               title="Search"
-              aria-label={isAuthenticated ? 'Search specialists' : 'Sign in to search specialists'}
+              aria-label={isAuthenticated ? 'Search contractors' : 'Sign in to search contractors'}
             >
               <ArrowUp className="w-4 h-4 stroke-[2.5]" />
             </button>

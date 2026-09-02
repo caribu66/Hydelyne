@@ -165,7 +165,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
               <UploadCloud className="w-5 h-5" />
             </div>
             <div>
-            <h2 id="document-upload-title" className="text-base font-bold text-primary">Upload Specialist Document</h2>
+            <h2 id="document-upload-title" className="text-base font-bold text-primary">Upload Contractor Document</h2>
               <p id="document-upload-description" className="text-xs text-secondary">
                 Adding compliance credential to <strong className="text-primary">{profile.name}</strong>
               </p>

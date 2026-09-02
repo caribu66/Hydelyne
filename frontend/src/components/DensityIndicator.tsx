@@ -20,7 +20,7 @@ export const DensityIndicator: FC<DensityIndicatorProps> = ({
   const getDensityTier = () => {
     if (percentage >= 80) return 'Broad Roster';
     if (percentage >= 40) return 'Balanced Match';
-    if (percentage >= 15) return 'Targeted Specialists';
+    if (percentage >= 15) return 'Targeted Contractors';
     return 'Niche Discipline';
   };
 
@@ -28,7 +28,7 @@ export const DensityIndicator: FC<DensityIndicatorProps> = ({
     <div
       id="visual-density-indicator"
       className={`inline-flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-surface/90 border border-border-subtle text-xs text-secondary select-none ${className}`}
-      title={`${matchedCount} of ${totalCount} active specialists (${percentage}% of specialist roster - ${getDensityTier()})`}
+      title={`${matchedCount} of ${totalCount} active contractors (${percentage}% of contractor roster - ${getDensityTier()})`}
     >
       <span className="text-muted font-medium hidden xs:inline">Roster</span>
       

@@ -52,7 +52,7 @@ export const FilterModal: FC<FilterModalProps> = ({
             <SlidersHorizontal className="w-5 h-5 text-secondary" />
             <div>
             <h2 id="filter-modal-title" className="text-base sm:text-lg font-bold text-primary">
-              Filter specialists
+              Filter contractors
             </h2>
             <p id="filter-modal-description" className="text-xs text-secondary">Narrow the roster by fit, availability, and credentials.</p>
             </div>
@@ -98,7 +98,7 @@ export const FilterModal: FC<FilterModalProps> = ({
             onClick={onClose}
             className="min-h-11 px-6 py-2.5 rounded-[10px] bg-action hover:bg-action-hover text-on-action font-bold text-xs transition-all cursor-pointer"
           >
-            Show {totalFilteredCount} specialists
+            Show {totalFilteredCount} contractors
           </button>
         </div>
       </div>

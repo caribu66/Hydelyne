@@ -46,8 +46,11 @@ export function ServiceStatus() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
+  const announcement = services.map(({ name, label }) => `${label}: ${states[name]}`).join(', ');
+
   return (
     <div className="hidden lg:flex items-center gap-1 rounded-[10px] border border-border-subtle bg-canvas/60 p-1" aria-label="Live service status">
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">Services: {announcement}</span>
       {services.map(({ name, label, icon: Icon }) => {
         const state = states[name];
         return (

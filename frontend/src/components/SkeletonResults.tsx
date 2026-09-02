@@ -80,10 +80,10 @@ export const SkeletonResults: FC<SkeletonResultsProps> = ({
 
   if (viewMode === 'list') {
     return (
-      <div className="space-y-2" role="status" aria-live="polite" aria-label="Loading specialist results">
+      <div className="space-y-2" role="status" aria-live="polite" aria-label="Loading contractor results">
         <div className="flex items-center gap-2 px-1 pb-1 text-xs text-secondary">
           <span className="h-2 w-2 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-          <span>Finding the right specialists…</span>
+          <span>Finding the right contractors…</span>
           <span className="ml-auto hidden font-mono text-xs text-muted sm:inline">Checking availability and fit</span>
         </div>
         <div className="divide-y divide-slate-800/60 border border-border-strong/60 rounded-[10px] bg-surface-raised/30 overflow-hidden">

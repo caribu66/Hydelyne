@@ -193,9 +193,9 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
         <div className="w-14 h-14 rounded-[14px] bg-surface border border-border-subtle flex items-center justify-center text-muted mb-3 shadow-inner">
           <Compass className="w-7 h-7 text-muted" />
         </div>
-        <h3 className="text-sm font-semibold text-secondary">No Specialist Selected</h3>
+        <h3 className="text-sm font-semibold text-secondary">No Contractor Selected</h3>
         <p className="text-xs text-muted max-w-xs mt-1">
-          Select a specialist from the list or press <kbd className="px-1.5 py-0.5 rounded bg-surface-raised border border-border-strong text-xs text-secondary font-mono">↑</kbd> <kbd className="px-1.5 py-0.5 rounded bg-surface-raised border border-border-strong text-xs text-secondary font-mono">↓</kbd> to review their dossier, skills radar, and compliance documents.
+          Select a contractor from the list or press <kbd className="px-1.5 py-0.5 rounded bg-surface-raised border border-border-strong text-xs text-secondary font-mono">↑</kbd> <kbd className="px-1.5 py-0.5 rounded bg-surface-raised border border-border-strong text-xs text-secondary font-mono">↓</kbd> to review their dossier, skills radar, and compliance documents.
         </p>
       </div>
     );
@@ -259,7 +259,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               <span className="relative inline-flex rounded-full h-2 w-2 bg-action"></span>
             </span>
             <span className="font-semibold text-primary uppercase tracking-wider font-mono text-xs">
-              Focused Specialist Workspace
+              Focused Contractor Workspace
             </span>
             {totalProfiles && totalProfiles > 1 && (
               <span className="text-secondary font-mono text-xs">
@@ -274,7 +274,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 type="button"
                 onClick={onPrevProfile}
                 className="min-h-11 px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface-selected border border-border-strong text-primary hover:text-primary flex items-center gap-1 font-medium transition-colors cursor-pointer"
-                title="Previous Specialist (Press Left Arrow)"
+                title="Previous Contractor (Press Left Arrow)"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Prev</span>
@@ -285,7 +285,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 type="button"
                 onClick={onNextProfile}
                 className="min-h-11 px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface-selected border border-border-strong text-primary hover:text-primary flex items-center gap-1 font-medium transition-colors cursor-pointer"
-                title="Next Specialist (Press Right Arrow)"
+                title="Next Contractor (Press Right Arrow)"
               >
                 <span>Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -337,7 +337,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 {profile.isHighlyRecommended && (
                   <span className="badge-accent inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium">
                     <BadgeCheck className="w-3.5 h-3.5 text-accent" />
-                    <span>Verified Specialist</span>
+                    <span>Verified Contractor</span>
                   </span>
                 )}
               </div>
@@ -369,8 +369,8 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                     ? 'bg-action border-border-strong text-on-action shadow-xs'
                     : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
                 }`}
-                title={isFocusMode ? 'Exit focus mode (Split View)' : 'Open focused specialist view (Press F)'}
-                aria-label={isFocusMode ? 'Exit focused specialist view' : 'Open focused specialist view'}
+                title={isFocusMode ? 'Exit focus mode (Split View)' : 'Open focused contractor view (Press F)'}
+                aria-label={isFocusMode ? 'Exit focused contractor view' : 'Open focused contractor view'}
               >
                 {isFocusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
@@ -422,7 +422,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                     )}
                     {canDeleteCrew && onDeleteCrew && (
                       <button type="button" role="menuitem" onClick={() => runHeaderAction(() => setIsDeleteConfirmOpen(true))} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-danger hover:bg-danger-soft/70 hover:text-danger">
-                        <Trash2 className="h-4 w-4" /> Delete specialist
+                        <Trash2 className="h-4 w-4" /> Delete contractor
                       </button>
                     )}
                   </div>
@@ -470,7 +470,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
           <Sparkles className="fit-summary-label mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <div className="min-w-0">
             <p className="fit-summary-label text-xs font-semibold uppercase tracking-wider font-mono">
-              Why this specialist
+              Why this contractor
             </p>
             <p className="mt-1 text-xs leading-5">
               {profile.name} brings <strong className="font-semibold text-primary">{profile.yearsOfExperience} years</strong> of offshore experience in {profile.department.toLowerCase()} and is {isAvailableNow ? 'available for immediate mobilization' : profile.availability.toLowerCase()}.
@@ -478,7 +478,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
           </div>
         </div>
 
-        {/* Primary sections remain visible; specialist detail is progressively disclosed. */}
+        {/* Primary sections remain visible; contractor detail is progressively disclosed. */}
         <div role="group" aria-label={`${profile.name} dossier sections`} className="flex items-center gap-2 mt-3 pt-2 border-t border-border-subtle/80 flex-wrap">
           <button
             type="button"
@@ -953,7 +953,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
     <ConfirmDialog
       open={isDeleteConfirmOpen}
       title={`Delete ${profile.name}?`}
-      description="This permanently removes the specialist, their certifications, work history, and managed documents. This cannot be undone."
+      description="This permanently removes the contractor, their certifications, work history, and managed documents. This cannot be undone."
       confirmLabel={isDeleting ? 'Deleting…' : 'Delete permanently'}
       onConfirm={() => void handleDeleteCrew()}
       onCancel={() => !isDeleting && setIsDeleteConfirmOpen(false)}

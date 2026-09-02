@@ -173,9 +173,9 @@ export const FilterSidebar: FC<FilterSidebarProps> = ({
             <SlidersHorizontal className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-bold text-sm text-primary">Specialist filters</h3>
+            <h3 className="font-bold text-sm text-primary">Contractor filters</h3>
             <p className="text-xs text-secondary font-mono">
-              <span className="text-primary font-semibold">{totalFilteredCount}</span> of {totalCount} specialists match
+              <span className="text-primary font-semibold">{totalFilteredCount}</span> of {totalCount} contractors match
             </p>
           </div>
         </div>
@@ -291,8 +291,8 @@ export const FilterSidebar: FC<FilterSidebarProps> = ({
                 type="text"
                 value={skillSearchQuery}
                 onChange={(e) => setSkillSearchQuery(e.target.value)}
-                placeholder="Search specialist skills…"
-                aria-label="Search specialist skills"
+                placeholder="Search contractor skills…"
+                aria-label="Search contractor skills"
                 className="min-h-11 w-full pl-8 pr-3 py-1.5 bg-canvas/80 border border-border-subtle rounded-[10px] text-sm text-primary placeholder:text-muted focus:outline-none focus:border-border-strong"
               />
             </div>

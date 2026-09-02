@@ -69,7 +69,7 @@ export const CrewQuerySummary: FC<CrewQuerySummaryProps> = ({ data, loading, onR
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
                 Search criteria · all required {onRemoveCriterion ? '· click a criterion to remove it' : ''}
               </p>
-              <div className="flex flex-wrap gap-1.5" aria-label="Applied specialist requirements">
+              <div className="flex flex-wrap gap-1.5" aria-label="Applied contractor requirements">
                 {criteriaLabels.map((criterion) => (
                   <button
                     key={`${criterion.key}-${criterion.value || criterion.label}`}

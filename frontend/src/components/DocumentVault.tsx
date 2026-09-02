@@ -156,7 +156,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
 
     const manifest = `HYDENLYNE COMPLIANCE BUNDLE MANIFEST
 ===================================================
-SPECIALIST: ${profile.name}
+CONTRACTOR: ${profile.name}
 DISCIPLINE: ${profile.department} (${profile.title})
 TOTAL CREDENTIALS: ${documents.length}
 MOBILISATION COMPLIANCE: ${expiredCount === 0 ? '100% AUDIT COMPLIANT (CLEARED)' : 'ACTION REQUIRED'}

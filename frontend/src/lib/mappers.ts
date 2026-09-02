@@ -213,7 +213,7 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
   return {
     id: raw.id,
     name: raw.fullName,
-    title: primarySpecialty ? `${primarySpecialty} Specialist` : 'Crew member',
+    title: primarySpecialty ? `${primarySpecialty} Contractor` : 'Contractor',
     avatar: avatarFor(raw.fullName),
     company: 'Company not recorded',
     department: dept,
@@ -223,7 +223,7 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
     skills,
     expertise,
     // Real CV-derived text when the deterministic extractor found one;
-    // the synthesized fallback only covers crew members without a
+    // the synthesized fallback only covers contractors without a
     // processed CV yet.
     bio:
       raw.professionalSummary ||

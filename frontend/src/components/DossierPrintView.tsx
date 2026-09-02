@@ -33,7 +33,7 @@ export const DossierPrintView: FC<DossierPrintViewProps> = ({ profile, onClose }
         <div className="print:hidden flex items-center justify-between px-6 py-3.5 bg-surface text-primary border-b border-border-subtle">
           <div className="flex items-center gap-2 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-positive" />
-            <span>Specialist Dossier Preview (Print-Ready)</span>
+            <span>Contractor dossier Preview (Print-Ready)</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -150,7 +150,7 @@ export const DossierPrintView: FC<DossierPrintViewProps> = ({ profile, onClose }
           {profile.skills && profile.skills.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-muted border-b border-border-strong pb-1">
-                Technical Skills & Specialist Software / Equipment
+                Technical Skills & Contractor Software / Equipment
               </h2>
               <div className="flex flex-wrap gap-1.5">
                 {profile.skills.map((skill) => (

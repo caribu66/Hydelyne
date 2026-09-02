@@ -129,7 +129,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
       setStep('done');
       onSuccess?.();
     } catch (error) {
-      console.error('Failed to create crew member:', error);
+      console.error('Failed to create contractor:', error);
       setStep('form');
     }
   };
@@ -150,7 +150,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-raised border border-border-strong">
               <UserPlus className="h-5 w-5 text-secondary" />
             </div>
-            <h2 id="add-specialist-title" className="text-lg font-semibold text-primary">Add specialist</h2>
+            <h2 id="add-specialist-title" className="text-lg font-semibold text-primary">Add contractor</h2>
           </div>
           <button
             type="button"
@@ -167,7 +167,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             <div className="flex items-center gap-3 p-4 rounded-[10px] bg-positive-soft/30 border border-positive-border/60">
               <CheckCircle className="w-6 h-6 text-positive shrink-0" />
               <div>
-                <p className="font-medium text-positive">Specialist added successfully!</p>
+                <p className="font-medium text-positive">Contractor added successfully!</p>
                 <p className="text-sm text-positive/80">
                   {uploadedCv ? 'CV uploaded and profile extraction finished.' : 'No CV was uploaded.'}
                 </p>
@@ -184,7 +184,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
 
             {uploadError && (
               <p className="rounded-[10px] border border-warning-border/60 bg-warning-soft/30 p-3 text-sm text-warning">
-                The specialist was created, but the CV was not uploaded: {uploadError}
+                The contractor was created, but the CV was not uploaded: {uploadError}
               </p>
             )}
 
@@ -317,7 +317,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             {step === 'creating' && (
               <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-raised/70 border border-border-strong text-secondary">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Creating specialist…</span>
+                <span className="text-sm">Creating contractor…</span>
               </div>
             )}
 
@@ -342,7 +342,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 disabled={step !== 'form' || isPreviewing || (!fullName.trim() && !cvFile)}
                 className="min-h-11 flex-1 px-4 py-2.5 rounded-[10px] bg-action hover:bg-action-hover disabled:bg-surface-selected disabled:text-muted text-on-action transition-colors cursor-pointer font-medium flex items-center justify-center gap-2"
               >
-                {step === 'form' ? 'Add specialist' : <Loader2 className="w-4 h-4 animate-spin" />}
+                {step === 'form' ? 'Add contractor' : <Loader2 className="w-4 h-4 animate-spin" />}
               </button>
             </div>
           </form>

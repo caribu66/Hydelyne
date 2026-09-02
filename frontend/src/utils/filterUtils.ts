@@ -349,12 +349,12 @@ export function generateAIOverview(
   let summary = '';
   if (query.trim()) {
     summary = `Identified ${total} verified ${
-      total === 1 ? 'specialist' : 'specialists'
+      total === 1 ? 'contractor' : 'contractors'
     } matching "${query}". The cohort averages ${avgExp} years of offshore & survey tenure with deep domain expertise in ${sortedSkills.slice(0, 3).join(', ')}.`;
   } else if (filters.selectedSkills.length > 0) {
-    summary = `Found ${total} offshore specialists accredited in ${filters.selectedSkills.join(', ')}. Current talent pool features verified alumni from ${topCompanies.join(', ')}.`;
+    summary = `Found ${total} offshore contractors accredited in ${filters.selectedSkills.join(', ')}. Current talent pool features verified alumni from ${topCompanies.join(', ')}.`;
   } else {
-    summary = `Indexed ${total} accredited marine geophysicists, environmental MMO/PAM specialists, geotechnical consultants, and client representatives. ${availablePercentage}% are available immediately or open for mobilization.`;
+    summary = `Indexed ${total} accredited marine geophysicists, environmental MMO/PAM contractors, geotechnical consultants, and client representatives. ${availablePercentage}% are available immediately or open for mobilization.`;
   }
 
   const rates = profiles.map((p) => p.dayRate || 800).filter(Boolean);
@@ -362,7 +362,7 @@ export function generateAIOverview(
   const maxRate = rates.length > 0 ? Math.max(...rates) : 1200;
 
   const keyInsights: string[] = [
-    `${availablePercentage}% of matched specialists are available for immediate mobilization or offshore rotation.`,
+    `${availablePercentage}% of matched contractors are available for immediate mobilization or offshore rotation.`,
     `${remotePercentage}% support hybrid onshore processing & remote QC reporting.`,
     `Standard day rate across this cohort ranges between £${minRate} - £${maxRate} / day.`,
   ];

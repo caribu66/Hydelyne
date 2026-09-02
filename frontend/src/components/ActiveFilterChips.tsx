@@ -129,7 +129,7 @@ export const ActiveFilterChips: FC<ActiveFilterChipsProps> = ({
   if (chips.length === 0) return null;
 
   return (
-    <div id="active-filter-chips-bar" className="flex flex-wrap items-center gap-2 py-3" aria-label="Active specialist filters">
+    <div id="active-filter-chips-bar" className="flex flex-wrap items-center gap-2 py-3" aria-label="Active contractor filters">
       <div className="flex items-center gap-1.5 text-xs font-medium text-secondary uppercase tracking-wider mr-1">
         <Filter className="w-3.5 h-3.5 text-accent" />
         <span>Active Filters ({chips.length}):</span>

@@ -89,10 +89,10 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
             </div>
             <div>
               <h3 id="shortlist-title" className="font-semibold text-base text-primary">
-                Shortlisted specialists ({shortlistedProfiles.length})
+                Shortlisted contractors ({shortlistedProfiles.length})
               </h3>
               <p className="text-xs text-secondary font-light">
-                Specialist review, CSV export, and batch clipboard summary
+                Contractor review, CSV export, and batch clipboard summary
               </p>
             </div>
           </div>
@@ -109,9 +109,9 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
         <div className="flex-1 overflow-y-auto p-5 space-y-2.5 divide-y divide-zinc-800/40">
           {shortlistedProfiles.length === 0 ? (
             <div className="text-center py-12 text-muted space-y-2">
-              <p className="text-sm">No specialists currently saved to shortlist.</p>
+              <p className="text-sm">No contractors currently saved to shortlist.</p>
               <p className="text-xs text-muted">
-                Use “Save to shortlist” or press <kbd className="rounded border border-border-subtle bg-canvas px-1.5 py-0.5 font-mono">S</kbd> while viewing a specialist.
+                Use “Save to shortlist” or press <kbd className="rounded border border-border-subtle bg-canvas px-1.5 py-0.5 font-mono">S</kbd> while viewing a contractor.
               </p>
             </div>
           ) : (

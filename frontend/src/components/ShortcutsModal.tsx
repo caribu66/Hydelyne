@@ -15,13 +15,13 @@ interface ShortcutItem {
 
 const SHORTCUTS: ShortcutItem[] = [
   { key: '/', description: 'Focus search bar', category: 'Navigation' },
-  { key: '↓ / ↑', description: 'Navigate specialists up/down', category: 'Navigation' },
+  { key: '↓ / ↑', description: 'Navigate contractors up/down', category: 'Navigation' },
   { key: 'J / K', description: 'Vim navigation next/previous', category: 'Navigation' },
-  { key: 'Home / End', description: 'Jump to first/last specialist', category: 'Navigation' },
-  { key: 'Enter', description: 'Select the focused specialist result', category: 'Actions' },
-  { key: 'S', description: 'Toggle specialist shortlist status', category: 'Actions' },
-  { key: 'C', description: 'Copy specialist email to clipboard', category: 'Actions' },
-  { key: 'T', description: 'Toggle Deep Zinc / Light theme', category: 'General' },
+  { key: 'Home / End', description: 'Jump to first/last contractor', category: 'Navigation' },
+  { key: 'Enter', description: 'Select the focused contractor result', category: 'Actions' },
+  { key: 'S', description: 'Toggle contractor shortlist status', category: 'Actions' },
+  { key: 'C', description: 'Copy contractor email to clipboard', category: 'Actions' },
+  { key: 'T', description: 'Toggle dark / light theme', category: 'General' },
   { key: 'Esc', description: 'Exit focus mode or close the active dialog', category: 'General' },
   { key: '?', description: 'Open keyboard shortcuts sheet', category: 'General' },
 ];

@@ -10,6 +10,19 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-02 — Unified Hydenlyne UI theme (Codex)
+
+- Replaced screen-level zinc/blue styling with semantic dark and light theme
+  roles for surfaces, text, actions, focus, and statuses; removed remote font
+  loading and added pre-render theme initialization to avoid a theme flash.
+- Added typed UI primitives, standardized control/card radii and metadata text,
+  refreshed the responsive search/results/dossier hierarchy, exposed result
+  views in one toolbar, and normalized user-facing specialist, shortlist,
+  compare, and mobilization language.
+- Extended the strict UI audit to reject raw palette and literal visual colors.
+  Added inspected dark/light authenticated visual baselines at mobile, tablet,
+  desktop, and wide viewports. No backend or API contract changed.
+
 ## 2026-09-02 — Authorization matrix: close test and doc gaps (Claude Code)
 
 Addressed `docs/AUDIT_2026-09-02.md` P1 #4 ("no documented+tested

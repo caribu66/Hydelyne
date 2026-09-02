@@ -89,13 +89,13 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
             {isAuthenticated && (
               <button type="button" onClick={() => closeAfter(onOpenAddSpecialist)} className="menu-drawer-action menu-drawer-action-primary">
                 <UserPlus className="h-4 w-4" aria-hidden="true" />
-                <span>Add specialist</span>
+                <span>Add contractor</span>
               </button>
             )}
             {compareCount > 0 && isAuthenticated && (
               <button type="button" onClick={() => closeAfter(onOpenCompare)} className="menu-drawer-action">
                 <Scale className="h-4 w-4" aria-hidden="true" />
-                <span>Compare specialists</span>
+                <span>Compare contractors</span>
                 <span className="menu-drawer-count">{compareCount}</span>
               </button>
             )}

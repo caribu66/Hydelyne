@@ -223,7 +223,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono uppercase px-2 py-0.5 bg-accent-soft text-accent border border-border-strong rounded-md font-bold">
-                    {originalFileAvailable ? 'Original Specialist Document' : 'Compliance Record — No Original File'}
+                    {originalFileAvailable ? 'Original Contractor Document' : 'Compliance Record — No Original File'}
                   </span>
                   <span className="text-xs font-mono text-secondary">REF: {doc.id}</span>
                 </div>
@@ -242,7 +242,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
             {/* Document Details Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10 text-xs">
               <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/80 space-y-1">
-                <span className="text-secondary font-mono text-xs block uppercase">Specialist / Holder</span>
+                <span className="text-secondary font-mono text-xs block uppercase">Contractor / Holder</span>
                 <span className="text-primary font-semibold text-sm block">{profile.name}</span>
                 <span className="text-secondary text-xs block">{profile.title}</span>
               </div>
@@ -389,7 +389,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
     <ConfirmDialog
       open={isDeleteConfirmationOpen}
       title="Remove compliance record?"
-      description={`This will remove “${doc.title}” from this specialist’s vault. The action cannot be undone from this screen.`}
+      description={`This will remove “${doc.title}” from this contractor’s vault. The action cannot be undone from this screen.`}
       confirmLabel="Remove record"
       onConfirm={confirmDelete}
       onCancel={() => setIsDeleteConfirmationOpen(false)}
