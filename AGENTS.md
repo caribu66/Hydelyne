@@ -8,10 +8,13 @@ whole workspace. More specific `AGENTS.md` files add rules for their directory.
 Read, in order:
 
 1. This file.
-2. `docs/ARCHITECTURE.md`.
-3. `docs/ENGINEERING_STANDARDS.md`.
-4. The nearest directory-specific `AGENTS.md`.
-5. Tests and existing implementations adjacent to the requested change.
+2. `docs/CHANGELOG.md` — what was recently built, by whom/which tool, and why.
+   This is the shared handoff point between different AI tools and sessions;
+   check it before assuming context has to be re-explained.
+3. `docs/ARCHITECTURE.md`.
+4. `docs/ENGINEERING_STANDARDS.md`.
+5. The nearest directory-specific `AGENTS.md`.
+6. Tests and existing implementations adjacent to the requested change.
 
 For consultant retrieval, ingestion vocabulary, Meilisearch, or Qdrant work,
 also read `backend/docs/consultant-knowledge-core.md`. For CV/document
@@ -20,10 +23,8 @@ extraction is deterministic by design; do not add an LLM call there.
 
 ## Repository facts
 
-- The root repository owns the backend, infrastructure, CI, and root docs.
-- `frontend/` is currently a separate, ignored Git repository. A full-stack
-  change therefore spans two independent histories and cannot be treated as
-  one atomic commit. See the audit before changing repository topology.
+- This is a true monorepo (ADR 0001): one root repository owns the backend,
+  frontend, infrastructure, CI, and docs. A full-stack change is one commit.
 - The backend is Python 3.11, FastAPI, Strawberry GraphQL, SQLAlchemy async,
   Alembic, Celery, PostgreSQL, Redis, Meilisearch, Qdrant, and Ollama.
 - The frontend is React 19, TypeScript, Vite, Apollo Client, and Tailwind CSS.
@@ -97,11 +98,14 @@ Before completion:
 
 1. Run the checks required by the nearest `AGENTS.md` and
    `docs/ENGINEERING_STANDARDS.md`.
-2. Review `git diff --check`, the complete diff, and untracked files in each
-   affected repository.
+2. Review `git diff --check`, the complete diff, and untracked files.
 3. Report checks run, failures, assumptions, migrations, security impact,
    compatibility impact, and remaining risk. Never claim a check passed if it
    was skipped, timed out, or was non-blocking.
+4. Append a dated entry to `docs/CHANGELOG.md`: what changed, why, which
+   tool/agent did it, and any follow-up the next session needs to know about.
+   Do this for anything that changes committed code, running data (seeds,
+   migrations run by hand), or infrastructure state — not for pure Q&A.
 
 ## Architecture decisions
 

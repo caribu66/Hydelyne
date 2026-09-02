@@ -1,0 +1,1 @@
+../../../frontend/.codex/skills/ui-consistency/SKILL.md

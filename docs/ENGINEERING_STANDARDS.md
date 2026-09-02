@@ -136,7 +136,7 @@ A change is done only when:
 - logs/metrics make important failures diagnosable without exposing private
   data;
 - relevant quality gates pass;
-- documentation and ADRs reflect the result;
+- documentation, ADRs, and `docs/CHANGELOG.md` reflect the result;
 - the complete diff contains no unexplained or unrelated changes;
 - deployment and rollback are understood; and
 - a human reviewer approves high-risk business, security, migration, and LLM

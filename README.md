@@ -222,9 +222,14 @@ cd frontend && npm run lint && npm run build
 
 ## Documentation
 
+- [AI engineering contract](AGENTS.md) — mandatory rules for AI-assisted work,
+  read automatically by Claude Code via `CLAUDE.md`, and directly by Codex and
+  Kilo Code. This is the single source of truth for project rules — don't fork
+  them into a tool-specific file.
+- [Changelog](docs/CHANGELOG.md) — running log of what was built, by which
+  tool, and why. Read this first when picking up work in a new session.
 - [Secret Rotation](SECRET_ROTATION.md) — what each secret protects and the
   blast radius of rotating it
-- [AI engineering contract](AGENTS.md) — mandatory rules for AI-assisted work
 - [Architecture](docs/ARCHITECTURE.md) — system ownership, dependency direction,
   data flows, and known legacy exceptions
 - [Engineering standards](docs/ENGINEERING_STANDARDS.md) — quality gates,

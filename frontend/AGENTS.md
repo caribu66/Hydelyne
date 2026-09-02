@@ -2,10 +2,10 @@
 
 Use the `ui-consistency` skill for substantial frontend UI work and reviews.
 
-Read the workspace-root `AGENTS.md`, `docs/ARCHITECTURE.md`, and
-`docs/ENGINEERING_STANDARDS.md` before changing frontend behavior. This
-directory is currently its own Git repository, so inspect and report its Git
-status separately from the root repository.
+Read the workspace-root `AGENTS.md`, `docs/CHANGELOG.md`, `docs/ARCHITECTURE.md`,
+and `docs/ENGINEERING_STANDARDS.md` before changing frontend behavior. This
+directory is part of the root monorepo (ADR 0001) — one Git status, one commit
+history, shared with the backend.
 
 ## Frontend architecture
 
