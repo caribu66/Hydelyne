@@ -94,8 +94,8 @@ export const CertificationBadge: FC<CertificationBadgeProps> = ({
       <span
         className={`inline-flex items-center gap-1 font-mono font-medium rounded-lg border transition-colors cursor-help select-none ${
           size === 'sm'
-            ? 'px-1.5 py-0.5 text-[10px]'
-            : size === 'lg' ? 'px-3 py-1.5 text-xs' : 'px-2 py-1 text-[11px]'
+            ? 'px-1.5 py-0.5 text-xs'
+            : size === 'lg' ? 'px-3 py-1.5 text-xs' : 'px-2 py-1 text-xs'
         } ${
           matchKey
             ? 'badge-neutral hover:brightness-95'
@@ -108,12 +108,12 @@ export const CertificationBadge: FC<CertificationBadgeProps> = ({
       </span>
 
       {showTooltip && info && (
-        <div id={tooltipId} role="tooltip" className="absolute z-[100] top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2.5 rounded-xl bg-zinc-900 border border-zinc-750 text-xs text-zinc-200 shadow-xl pointer-events-none transition-all">
-          <div className="flex items-center justify-between gap-1 mb-1 border-b border-zinc-800 pb-1">
-            <span className="font-semibold text-blue-300 font-mono text-[11px]">{info.label}</span>
-            <span className="text-[10px] text-zinc-400">{info.org}</span>
+        <div id={tooltipId} role="tooltip" className="absolute z-[100] top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-2.5 rounded-[10px] bg-surface border border-border-strong text-xs text-primary shadow-xl pointer-events-none transition-all">
+          <div className="flex items-center justify-between gap-1 mb-1 border-b border-border-subtle pb-1">
+            <span className="font-semibold text-accent font-mono text-xs">{info.label}</span>
+            <span className="text-xs text-secondary">{info.org}</span>
           </div>
-          <p className="text-[11px] text-zinc-300 leading-snug">{info.description}</p>
+          <p className="text-xs text-secondary leading-snug">{info.description}</p>
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 -mb-px border-4 border-transparent border-b-zinc-800" />
         </div>
       )}

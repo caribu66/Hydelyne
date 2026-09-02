@@ -75,7 +75,7 @@ export const SpecialistActionsMenu: FC<SpecialistActionsMenuProps> = ({
     triggerRef.current?.focus();
   };
 
-  const itemClass = 'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:bg-zinc-800 focus-visible:text-white';
+  const itemClass = 'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary transition-colors hover:bg-surface-raised hover:text-primary focus-visible:bg-surface-raised focus-visible:text-primary';
 
   return (
     <div ref={rootRef} className="relative shrink-0">
@@ -87,8 +87,8 @@ export const SpecialistActionsMenu: FC<SpecialistActionsMenuProps> = ({
         aria-expanded={isOpen}
         aria-controls={isOpen ? menuId : undefined}
         onClick={() => setIsOpen((open) => !open)}
-        className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl transition-colors ${
-          isOpen ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200'
+        className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] transition-colors ${
+          isOpen ? 'bg-surface-raised text-primary' : 'text-muted hover:bg-surface-raised/70 hover:text-primary'
         }`}
       >
         <Ellipsis className="h-4 w-4" aria-hidden="true" />
@@ -99,24 +99,24 @@ export const SpecialistActionsMenu: FC<SpecialistActionsMenuProps> = ({
           id={menuId}
           role="menu"
           aria-label={`Actions for ${profile.name}`}
-          className="absolute right-0 top-12 z-40 w-56 rounded-2xl border border-zinc-700/80 bg-zinc-900/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl"
+          className="absolute right-0 top-12 z-40 w-56 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl"
         >
           <button type="button" role="menuitem" onClick={() => runAction(onToggleBookmark)} className={itemClass}>
-            {isBookmarked ? <BookmarkCheck className="h-4 w-4 text-blue-400" /> : <Bookmark className="h-4 w-4" />}
+            {isBookmarked ? <BookmarkCheck className="h-4 w-4 text-accent" /> : <Bookmark className="h-4 w-4" />}
             {isBookmarked ? 'Remove from shortlist' : 'Save to shortlist'}
           </button>
           <button type="button" role="menuitem" onClick={() => runAction(onToggleCompare)} className={itemClass}>
-            <Scale className={`h-4 w-4 ${isCompared ? 'text-blue-400' : ''}`} />
+            <Scale className={`h-4 w-4 ${isCompared ? 'text-accent' : ''}`} />
             {isCompared ? 'Remove from compare' : 'Add to compare'}
           </button>
           {onCopyEmail && (
             <button type="button" role="menuitem" onClick={() => runAction(onCopyEmail)} className={itemClass}>
-              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+              {copied ? <Check className="h-4 w-4 text-positive" /> : <Copy className="h-4 w-4" />}
               {copied ? 'Email copied' : 'Copy email'}
             </button>
           )}
           {onRequestMobilization && (
-            <button type="button" role="menuitem" onClick={() => runAction(onRequestMobilization)} className={`${itemClass} text-blue-300`}>
+            <button type="button" role="menuitem" onClick={() => runAction(onRequestMobilization)} className={`${itemClass} text-accent`}>
               <Send className="h-4 w-4" />
               Request mobilization
             </button>

@@ -88,29 +88,29 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
   };
 
   return (
-    <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-zinc-950/80 backdrop-blur-md">
+    <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-canvas/80 backdrop-blur-md">
       <motion.div
         ref={dialogRef}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
+        className="w-full max-w-2xl bg-surface border border-border-subtle rounded-[14px] shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobilization-modal-title"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/90 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle bg-surface/90 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-950/60 border border-blue-800/60 text-blue-400">
+            <div className="flex items-center justify-center w-9 h-9 rounded-[10px] bg-accent-soft/60 border border-border-strong/60 text-accent">
               <Anchor className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="mobilization-modal-title" className="text-base font-semibold text-zinc-100">
+              <h2 id="mobilization-modal-title" className="text-base font-semibold text-primary">
                 Request mobilization
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-secondary">
                 Share the campaign essentials and Hydenlyne operations will take it from here.
               </p>
             </div>
@@ -118,7 +118,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
             aria-label="Close modal"
           >
             <X className="w-4 h-4" />
@@ -128,18 +128,18 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Specialist Snapshot Banner */}
-          <div className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-4">
+          <div className="p-3.5 rounded-[10px] bg-canvas/70 border border-border-subtle flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <img
                 src={profile.avatar}
                 alt={profile.name}
-                className="w-11 h-11 rounded-xl object-cover border border-zinc-700 shrink-0"
+                className="w-11 h-11 rounded-[10px] object-cover border border-border-strong shrink-0"
               />
               <div className="min-w-0">
-                <h3 className="font-semibold text-sm text-zinc-100 truncate">{profile.name}</h3>
-                <p className="text-xs text-zinc-400 truncate">{profile.title}</p>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-400 font-mono">
-                  <span className="text-emerald-400 font-medium">{profile.availability}</span>
+                <h3 className="font-semibold text-sm text-primary truncate">{profile.name}</h3>
+                <p className="text-xs text-secondary truncate">{profile.title}</p>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-secondary font-mono">
+                  <span className="text-positive font-medium">{profile.availability}</span>
                   <span>•</span>
                   <span>{profile.location}</span>
                 </div>
@@ -147,10 +147,10 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
             </div>
 
             <div className="text-right shrink-0">
-              <span className="block text-xs font-medium uppercase text-zinc-400 font-mono">Indicative day rate</span>
-              <span className="text-base font-bold text-zinc-100 font-mono">
+              <span className="block text-xs font-medium uppercase text-secondary font-mono">Indicative day rate</span>
+              <span className="text-base font-bold text-primary font-mono">
                 £{estimatedDayRate}
-                <span className="text-xs text-zinc-400 font-normal">/day</span>
+                <span className="text-xs text-secondary font-normal">/day</span>
               </span>
             </div>
           </div>
@@ -158,33 +158,33 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
           {/* Form or Confirmation View */}
           {submittedRef ? (
             <div className="py-6 text-center space-y-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-950/80 border border-emerald-700 text-emerald-400 flex items-center justify-center mx-auto">
+              <div className="w-12 h-12 rounded-full bg-positive-soft/80 border border-positive-border text-positive flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
 
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-zinc-100">Request received</h3>
-                <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                <h3 className="text-base font-bold text-primary">Request received</h3>
+                <p className="text-xs text-secondary max-w-md mx-auto">
                   Hydenlyne operations will review the details and follow up with availability and next steps within 2 hours.
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 max-w-md mx-auto text-left space-y-2 text-xs">
-                <div className="flex justify-between border-b border-zinc-800 pb-2">
-                  <span className="text-zinc-400 font-mono">Booking Ref:</span>
-                  <span className="font-bold text-blue-400 font-mono">{submittedRef}</span>
+              <div className="p-4 rounded-[10px] bg-canvas/80 border border-border-subtle max-w-md mx-auto text-left space-y-2 text-xs">
+                <div className="flex justify-between border-b border-border-subtle pb-2">
+                  <span className="text-secondary font-mono">Request reference:</span>
+                  <span className="font-bold text-accent font-mono">{submittedRef}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-zinc-400">Campaign:</span>
-                  <span className="text-zinc-200 font-medium">{projectName || 'Offshore Campaign'}</span>
+                  <span className="text-secondary">Campaign:</span>
+                  <span className="text-primary font-medium">{projectName || 'Offshore Campaign'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-zinc-400">Duration:</span>
-                  <span className="text-zinc-200 font-medium">{durationDays} Days ({startDate})</span>
+                  <span className="text-secondary">Duration:</span>
+                  <span className="text-primary font-medium">{durationDays} Days ({startDate})</span>
                 </div>
                 <div className="flex justify-between">
-                      <span className="text-zinc-400">Estimated base rate:</span>
-                  <span className="text-zinc-100 font-bold font-mono">£{estimatedTotalRate.toLocaleString()}</span>
+                      <span className="text-secondary">Estimated base rate:</span>
+                  <span className="text-primary font-bold font-mono">£{estimatedTotalRate.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -192,15 +192,15 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 <button
                   type="button"
                   onClick={handleCopySummary}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-xs font-semibold text-primary hover:text-primary transition-colors cursor-pointer"
                 >
-                  {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {isCopied ? <Check className="w-3.5 h-3.5 text-positive" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{isCopied ? 'Copied Summary' : 'Copy Booking Brief'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover text-xs font-semibold text-on-action transition-colors cursor-pointer"
                 >
                   <span>Done</span>
                 </button>
@@ -211,8 +211,8 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
               {/* Campaign / Vessel Name & Deployment Hub */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label htmlFor="mobilization-campaign" className="block text-xs font-medium text-zinc-300 mb-1">
-                    Campaign or vessel <span className="text-blue-400">*</span>
+                  <label htmlFor="mobilization-campaign" className="block text-xs font-medium text-secondary mb-1">
+                    Campaign or vessel <span className="text-accent">*</span>
                   </label>
                   <input
                     id="mobilization-campaign"
@@ -221,19 +221,19 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
                     placeholder="e.g. Dogger Bank C / MV Deep Arctic"
-                    className="min-h-11 w-full px-3 py-2 rounded-xl bg-zinc-950/70 border border-zinc-750 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500 transition-colors"
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="mobilization-port" className="block text-xs font-medium text-zinc-300 mb-1">
-                    Deployment port <span className="text-blue-400">*</span>
+                  <label htmlFor="mobilization-port" className="block text-xs font-medium text-secondary mb-1">
+                    Deployment port <span className="text-accent">*</span>
                   </label>
                   <select
                     id="mobilization-port"
                     value={deploymentPort}
                     onChange={(e) => setDeploymentPort(e.target.value)}
-                    className="min-h-11 w-full px-3 py-2 rounded-xl bg-zinc-950/70 border border-zinc-750 text-sm text-zinc-100 focus:outline-none focus:border-blue-500 transition-colors"
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus:outline-none focus:border-border-strong transition-colors"
                   >
                     <option value="Aberdeen, Scotland">Aberdeen, Scotland (UK)</option>
                     <option value="Bergen / Stavanger, Norway">Bergen / Stavanger, Norway</option>
@@ -250,14 +250,14 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
 
               {/* Survey Discipline Scope */}
               <div>
-                <label htmlFor="mobilization-scope" className="block text-xs font-medium text-zinc-300 mb-1">
+                <label htmlFor="mobilization-scope" className="block text-xs font-medium text-secondary mb-1">
                   Work required
                 </label>
                 <select
                   id="mobilization-scope"
                   value={surveyScope}
                   onChange={(e) => setSurveyScope(e.target.value)}
-                  className="min-h-11 w-full px-3 py-2 rounded-xl bg-zinc-950/70 border border-zinc-750 text-sm text-zinc-100 focus:outline-none focus:border-blue-500 transition-colors"
+                  className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus:outline-none focus:border-border-strong transition-colors"
                 >
                   <option value="Marine Seismic QC / OBN">2D/3D/4D Marine Seismic & OBN QC</option>
                   <option value="PAM & MMO Environmental Mitigation">PAM & MMO Passive Acoustic Monitoring</option>
@@ -272,7 +272,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
               {/* Start Date & Duration */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label htmlFor="mobilization-date" className="block text-xs font-medium text-zinc-300 mb-1">
+                  <label htmlFor="mobilization-date" className="block text-xs font-medium text-secondary mb-1">
                     Preferred start date
                   </label>
                   <input
@@ -280,16 +280,16 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="min-h-11 w-full px-3 py-2 rounded-xl bg-zinc-950/70 border border-zinc-750 text-sm text-zinc-100 focus:outline-none focus:border-blue-500 transition-colors"
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus:outline-none focus:border-border-strong transition-colors"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label htmlFor="mobilization-duration" className="text-xs font-medium text-zinc-300">
+                    <label htmlFor="mobilization-duration" className="text-xs font-medium text-secondary">
                       Expected duration
                     </label>
-                    <span className="text-xs font-bold text-blue-400 font-mono">
+                    <span className="text-xs font-bold text-accent font-mono">
                       {durationDays} Days (~{Math.round(durationDays / 7)} wks)
                     </span>
                   </div>
@@ -302,14 +302,14 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     value={durationDays}
                     onChange={(e) => setDurationDays(parseInt(e.target.value, 10))}
                     aria-valuetext={`${durationDays} days`}
-                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    className="w-full h-1.5 bg-surface-raised rounded-lg appearance-none cursor-pointer accent-blue-500"
                   />
                 </div>
               </div>
 
               {/* Client Contact Info */}
-              <div className="p-3.5 rounded-xl bg-zinc-950/50 border border-zinc-800 space-y-3">
-                  <span className="text-[11px] font-mono text-zinc-400 font-medium uppercase tracking-wider block">
+              <div className="p-3.5 rounded-[10px] bg-canvas/50 border border-border-subtle space-y-3">
+                  <span className="text-xs font-mono text-secondary font-medium uppercase tracking-wider block">
                   Your contact details
                 </span>
 
@@ -322,9 +322,9 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                       required
                       value={clientName}
                       onChange={(e) => setClientName(e.target.value)}
-                      placeholder="Your Full Name"
+                      placeholder="Your full name"
                       autoComplete="name"
-                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-750 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
+                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong"
                     />
                   </div>
                   <div>
@@ -337,7 +337,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                       onChange={(e) => setClientEmail(e.target.value)}
                       placeholder="work@operator.com"
                       autoComplete="email"
-                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-750 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
+                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong"
                     />
                   </div>
                   <div>
@@ -350,7 +350,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                       onChange={(e) => setClientCompany(e.target.value)}
                       placeholder="Operator / Company"
                       autoComplete="organization"
-                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-750 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
+                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong"
                     />
                   </div>
                 </div>
@@ -358,7 +358,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
 
               {/* Special Instructions */}
               <div>
-                <label htmlFor="mobilization-notes" className="block text-xs font-medium text-zinc-300 mb-1">
+                <label htmlFor="mobilization-notes" className="block text-xs font-medium text-secondary mb-1">
                   Special Project Requirements / Offshore Rotation Notes
                 </label>
                 <textarea
@@ -367,17 +367,17 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                   value={specialInstructions}
                   onChange={(e) => setSpecialInstructions(e.target.value)}
                   placeholder="e.g. 12-hour night shifts, 4-week back-to-back rotation, high-pressure airgun array experience required..."
-                  className="w-full px-3 py-2 rounded-xl bg-zinc-950/70 border border-zinc-750 text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500 resize-none transition-colors"
+                  className="w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong resize-none transition-colors"
                 />
               </div>
 
               {/* Budget Calculation & Submit */}
-              <div className="flex flex-col items-stretch gap-4 border-t border-zinc-800 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col items-stretch gap-4 border-t border-border-subtle pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <span className="block text-xs font-medium uppercase text-zinc-400 font-mono">Estimated personnel budget</span>
-                  <div className="text-base font-bold text-zinc-100 font-mono">
+                  <span className="block text-xs font-medium uppercase text-secondary font-mono">Estimated personnel budget</span>
+                  <div className="text-base font-bold text-primary font-mono">
                     £{estimatedTotalRate.toLocaleString()}{' '}
-                    <span className="text-xs text-zinc-400 font-normal">
+                    <span className="text-xs text-secondary font-normal">
                       ({durationDays} days @ £{estimatedDayRate}/d)
                     </span>
                   </div>
@@ -387,14 +387,14 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                   <button
                     type="button"
                     onClick={onClose}
-                    className="min-h-11 px-3 py-2 rounded-xl text-zinc-400 hover:text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+                    className="min-h-11 px-3 py-2 rounded-[10px] text-secondary hover:text-primary text-xs font-medium transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-md shadow-blue-950/30 cursor-pointer"
+                    className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover disabled:opacity-50 text-on-action font-semibold text-xs transition-all shadow-md shadow-black/30 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{isSubmitting ? 'Sending…' : 'Send request'}</span>

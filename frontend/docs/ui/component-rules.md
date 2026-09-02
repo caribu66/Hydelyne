@@ -1,28 +1,30 @@
-# Component rules
+# Hydenlyne component rules
 
-## Buttons
+## Language
 
-- Use a text label for primary actions.
-- Use `aria-label` for icon-only actions.
-- Use `aria-pressed` for toggles such as shortlist, compare, and view mode.
-- Include a visible `:focus-visible` state.
-- Do not communicate state through color alone.
+- Product name: “Hydenlyne”.
+- People in the network are “specialists”.
+- Saved specialists belong to the “shortlist”.
+- Side-by-side review is “compare”.
+- Deployment contact is a “mobilization request”.
+- Use concise sentence case for labels and messages.
 
-## Cards and rows
+## Controls
 
-- Make the primary action a semantic button or link.
-- Do not use clickable headings or generic divs as controls.
-- Keep secondary actions separate from the primary click target.
-- Preserve a stable visual height when loading or filtering.
+- Start with `Button`, `IconButton`, or `Field` from the shared UI module. Add a variant there when a genuinely reusable role is missing.
+- Primary actions have text labels. Icon-only controls require an accessible name.
+- Toggles use `aria-pressed`; menus and dialogs expose their expanded/open state.
+- Focus is visible, touch targets are at least 44px, and state is never communicated through color alone.
 
-## Dialogs
+## Surfaces and states
 
-- Use `role="dialog"` and `aria-modal="true"`.
-- Reference a visible heading with `aria-labelledby`.
-- Trap focus while open and restore focus when closed.
-- Lock document scrolling while open.
-- Allow backdrop click and Escape to close unless the workflow is destructive or incomplete.
+- Cards, rows, dialogs, and menus use semantic surface and border roles rather than raw colors.
+- Keep the primary row/card action semantic and separate from secondary actions.
+- Every data-dependent surface has loading, empty, error, and success states without changing its visual vocabulary.
+- Dialogs are named, trap and restore focus, close on Escape when safe, and lock page scroll.
 
-## States
+## Responsive workspace
 
-Every data-dependent surface needs distinct states for loading, empty, error, and success. Do not present unavailable data as an empty search result.
+- Mobile uses a single results column and modal dossier navigation.
+- Tablet and desktop retain the focused split workspace, with cards and matrix views available from the same toolbar.
+- Text and controls remain usable at 200% zoom without horizontal page overflow.

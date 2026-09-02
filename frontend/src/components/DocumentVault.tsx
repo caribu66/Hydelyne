@@ -184,25 +184,25 @@ All documents have been digitally archived for offshore mobilization verificatio
   return (
     <div className="space-y-3">
       {/* Compliance Header & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-canvas/80 border border-border-subtle rounded-[10px] p-3">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-750 flex items-center justify-center text-zinc-300 shrink-0">
-            <ShieldCheck className="w-4 h-4 text-zinc-300" />
+          <div className="w-8 h-8 rounded-lg bg-surface border border-border-strong flex items-center justify-center text-secondary shrink-0">
+            <ShieldCheck className="w-4 h-4 text-secondary" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-zinc-100">Compliance & Document Vault</span>
-              <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px]">
+              <span className="text-xs font-bold text-primary">Compliance & Document Vault</span>
+              <span className="px-1.5 py-0.2 rounded bg-surface-raised text-secondary font-mono text-xs">
                 {totalCount} files
               </span>
             </div>
-            <p className="text-[11px] text-zinc-400">
+            <p className="text-xs text-secondary">
               {expiredCount > 0 ? (
-                <span className="text-rose-400 font-medium">⚠️ {expiredCount} document expired</span>
+                <span className="text-danger font-medium">⚠️ {expiredCount} document expired</span>
               ) : expiringSoonCount > 0 ? (
-                <span className="text-amber-400 font-medium">⚠️ {expiringSoonCount} document expiring soon</span>
+                <span className="text-warning font-medium">⚠️ {expiringSoonCount} document expiring soon</span>
               ) : (
-                <span className="text-emerald-400 font-medium">✓ 100% offshore mobilization compliant</span>
+                <span className="text-positive font-medium">✓ 100% offshore mobilization compliant</span>
               )}
             </p>
           </div>
@@ -213,7 +213,7 @@ All documents have been digitally archived for offshore mobilization verificatio
             <button
               type="button"
               onClick={handleDownloadAllBundle}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary text-xs font-medium transition-colors cursor-pointer"
               title="Download full compliance manifest"
             >
               <FolderArchive className="w-3.5 h-3.5" />
@@ -225,7 +225,7 @@ All documents have been digitally archived for offshore mobilization verificatio
                 type="button"
                 onClick={() => setIsUploadOpen(true)}
                 aria-label={`Upload a document for ${profile.name}`}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-action hover:bg-action-hover text-on-action text-xs font-semibold transition-colors cursor-pointer shadow-xs"
           >
             <UploadCloud className="w-3.5 h-3.5" />
             <span>Upload Document</span>
@@ -235,7 +235,7 @@ All documents have been digitally archived for offshore mobilization verificatio
 
       {/* Auto-Sort and Filter Toolbar */}
       {!compact && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-surface/50 border border-border-subtle/80 rounded-[10px] p-2.5">
           {/* Category Pills Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 text-xs">
             {[
@@ -252,11 +252,11 @@ All documents have been digitally archived for offshore mobilization verificatio
                 aria-pressed={activeCategory === cat.id}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 cursor-pointer ${
                   activeCategory === cat.id
-                    ? 'bg-zinc-800 text-white border-zinc-600 font-semibold shadow-2xs'
-                    : 'bg-zinc-950/60 text-zinc-400 border-zinc-850 hover:text-zinc-200'
+                    ? 'bg-surface-raised text-primary border-border-strong font-semibold shadow-2xs'
+                    : 'bg-canvas/60 text-secondary border-border-subtle hover:text-primary'
                 }`}
               >
-                {cat.label} {cat.count > 0 && <span className="opacity-70 font-mono text-[10px]">({cat.count})</span>}
+                {cat.label} {cat.count > 0 && <span className="opacity-70 font-mono text-xs">({cat.count})</span>}
               </button>
             ))}
           </div>
@@ -264,15 +264,15 @@ All documents have been digitally archived for offshore mobilization verificatio
           {/* Auto-Sort Control Strip */}
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-zinc-400 flex items-center gap-1 font-mono text-[11px]">
-                <ArrowUpDown className="w-3 h-3 text-zinc-400" />
+              <span className="text-secondary flex items-center gap-1 font-mono text-xs">
+                <ArrowUpDown className="w-3 h-3 text-secondary" />
                 <span className="hidden md:inline">Sort:</span>
               </span>
               <select
                 id="document-sort-select"
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value as DocumentSortOption)}
-                className="bg-zinc-950 border border-zinc-750 text-zinc-200 text-xs rounded-lg px-2.5 py-1 font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                className="bg-canvas border border-border-strong text-primary text-xs rounded-lg px-2.5 py-1 font-medium focus:outline-hidden focus:ring-1 focus:ring-focus cursor-pointer"
                 title="Sort documents"
               >
                 <option value="uploaded-desc">Auto-Sort: Upload Date (Newest first)</option>
@@ -284,7 +284,7 @@ All documents have been digitally archived for offshore mobilization verificatio
 
             {sortOption === 'uploaded-desc' && (
               <span
-                className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-mono font-medium flex items-center gap-1"
+                className="px-2 py-0.5 rounded-md bg-action/10 border border-border-strong/20 text-accent text-xs font-mono font-medium flex items-center gap-1"
                 title="Auto-sort is actively organizing files newest upload first"
               >
                 <Sparkles className="w-2.5 h-2.5" />
@@ -307,38 +307,38 @@ All documents have been digitally archived for offshore mobilization verificatio
               <div
                 key={doc.id}
                 onClick={() => setSelectedDoc(doc)}
-                className="group p-3 rounded-xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-750 transition-all cursor-pointer flex items-center justify-between gap-3 shadow-xs"
+                className="group p-3 rounded-[10px] bg-surface/60 hover:bg-surface border border-border-subtle hover:border-border-strong transition-all cursor-pointer flex items-center justify-between gap-3 shadow-xs"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-lg bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center text-zinc-300 shrink-0 group-hover:border-zinc-600 transition-colors">
+                  <div className="w-9 h-9 rounded-lg bg-surface-raised/80 border border-border-strong/60 flex items-center justify-center text-secondary shrink-0 group-hover:border-border-strong transition-colors">
                     <IconComponent className="w-4 h-4" />
                   </div>
 
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-semibold text-zinc-200 group-hover:text-white transition-colors truncate">
+                      <h4 className="text-xs font-semibold text-primary group-hover:text-primary transition-colors truncate">
                         {doc.title}
                       </h4>
                       {doc.isVerified && (
-                        <span title="Verified Credential"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /></span>
+                        <span title="Verified Credential"><CheckCircle2 className="w-3.5 h-3.5 text-positive shrink-0" /></span>
                       )}
                       {isLatest && (
-                        <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono text-[9px] font-medium shrink-0">
+                        <span className="px-1.5 py-0.2 rounded bg-surface-raised border border-border-strong text-secondary font-mono text-xs font-medium shrink-0">
                           Latest Upload
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-zinc-400 flex-wrap">
-                      <span className="font-mono text-zinc-400">{doc.fileName}</span>
+                    <div className="flex items-center gap-2 text-xs text-secondary flex-wrap">
+                      <span className="font-mono text-secondary">{doc.fileName}</span>
                       {doc.fileSize && <span>• {doc.fileSize}</span>}
                       <span>•</span>
-                      <span className="flex items-center gap-1 font-mono text-zinc-400" title={`Uploaded: ${new Date(doc.uploadedAt).toLocaleString()}`}>
-                        <Clock className="w-3 h-3 text-zinc-400" />
+                      <span className="flex items-center gap-1 font-mono text-secondary" title={`Uploaded: ${new Date(doc.uploadedAt).toLocaleString()}`}>
+                        <Clock className="w-3 h-3 text-secondary" />
                         <span>Uploaded {formatUploadDate(doc.uploadedAt)}</span>
                       </span>
                       <span>•</span>
-                      <span className={`px-2 py-0.2 rounded text-[10px] font-semibold border ${compliance.badgeClass}`}>
+                      <span className={`px-2 py-0.2 rounded text-xs font-semibold border ${compliance.badgeClass}`}>
                         {compliance.label}
                       </span>
                     </div>
@@ -352,7 +352,7 @@ All documents have been digitally archived for offshore mobilization verificatio
                     onClick={(e) => handleDownloadSingle(doc, e)}
                     aria-label={`Download ${doc.title}`}
                     disabled={!hasOriginalDocumentFile(doc)}
-                    className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-zinc-800"
+                    className="p-1.5 rounded-lg bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface-raised"
                     title={hasOriginalDocumentFile(doc) ? 'Download original file' : 'Original file unavailable; export the compliance record instead'}
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -362,7 +362,7 @@ All documents have been digitally archived for offshore mobilization verificatio
                     type="button"
                     onClick={() => setSelectedDoc(doc)}
                     aria-label={`Preview ${doc.title}`}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white font-medium text-xs transition-colors cursor-pointer border border-zinc-700/60"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary font-medium text-xs transition-colors cursor-pointer border border-border-strong/60"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Preview</span>
@@ -373,13 +373,13 @@ All documents have been digitally archived for offshore mobilization verificatio
           })}
         </div>
       ) : (
-        <div className="text-center py-6 border border-dashed border-zinc-800 rounded-xl bg-zinc-950/40 space-y-2">
-          <FileText className="w-6 h-6 text-zinc-600 mx-auto" />
-          <p className="text-xs text-zinc-400">No documents found in this category.</p>
+        <div className="text-center py-6 border border-dashed border-border-subtle rounded-[10px] bg-canvas/40 space-y-2">
+          <FileText className="w-6 h-6 text-muted mx-auto" />
+          <p className="text-xs text-secondary">No documents found in this category.</p>
           {canManageDocuments && <button
             type="button"
             onClick={() => setIsUploadOpen(true)}
-            className="text-xs text-blue-400 hover:underline font-medium"
+            className="text-xs text-accent hover:underline font-medium"
           >
             Upload first document
           </button>}

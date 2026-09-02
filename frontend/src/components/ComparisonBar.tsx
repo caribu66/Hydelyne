@@ -26,7 +26,7 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
         exit={{ y: 80, opacity: 0 }}
         className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 max-w-xl w-[92%] sm:w-auto"
       >
-        <div className="flex items-center justify-between gap-3 sm:gap-5 px-4 py-2.5 rounded-2xl bg-zinc-900/95 border border-zinc-750 shadow-2xl backdrop-blur-lg">
+        <div className="flex items-center justify-between gap-3 sm:gap-5 px-4 py-2.5 rounded-[14px] bg-surface/95 border border-border-strong shadow-2xl backdrop-blur-lg">
           {/* Avatar stack & Count */}
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2 overflow-hidden">
@@ -35,12 +35,12 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
                   <img
                     src={p.avatar}
                     alt={p.name}
-                    className="w-8 h-8 rounded-full object-cover border-2 border-zinc-900 shrink-0"
+                    className="w-8 h-8 rounded-full object-cover border-2 border-border-subtle shrink-0"
                   />
                   <button
                     type="button"
                     onClick={() => onRemoveProfile(p.id)}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-zinc-800 hover:bg-red-500 text-white rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-surface-raised hover:bg-danger text-on-action rounded-full flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                     title={`Remove ${p.name}`}
                     aria-label={`Remove ${p.name} from comparison`}
                   >
@@ -51,10 +51,10 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
             </div>
 
             <div>
-              <span className="text-xs font-semibold text-zinc-100 block">
+              <span className="text-xs font-semibold text-primary block">
                 {compareProfiles.length} Specialist{compareProfiles.length === 1 ? '' : 's'} Selected
               </span>
-              <span className="text-[10px] text-zinc-400 font-mono">
+              <span className="text-xs text-secondary font-mono">
                 {compareProfiles.length < 2 ? 'Select 1 more to compare' : 'Ready for side-by-side analysis'}
               </span>
             </div>
@@ -65,7 +65,7 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
             <button
               type="button"
               onClick={onClearCompare}
-              className="min-h-10 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+              className="min-h-10 px-2.5 py-1.5 text-xs text-secondary hover:text-primary transition-colors cursor-pointer"
             >
               Clear
             </button>
@@ -74,7 +74,7 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
               type="button"
               onClick={onOpenCompareModal}
               disabled={compareProfiles.length < 2}
-              className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:opacity-100 text-white font-medium text-xs transition-all shadow-xs cursor-pointer"
+              className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-1.5 rounded-[10px] bg-action hover:bg-action-hover disabled:bg-surface-raised disabled:text-muted disabled:border-border-strong disabled:opacity-100 text-on-action font-medium text-xs transition-all shadow-xs cursor-pointer"
             >
               <Scale className="w-3.5 h-3.5" />
               <span>{compareProfiles.length < 2 ? 'Select one more' : 'Compare Matrix'}</span>

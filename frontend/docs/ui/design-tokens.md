@@ -1,53 +1,44 @@
 # Hydenlyne UI design tokens
 
-These values are the default visual language for the talent workspace. A new value should be added here before being introduced in a component.
+Hydenlyne uses a restrained monochrome workspace theme. Components consume semantic roles from `src/index.css`; they do not select Tailwind palette colors directly. Dark is the default and light is an equal, independently defined theme.
 
 ## Color roles
 
-| Role | Dark | Light | Usage |
-| --- | --- | --- | --- |
-| Page background | `zinc-950` | white | Application canvas |
-| Surface | `zinc-900` | `slate-50` | Cards, controls, panels |
-| Elevated surface | `zinc-850` | `slate-100` | Hover and raised content |
-| Border | `zinc-800` | `slate-200` | Default separation |
-| Primary text | `zinc-100` | `slate-950` | Headings and important values |
-| Secondary text | `zinc-400` | `slate-600` | Supporting information |
-| Muted text | `zinc-500` | `slate-500` | Metadata only |
-| Primary action | `blue-600` | `blue-600` | Main calls to action |
-| Success | `emerald-500` | `emerald-600` | Availability and completed actions |
-| Warning | `amber-500` | `amber-600` | Demo or attention states |
-| Error | `rose-500` | `rose-600` | Failures and destructive actions |
+| Role | Purpose |
+| --- | --- |
+| `canvas` | Application background |
+| `surface` | Controls, cards, dialogs, and panels |
+| `surface-raised` | Hovered or elevated content |
+| `surface-selected` | Selected neutral content |
+| `border-subtle` / `border-strong` | Default and emphasized separation |
+| `primary` / `secondary` / `muted` | Text hierarchy |
+| `action` / `action-hover` / `on-action` | Primary monochrome actions |
+| `accent` / `accent-soft` | Verification, selection, and quiet emphasis |
+| `focus` | Keyboard focus and interactive chart emphasis |
+| `positive`, `warning`, `danger` | Semantic status foregrounds |
+| `*-soft` / `*-border` | Semantic status surfaces and borders |
 
-## Type scale
+Literal colors and raw palette utilities are prohibited in feature components and checked by `npm run ui:audit:strict`.
 
-- Page title: 32–40px
-- Section title: 18–24px
-- Card title: 15–18px
-- Body: 14–16px
-- Metadata: 12–13px
-- Minimum text: 11px, metadata only
+## Typography
 
-## Badge roles
+- System sans-serif is the product typeface; no remote font request is required.
+- Page title: 32–44px; section title: 18–24px; card title: 15–18px.
+- Body and controls: 14–16px.
+- Metadata: 12–13px and never used for an essential action or value.
+- Monospace is limited to identifiers, keyboard shortcuts, compact numeric data, and operational metadata.
 
-Badges use theme-aware role tokens rather than fixed blue, green, or zinc text/background pairs:
+## Shape and spacing
 
-- Neutral: general metadata and certifications
-- Accent: discipline, verification, and selected states
-- Positive: availability and completed actions
+- Page maximum: 1280px.
+- Spacing follows 4, 8, 12, 16, 24, 32, and 48px increments.
+- Controls: 10px radius and at least 44px high.
+- Cards and panels: 14px radius.
+- Dialogs and primary composed surfaces: 14–16px radius.
+- Shadows are restrained and only communicate elevation.
 
-Search matches use a solid, theme-aware highlight background with high-contrast text. Avoid translucent highlight colors for essential text.
+## Components and motion
 
-## Layout scale
-
-- Page max width: 1152px
-- Spacing: 4, 8, 12, 16, 24, 32, 48px
-- Card radius: 16px
-- Modal radius: 16–24px
-- Standard control height: 40–44px
-- Minimum touch target: 44×44px
-
-## Motion
-
-- Use short, purposeful transitions for state changes.
-- Avoid animation for essential information.
-- Always preserve the global reduced-motion override.
+- Prefer the typed primitives in `src/components/ui.tsx`: `Button`, `IconButton`, `Field`, `Surface`, `SectionHeading`, and `StatusMessage`.
+- Badges use neutral, accent, or semantic status roles. Search matches use the theme-aware `search-highlight` role.
+- Transitions are short and purposeful. Every animation is disabled by the global reduced-motion rule.

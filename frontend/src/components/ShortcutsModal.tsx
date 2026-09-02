@@ -34,7 +34,7 @@ export const ShortcutsModal: FC<ShortcutsModalProps> = ({ isOpen, onClose }) => 
 
   return (
     <div
-      className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-xs"
+      className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-xs"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -42,24 +42,24 @@ export const ShortcutsModal: FC<ShortcutsModalProps> = ({ isOpen, onClose }) => 
     >
       <div
         ref={dialogRef}
-        className="ui-surface-enter w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-2xl text-zinc-100"
+        className="ui-surface-enter w-full max-w-md bg-surface border border-border-subtle rounded-[14px] p-5 sm:p-6 shadow-2xl text-primary"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between pb-4 border-b border-border-subtle">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300">
+            <div className="p-1.5 rounded-lg bg-surface-raised text-secondary">
               <Command className="w-4 h-4" />
             </div>
             <div>
-              <h3 id="shortcuts-title" className="font-semibold text-sm text-zinc-100">
+              <h3 id="shortcuts-title" className="font-semibold text-sm text-primary">
                 Keyboard Shortcuts
               </h3>
-              <p className="text-[11px] text-zinc-400">Power user navigation commands</p>
+              <p className="text-xs text-secondary">Power user navigation commands</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors cursor-pointer"
             aria-label="Close shortcuts modal"
           >
             <X className="w-4 h-4" />
@@ -70,21 +70,21 @@ export const ShortcutsModal: FC<ShortcutsModalProps> = ({ isOpen, onClose }) => 
           {SHORTCUTS.map((item) => (
             <div
               key={item.key + item.description}
-              className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
+              className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-surface-raised/50 transition-colors"
             >
-              <span className="text-zinc-300 font-light">{item.description}</span>
-              <kbd className="px-2 py-1 rounded bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-400 shadow-xs">
+              <span className="text-secondary font-light">{item.description}</span>
+              <kbd className="px-2 py-1 rounded bg-canvas border border-border-subtle font-mono text-xs text-secondary shadow-xs">
                 {item.key}
               </kbd>
             </div>
           ))}
         </div>
 
-        <div className="mt-5 pt-3 border-t border-zinc-800/80 flex justify-end">
+        <div className="mt-5 pt-3 border-t border-border-subtle/80 flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-primary text-xs font-medium transition-colors cursor-pointer"
           >
             Done
           </button>

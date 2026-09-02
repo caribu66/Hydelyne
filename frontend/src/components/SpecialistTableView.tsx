@@ -128,20 +128,20 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
       return <ArrowUpDown className="w-3 h-3 opacity-40 group-hover:opacity-100" />;
     }
     return sortDirection === 'asc' ? (
-      <ArrowUp className="w-3 h-3 text-blue-400" />
+      <ArrowUp className="w-3 h-3 text-accent" />
     ) : (
-      <ArrowDown className="w-3 h-3 text-blue-400" />
+      <ArrowDown className="w-3 h-3 text-accent" />
     );
   };
 
   return (
     <div className="w-full space-y-2">
       {/* Table Toolbar Controls */}
-      <div className="flex items-center justify-between px-1 text-xs text-zinc-400">
+      <div className="flex items-center justify-between px-1 text-xs text-secondary">
         <div className="flex items-center gap-2">
           <span>Showing {sortedProfiles.length} specialists in table matrix</span>
           {sortField && (
-            <span className="text-[11px] font-mono text-blue-400">
+            <span className="text-xs font-mono text-accent">
               (Sorted by {sortField} {sortDirection})
             </span>
           )}
@@ -151,28 +151,28 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
           <button
             type="button"
             onClick={() => setShowColSettings(!showColSettings)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 text-xs font-medium cursor-pointer transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] bg-surface border border-border-subtle hover:border-border-strong text-secondary text-xs font-medium cursor-pointer transition-colors"
           >
-            <SlidersHorizontal className="w-3 h-3 text-zinc-400" />
+            <SlidersHorizontal className="w-3 h-3 text-secondary" />
             <span>Columns</span>
           </button>
 
           {showColSettings && (
-            <div className="absolute right-0 top-full mt-1.5 z-40 w-48 p-2.5 rounded-xl bg-zinc-900 border border-zinc-750 shadow-2xl space-y-1.5 text-xs text-zinc-200">
-              <span className="font-semibold text-[11px] text-zinc-400 uppercase font-mono block pb-1 border-b border-zinc-800">
+            <div className="absolute right-0 top-full mt-1.5 z-40 w-48 p-2.5 rounded-[10px] bg-surface border border-border-strong shadow-2xl space-y-1.5 text-xs text-primary">
+              <span className="font-semibold text-xs text-secondary uppercase font-mono block pb-1 border-b border-border-subtle">
                 Toggle Columns
               </span>
               {Object.keys(colVisibility).map((key) => {
                 const colKey = key as keyof ColumnVisibility;
                 return (
-                  <label key={colKey} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-white">
+                  <label key={colKey} className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-primary">
                     <input
                       type="checkbox"
                       checked={colVisibility[colKey]}
                       onChange={(e) =>
                         setColVisibility((prev) => ({ ...prev, [colKey]: e.target.checked }))
                       }
-                      className="rounded border-zinc-700 bg-zinc-800 text-blue-500 accent-blue-500"
+                      className="rounded border-border-strong bg-surface-raised text-accent accent-blue-500"
                     />
                     <span className="capitalize">{colKey.replace(/([A-Z])/g, ' $1')}</span>
                   </label>
@@ -184,14 +184,14 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
       </div>
 
       {/* Main Table Structure */}
-      <div className="scan-matrix-scroll w-full max-h-[min(760px,calc(100vh-250px))] overflow-auto border border-zinc-800 rounded-2xl bg-zinc-900/40 shadow-xs">
-        <table className="w-full text-left text-xs text-zinc-300 border-collapse">
+      <div className="scan-matrix-scroll w-full max-h-[min(760px,calc(100vh-250px))] overflow-auto border border-border-subtle rounded-[14px] bg-surface/40 shadow-xs">
+        <table className="w-full text-left text-xs text-secondary border-collapse">
           <caption className="sr-only">Specialist screening matrix</caption>
-          <thead className="sticky top-0 z-10 bg-zinc-950/95 text-[11px] text-zinc-400 uppercase font-semibold border-b border-zinc-800 tracking-wider select-none backdrop-blur-sm">
+          <thead className="sticky top-0 z-10 bg-canvas/95 text-xs text-secondary uppercase font-semibold border-b border-border-subtle tracking-wider select-none backdrop-blur-sm">
             <tr>
               {onToggleCompare && <th className="py-3 px-3 w-10 text-center">Cmp</th>}
               <th aria-sort={sortField === 'name' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-4">
-                <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1.5 cursor-pointer hover:text-white group transition-colors">
+                <button type="button" onClick={() => handleSort('name')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
                   <span>Specialist</span>
                   {renderSortIndicator('name')}
                 </button>
@@ -199,7 +199,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
               {colVisibility.discipline && (
                 <th aria-sort={sortField === 'department' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-3">
-                  <button type="button" onClick={() => handleSort('department')} className="flex items-center gap-1.5 cursor-pointer hover:text-white group transition-colors">
+                  <button type="button" onClick={() => handleSort('department')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
                     <span>Discipline</span>
                     {renderSortIndicator('department')}
                   </button>
@@ -208,7 +208,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
               {colVisibility.mobilization && (
                 <th aria-sort={sortField === 'availability' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-3">
-                  <button type="button" onClick={() => handleSort('availability')} className="flex items-center gap-1.5 cursor-pointer hover:text-white group transition-colors">
+                  <button type="button" onClick={() => handleSort('availability')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
                     <span>Mobilization</span>
                     {renderSortIndicator('availability')}
                   </button>
@@ -219,7 +219,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
               {colVisibility.experience && (
                 <th aria-sort={sortField === 'experience' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-3">
-                  <button type="button" onClick={() => handleSort('experience')} className="flex items-center gap-1.5 cursor-pointer hover:text-white group transition-colors">
+                  <button type="button" onClick={() => handleSort('experience')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
                     <span>Exp</span>
                     {renderSortIndicator('experience')}
                   </button>
@@ -230,7 +230,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
               {colVisibility.dayRate && (
                 <th aria-sort={sortField === 'dayRate' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-3">
-                  <button type="button" onClick={() => handleSort('dayRate')} className="flex items-center gap-1.5 cursor-pointer hover:text-white group transition-colors">
+                  <button type="button" onClick={() => handleSort('dayRate')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
                     <span>Day Rate</span>
                     {renderSortIndicator('dayRate')}
                   </button>
@@ -239,7 +239,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
               {colVisibility.rating && (
                 <th aria-sort={sortField === 'rating' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="py-3 px-3">
-                  <button type="button" onClick={() => handleSort('rating')} className="flex items-center gap-1.5 cursor-pointer hover:text-white group transition-colors">
+                  <button type="button" onClick={() => handleSort('rating')} className="flex items-center gap-1.5 cursor-pointer hover:text-primary group transition-colors">
                     <span>Rating</span>
                     {renderSortIndicator('rating')}
                   </button>
@@ -268,8 +268,8 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                     onClick={() => onSelectProfile(profile)}
                     className={`group cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-zinc-800/80 hover:bg-zinc-800'
-                        : 'hover:bg-zinc-800/40'
+                        ? 'bg-surface-raised/80 hover:bg-surface-raised'
+                        : 'hover:bg-surface-raised/40'
                     }`}
                     aria-selected={isSelected}
                     tabIndex={0}
@@ -290,7 +290,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                           type="checkbox"
                           checked={isCompared}
                           onChange={() => onToggleCompare(profile)}
-                          className="rounded border-zinc-700 bg-zinc-800 text-blue-500 accent-blue-500 cursor-pointer"
+                          className="rounded border-border-strong bg-surface-raised text-accent accent-blue-500 cursor-pointer"
                           title="Select to compare"
                           aria-label={`Compare ${profile.name}`}
                         />
@@ -303,18 +303,18 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                         <img
                           src={profile.avatar}
                           alt={profile.name}
-                          className="w-8 h-8 rounded-xl object-cover border border-zinc-700 shrink-0"
+                          className="w-8 h-8 rounded-[10px] object-cover border border-border-strong shrink-0"
                         />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 font-medium text-zinc-100 group-hover:text-blue-400 transition-colors">
+                          <div className="flex items-center gap-1.5 font-medium text-primary group-hover:text-accent transition-colors">
                             <span className="truncate max-w-[170px]">
                               <HighlightText text={profile.name} query={searchQuery} />
                             </span>
                             {profile.isHighlyRecommended && (
-                              <BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                              <BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" />
                             )}
                           </div>
-                          <p className="text-[11px] text-zinc-400 truncate max-w-[200px]">
+                          <p className="text-xs text-secondary truncate max-w-[200px]">
                             <HighlightText text={profile.title} query={searchQuery} />
                           </p>
                         </div>
@@ -324,7 +324,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                     {/* Discipline / Department */}
                     {colVisibility.discipline && (
                       <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-lg text-[11px] font-medium bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                        <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-surface-raised border border-border-strong/60 text-secondary">
                           {profile.department}
                         </span>
                       </td>
@@ -334,13 +334,13 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                     {colVisibility.mobilization && (
                       <td className="py-3 px-3 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${
-                            isAvailableNow ? 'text-emerald-400' : 'text-zinc-400'
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                            isAvailableNow ? 'text-positive' : 'text-secondary'
                           }`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              isAvailableNow ? 'bg-emerald-400' : 'bg-zinc-600'
+                              isAvailableNow ? 'bg-positive' : 'bg-surface-selected'
                             }`}
                           />
                           <span>{profile.availability}</span>
@@ -350,9 +350,9 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
                     {/* Location */}
                     {colVisibility.location && (
-                      <td className="py-3 px-3 whitespace-nowrap text-zinc-400">
+                      <td className="py-3 px-3 whitespace-nowrap text-secondary">
                         <div className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
+                          <MapPin className="w-3 h-3 text-muted shrink-0" />
                           <span className="truncate max-w-[130px]">{profile.location}</span>
                         </div>
                       </td>
@@ -360,8 +360,8 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
                     {/* Offshore Exp */}
                     {colVisibility.experience && (
-                      <td className="py-3 px-3 whitespace-nowrap font-mono text-zinc-200">
-                        <span className="font-semibold text-zinc-100">{profile.yearsOfExperience}</span> yrs
+                      <td className="py-3 px-3 whitespace-nowrap font-mono text-primary">
+                        <span className="font-semibold text-primary">{profile.yearsOfExperience}</span> yrs
                       </td>
                     )}
 
@@ -374,10 +374,10 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                               <CertificationBadge key={cert} certification={cert} size="sm" />
                             ))
                           ) : (
-                            <span className="text-zinc-500 font-mono text-[10px]">—</span>
+                            <span className="text-muted font-mono text-xs">—</span>
                           )}
                           {profile.certifications && profile.certifications.length > 2 && (
-                            <span className="text-[10px] text-zinc-500 font-mono self-center">
+                            <span className="text-xs text-muted font-mono self-center">
                               +{profile.certifications.length - 2}
                             </span>
                           )}
@@ -387,14 +387,14 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
 
                     {/* Day Rate */}
                     {colVisibility.dayRate && (
-                      <td className="py-3 px-3 whitespace-nowrap font-mono font-medium text-zinc-100">
+                      <td className="py-3 px-3 whitespace-nowrap font-mono font-medium text-primary">
                         {profile.dayRate ? `£${profile.dayRate}/d` : 'Negotiable'}
                       </td>
                     )}
 
                     {/* Rating */}
                     {colVisibility.rating && (
-                      <td className="py-3 px-3 whitespace-nowrap font-mono text-amber-400">
+                      <td className="py-3 px-3 whitespace-nowrap font-mono text-warning">
                         ★ {profile.rating ? profile.rating.toFixed(1) : '4.9'}
                       </td>
                     )}
@@ -407,7 +407,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                             type="button"
                             onClick={() => onRequestMobilization(profile)}
                             aria-label={`Request mobilization for ${profile.name}`}
-                            className="p-1.5 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 transition-colors"
+                            className="p-1.5 rounded-lg text-secondary hover:text-accent hover:bg-surface-raised transition-colors"
                             title="Request mobilization"
                           >
                             <Send className="w-3.5 h-3.5" />
@@ -418,11 +418,11 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                           type="button"
                           onClick={(e) => handleCopyEmail(profile, e)}
                           aria-label={`Copy ${profile.name} email address`}
-                          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                          className="p-1.5 rounded-lg text-muted hover:text-secondary hover:bg-surface-raised transition-colors"
                           title="Copy Email"
                         >
                           {copiedId === profile.id ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <Check className="w-3.5 h-3.5 text-positive" />
                           ) : (
                             <Copy className="w-3.5 h-3.5" />
                           )}
@@ -433,12 +433,12 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                           onClick={(e) => onToggleBookmark(profile.id, e)}
                           aria-label={isProfileBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
                           className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                            isProfileBookmarked ? 'text-blue-400' : 'text-zinc-500 hover:text-zinc-300'
+                            isProfileBookmarked ? 'text-accent' : 'text-muted hover:text-secondary'
                           }`}
                           title={isProfileBookmarked ? 'Shortlisted' : 'Shortlist'}
                         >
                           {isProfileBookmarked ? (
-                            <BookmarkCheck className="w-3.5 h-3.5 fill-blue-400" />
+                            <BookmarkCheck className="w-3.5 h-3.5 fill-accent" />
                           ) : (
                             <Bookmark className="w-3.5 h-3.5" />
                           )}

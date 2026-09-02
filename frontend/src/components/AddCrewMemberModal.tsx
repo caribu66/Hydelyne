@@ -139,7 +139,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
   return (
     <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6" onClick={handleClose}>
       <div
-        className="ui-surface-enter max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-2xl sm:max-h-[92vh] sm:p-6"
+        className="ui-surface-enter max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-[14px] border border-border-subtle bg-surface p-4 shadow-2xl sm:max-h-[92vh] sm:p-6"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -147,15 +147,15 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800 border border-zinc-700">
-              <UserPlus className="h-5 w-5 text-zinc-300" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-raised border border-border-strong">
+              <UserPlus className="h-5 w-5 text-secondary" />
             </div>
-            <h2 id="add-specialist-title" className="text-lg font-semibold text-zinc-100">Add Specialist</h2>
+            <h2 id="add-specialist-title" className="text-lg font-semibold text-primary">Add specialist</h2>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -164,26 +164,26 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
 
         {step === 'done' ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/60">
-              <CheckCircle className="w-6 h-6 text-emerald-400 shrink-0" />
+            <div className="flex items-center gap-3 p-4 rounded-[10px] bg-positive-soft/30 border border-positive-border/60">
+              <CheckCircle className="w-6 h-6 text-positive shrink-0" />
               <div>
-                <p className="font-medium text-emerald-200">Specialist added successfully!</p>
-                <p className="text-sm text-emerald-300/80">
+                <p className="font-medium text-positive">Specialist added successfully!</p>
+                <p className="text-sm text-positive/80">
                   {uploadedCv ? 'CV uploaded and profile extraction finished.' : 'No CV was uploaded.'}
                 </p>
               </div>
             </div>
 
             {uploadedCv && (
-              <div className="space-y-1 p-4 rounded-xl bg-zinc-800/50 border border-zinc-700">
-                <h3 className="text-sm font-medium text-zinc-200">CV processing</h3>
-                <p className="text-sm text-zinc-400">Status: {uploadedCv.status}.</p>
-                <p className="text-xs text-zinc-500">Document ID: {uploadedCv.documentId}</p>
+              <div className="space-y-1 p-4 rounded-[10px] bg-surface-raised/50 border border-border-strong">
+                <h3 className="text-sm font-medium text-primary">CV processing</h3>
+                <p className="text-sm text-secondary">Status: {uploadedCv.status}.</p>
+                <p className="text-xs text-muted">Document ID: {uploadedCv.documentId}</p>
               </div>
             )}
 
             {uploadError && (
-              <p className="rounded-xl border border-amber-800/60 bg-amber-950/30 p-3 text-sm text-amber-200">
+              <p className="rounded-[10px] border border-warning-border/60 bg-warning-soft/30 p-3 text-sm text-warning">
                 The specialist was created, but the CV was not uploaded: {uploadError}
               </p>
             )}
@@ -191,7 +191,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             <button
               type="button"
               onClick={handleClose}
-              className="w-full px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-900 transition-colors cursor-pointer font-medium"
+              className="w-full px-4 py-2.5 rounded-[10px] bg-action hover:bg-action-hover text-on-action transition-colors cursor-pointer font-medium"
             >
               Done
             </button>
@@ -199,8 +199,8 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-zinc-300 mb-1.5">
-                Full Name {!cvFile && <span className="text-rose-400">*</span>}
+              <label htmlFor="fullName" className="block text-sm font-medium text-secondary mb-1.5">
+                Full name {!cvFile && <span className="text-danger">*</span>}
               </label>
               <input
                 id="fullName"
@@ -210,12 +210,12 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 placeholder={cvFile ? 'Optional — extracted from CV if left blank' : 'e.g. John Smith'}
                 required={!cvFile}
                 disabled={step !== 'form'}
-                className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400/20 disabled:opacity-50"
+                className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-zinc-300 mb-1.5">
+              <label htmlFor="email" className="block text-sm font-medium text-secondary mb-1.5">
                 Email
               </label>
               <input
@@ -225,12 +225,12 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. john@example.com"
                 disabled={step !== 'form'}
-                className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400/20 disabled:opacity-50"
+                className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
 
             <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-zinc-300 mb-1.5">
+              <label htmlFor="phone" className="block text-sm font-medium text-secondary mb-1.5">
                 Phone
               </label>
               <input
@@ -240,12 +240,12 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="e.g. +44 123 456789"
                 disabled={step !== 'form'}
-                className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400/20 disabled:opacity-50"
+                className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
 
             <div>
-              <label htmlFor="nationality" className="block text-sm font-medium text-zinc-300 mb-1.5">
+              <label htmlFor="nationality" className="block text-sm font-medium text-secondary mb-1.5">
                 Nationality
               </label>
               <input
@@ -255,12 +255,12 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 onChange={(e) => setNationality(e.target.value)}
                 placeholder="e.g. British"
                 disabled={step !== 'form'}
-                className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400/20 disabled:opacity-50"
+                className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+              <label className="block text-sm font-medium text-secondary mb-1.5">
                 CV (PDF) - Optional
               </label>
               <input
@@ -272,11 +272,11 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 disabled={step !== 'form'}
               />
               {cvFile ? (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800 border border-zinc-700">
-                  <FileText className="w-5 h-5 text-zinc-300 shrink-0" />
+                <div className="flex items-center gap-3 p-3 rounded-[10px] bg-surface-raised border border-border-strong">
+                  <FileText className="w-5 h-5 text-secondary shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-200 truncate">{cvFile.name}</p>
-                    <p className="text-xs text-zinc-500">{(cvFile.size / 1024).toFixed(0)} KB</p>
+                    <p className="text-sm text-primary truncate">{cvFile.name}</p>
+                    <p className="text-xs text-muted">{(cvFile.size / 1024).toFixed(0)} KB</p>
                   </div>
                   {step === 'form' && (
                     <button
@@ -285,7 +285,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                         setCvFile(null);
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 cursor-pointer"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-secondary hover:bg-surface-selected hover:text-primary cursor-pointer"
                       aria-label="Remove selected CV"
                     >
                       <X className="w-4 h-4" />
@@ -297,32 +297,32 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={step !== 'form'}
-                  className="w-full p-4 rounded-xl border-2 border-dashed border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50 flex flex-col items-center gap-2"
+                  className="w-full p-4 rounded-[10px] border-2 border-dashed border-border-strong hover:border-border-strong text-secondary hover:text-secondary transition-colors cursor-pointer disabled:opacity-50 flex flex-col items-center gap-2"
                 >
                   <Upload className="w-5 h-5" />
                   <span className="text-sm">Click to upload CV (PDF)</span>
-                  <span className="text-xs text-zinc-400">We'll read the name and nationality from the CV to pre-fill this form</span>
+                  <span className="text-xs text-secondary">We'll read the name and nationality from the CV to pre-fill this form</span>
                 </button>
               )}
               {isPreviewing && (
-                <div className="mt-2 flex items-center gap-2 text-sm text-zinc-400">
+                <div className="mt-2 flex items-center gap-2 text-sm text-secondary">
                   <Loader2 className="h-4 w-4 animate-spin" /> Reading CV and filling the form…
                 </div>
               )}
               {uploadError && step === 'form' && (
-                <p className="mt-2 text-sm text-amber-300">{uploadError}</p>
+                <p className="mt-2 text-sm text-warning">{uploadError}</p>
               )}
             </div>
 
             {step === 'creating' && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-zinc-800/70 border border-zinc-700 text-zinc-300">
+              <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-raised/70 border border-border-strong text-secondary">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Creating specialist…</span>
               </div>
             )}
 
             {step === 'extracting' && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-zinc-800/70 border border-zinc-700 text-zinc-300">
+              <div className="flex items-center gap-2 p-3 rounded-[10px] bg-surface-raised/70 border border-border-strong text-secondary">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Uploading CV and queuing extraction...</span>
               </div>
@@ -333,16 +333,16 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 type="button"
                 onClick={handleClose}
                 disabled={step !== 'form'}
-                className="min-h-11 flex-1 px-4 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors cursor-pointer font-medium disabled:opacity-50"
+                className="min-h-11 flex-1 px-4 py-2.5 rounded-[10px] border border-border-strong text-secondary hover:bg-surface-raised transition-colors cursor-pointer font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={step !== 'form' || isPreviewing || (!fullName.trim() && !cvFile)}
-                className="min-h-11 flex-1 px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 transition-colors cursor-pointer font-medium flex items-center justify-center gap-2"
+                className="min-h-11 flex-1 px-4 py-2.5 rounded-[10px] bg-action hover:bg-action-hover disabled:bg-surface-selected disabled:text-muted text-on-action transition-colors cursor-pointer font-medium flex items-center justify-center gap-2"
               >
-                {step === 'form' ? 'Add Specialist' : <Loader2 className="w-4 h-4 animate-spin" />}
+                {step === 'form' ? 'Add specialist' : <Loader2 className="w-4 h-4 animate-spin" />}
               </button>
             </div>
           </form>

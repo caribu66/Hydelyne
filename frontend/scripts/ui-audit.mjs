@@ -30,6 +30,16 @@ for (const file of files) {
   if (/<h[1-6]\b[^>]*\bonClick=/.test(source)) {
     findings.push({ severity: 'ERROR', file: name, message: 'Clickable heading detected; use a semantic button or link.' });
   }
+  if (name !== 'src/index.css') {
+    const rawPalette = source.match(/(?:bg|text|border|ring|fill|stroke)-(?:zinc|slate|gray|blue|sky|cyan|indigo|violet|purple|red|rose|emerald|green|amber|yellow|orange)-\d+/g) || [];
+    if (rawPalette.length > 0) {
+      findings.push({ severity: 'ERROR', file: name, message: `${rawPalette.length} raw palette utility occurrence(s); use a semantic theme token.` });
+    }
+    const literalVisualColors = source.match(/(?:text-\[#|(?:fill|stroke|stopColor)=["']#)/g) || [];
+    if (literalVisualColors.length > 0) {
+      findings.push({ severity: 'ERROR', file: name, message: `${literalVisualColors.length} literal visual color occurrence(s); use a semantic theme token.` });
+    }
+  }
 }
 
 console.log(`UI audit scanned ${files.length} source files.`);

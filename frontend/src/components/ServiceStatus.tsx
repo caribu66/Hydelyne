@@ -14,10 +14,10 @@ const services: Array<{ name: ServiceName; label: string; icon: typeof Database 
 ];
 
 const stateStyle: Record<ServiceState, string> = {
-  healthy: 'border-emerald-800/70 bg-emerald-950/40 text-emerald-300',
-  unhealthy: 'border-rose-800/70 bg-rose-950/40 text-rose-300',
-  unconfigured: 'border-amber-800/70 bg-amber-950/40 text-amber-300',
-  checking: 'border-zinc-700 bg-zinc-900 text-zinc-400',
+  healthy: 'border-positive-border/70 bg-positive-soft/40 text-positive',
+  unhealthy: 'border-danger-border/70 bg-danger-soft/40 text-danger',
+  unconfigured: 'border-warning-border/70 bg-warning-soft/40 text-warning',
+  checking: 'border-border-strong bg-surface text-secondary',
 };
 
 export function ServiceStatus() {
@@ -47,7 +47,7 @@ export function ServiceStatus() {
   }, []);
 
   return (
-    <div className="hidden lg:flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950/60 p-1" aria-label="Live service status">
+    <div className="hidden lg:flex items-center gap-1 rounded-[10px] border border-border-subtle bg-canvas/60 p-1" aria-label="Live service status">
       {services.map(({ name, label, icon: Icon }) => {
         const state = states[name];
         return (

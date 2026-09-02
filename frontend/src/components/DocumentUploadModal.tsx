@@ -151,7 +151,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
     >
       <div
         ref={dialogRef}
-        className="ui-surface-enter bg-zinc-900 border border-zinc-700/80 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+        className="ui-surface-enter bg-surface border border-border-strong/80 rounded-[14px] w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -159,15 +159,15 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
         aria-describedby="document-upload-description"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-950/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle bg-canvas/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-950/80 border border-blue-800 flex items-center justify-center text-blue-400">
+            <div className="w-10 h-10 rounded-[10px] bg-accent-soft/80 border border-border-strong flex items-center justify-center text-accent">
               <UploadCloud className="w-5 h-5" />
             </div>
             <div>
-            <h2 id="document-upload-title" className="text-base font-bold text-zinc-100">Upload Specialist Document</h2>
-              <p id="document-upload-description" className="text-xs text-zinc-400">
-                Adding compliance credential to <strong className="text-zinc-200">{profile.name}</strong>
+            <h2 id="document-upload-title" className="text-base font-bold text-primary">Upload Specialist Document</h2>
+              <p id="document-upload-description" className="text-xs text-secondary">
+                Adding compliance credential to <strong className="text-primary">{profile.name}</strong>
               </p>
             </div>
           </div>
@@ -175,7 +175,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close document upload"
-            className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+            className="p-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -189,12 +189,12 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+            className={`border-2 border-dashed rounded-[10px] p-5 text-center cursor-pointer transition-all ${
               isDragging
-                ? 'border-blue-500 bg-blue-950/30'
+                ? 'border-border-strong bg-accent-soft/30'
                 : file
-                ? 'border-emerald-700/80 bg-emerald-950/20'
-                : 'border-zinc-700 hover:border-zinc-500 bg-zinc-950/40'
+                ? 'border-positive-border/80 bg-positive-soft/20'
+                : 'border-border-strong hover:border-border-strong bg-canvas/40'
             }`}
           >
             <input
@@ -212,27 +212,27 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
 
             {file ? (
               <div className="flex items-center justify-center gap-3">
-                <File className="w-8 h-8 text-emerald-400 shrink-0" />
+                <File className="w-8 h-8 text-positive shrink-0" />
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-emerald-300 truncate max-w-xs">{file.name}</p>
-                  <p className="text-xs text-zinc-400 font-mono">{formatFileSize(file.size)} • Click to replace</p>
+                  <p className="text-sm font-semibold text-positive truncate max-w-xs">{file.name}</p>
+                  <p className="text-xs text-secondary font-mono">{formatFileSize(file.size)} • Click to replace</p>
                 </div>
               </div>
             ) : (
               <div className="space-y-1.5">
-                <UploadCloud className="w-7 h-7 text-zinc-400 mx-auto" />
-                <p className="text-xs font-semibold text-zinc-200">
-                  Drag and drop certificate / CV file here, or <span className="text-blue-400 underline">browse</span>
+                <UploadCloud className="w-7 h-7 text-secondary mx-auto" />
+                <p className="text-xs font-semibold text-primary">
+                  Drag and drop certificate / CV file here, or <span className="text-accent underline">browse</span>
                 </p>
-                <p className="text-[11px] text-zinc-400">Supports PDF, Word (.docx), Scanned Certificates, PNG, JPEG</p>
+                <p className="text-xs text-secondary">Supports PDF, Word (.docx), Scanned Certificates, PNG, JPEG</p>
               </div>
             )}
           </label>
 
           {/* Document Title */}
           <div>
-            <label className="block text-xs font-semibold text-zinc-300 mb-1">
-              Document Title <span className="text-rose-400">*</span>
+            <label className="block text-xs font-semibold text-secondary mb-1">
+              Document Title <span className="text-danger">*</span>
             </label>
             <input
               type="text"
@@ -240,7 +240,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. OPITO BOSIET with CA-EBS (Aberdeen)"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-canvas border border-border-subtle rounded-[10px] px-3.5 py-2 text-xs text-primary placeholder:text-muted focus:outline-none focus:border-border-strong"
             />
           </div>
 
@@ -258,10 +258,10 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
                 type="button"
                 key={cat.value}
                 onClick={() => setCategory(cat.value as DocumentCategory)}
-                className={`px-3 py-2 rounded-xl text-xs font-medium border text-left transition-colors cursor-pointer ${
+                className={`px-3 py-2 rounded-[10px] text-xs font-medium border text-left transition-colors cursor-pointer ${
                   category === cat.value
-                    ? 'bg-blue-950/90 border-blue-600 text-blue-200 font-semibold shadow-xs'
-                    : 'bg-zinc-950/60 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-accent-soft/90 border-border-strong text-accent font-semibold shadow-xs'
+                    : 'bg-canvas/60 border-border-subtle text-secondary hover:text-primary'
                 }`}
               >
                 {cat.label}
@@ -272,22 +272,22 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
           {/* Issue Date & Expiry Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1">Issue Date</label>
+              <label className="block text-xs font-semibold text-secondary mb-1">Issue Date</label>
               <input
                 type="date"
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
+                className="w-full bg-canvas border border-border-subtle rounded-[10px] px-3 py-2 text-xs text-primary focus:outline-none focus:border-border-strong"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-zinc-300">Expiry Date</label>
+                <label className="text-xs font-semibold text-secondary">Expiry Date</label>
                 <button
                   type="button"
                   onClick={() => setHasExpiry(!hasExpiry)}
-                  className="text-[11px] text-blue-400 hover:underline"
+                  className="text-xs text-accent hover:underline"
                 >
                   {hasExpiry ? 'Set as Permanent' : 'Has Expiry Date'}
                 </button>
@@ -298,10 +298,10 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
                   type="date"
                   value={expiryDate}
                   onChange={(e) => setExpiryDate(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-canvas border border-border-subtle rounded-[10px] px-3 py-2 text-xs text-primary focus:outline-none focus:border-border-strong"
                 />
               ) : (
-                <div className="px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 font-mono">
+                <div className="px-3 py-2 rounded-[10px] bg-canvas border border-border-subtle text-xs text-secondary font-mono">
                   Permanent / No Expiration
                 </div>
               )}
@@ -310,7 +310,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
 
           {/* Notes / Reference Number */}
           <div>
-            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+            <label className="block text-xs font-semibold text-secondary mb-1">
               Certificate Ref # or Verification Notes
             </label>
             <textarea
@@ -318,14 +318,14 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. OPITO Ref: #92841, OEUK Doctor Ref: Dr. Henderson Aberdeen Clinic"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-canvas border border-border-subtle rounded-[10px] px-3.5 py-2 text-xs text-primary placeholder:text-muted focus:outline-none focus:border-border-strong"
             />
           </div>
 
           {/* Footer Submit */}
           <div className="pt-2 flex items-center justify-end gap-2.5">
             {uploadError && (
-              <span className="text-[11px] text-rose-400 font-medium mr-auto flex items-center gap-1">
+              <span className="text-xs text-danger font-medium mr-auto flex items-center gap-1">
                 <AlertCircle className="w-3.5 h-3.5" />
                 {uploadError}
               </span>
@@ -334,7 +334,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={isUploading}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
@@ -342,7 +342,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
             <button
               type="submit"
               disabled={isUploading}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-semibold transition-colors cursor-pointer shadow-md"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover disabled:opacity-60 text-on-action text-xs font-semibold transition-colors cursor-pointer shadow-md"
             >
               <CheckCircle2 className={`w-3.5 h-3.5 ${isUploading ? 'animate-pulse' : ''}`} />
               <span>{isUploading ? 'Uploading…' : 'Save to Compliance Vault'}</span>

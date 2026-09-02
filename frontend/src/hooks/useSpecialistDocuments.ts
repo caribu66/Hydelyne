@@ -14,7 +14,7 @@ export function getDocumentComplianceStatus(doc: SpecialistDocument): {
     return {
       status: 'no_expiry',
       label: 'Verified Permanent',
-      badgeClass: 'bg-zinc-800 text-zinc-300 border-zinc-700',
+      badgeClass: 'bg-surface-raised text-secondary border-border-strong',
     };
   }
 
@@ -28,7 +28,7 @@ export function getDocumentComplianceStatus(doc: SpecialistDocument): {
       status: 'expired',
       daysLeft,
       label: `Expired (${Math.abs(daysLeft)}d ago)`,
-      badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+      badgeClass: 'bg-danger/10 text-danger border-danger-border/20',
     };
   }
 
@@ -37,7 +37,7 @@ export function getDocumentComplianceStatus(doc: SpecialistDocument): {
       status: 'expiring_soon',
       daysLeft,
       label: `Expiring Soon (${daysLeft}d left)`,
-      badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      badgeClass: 'bg-warning/10 text-warning border-warning-border/20',
     };
   }
 
@@ -45,7 +45,7 @@ export function getDocumentComplianceStatus(doc: SpecialistDocument): {
     status: 'valid',
     daysLeft,
     label: `Valid (${Math.floor(daysLeft / 30)} mo remaining)`,
-    badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    badgeClass: 'bg-positive/10 text-positive border-positive-border/20',
   };
 }
 

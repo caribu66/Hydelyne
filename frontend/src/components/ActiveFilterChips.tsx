@@ -130,8 +130,8 @@ export const ActiveFilterChips: FC<ActiveFilterChipsProps> = ({
 
   return (
     <div id="active-filter-chips-bar" className="flex flex-wrap items-center gap-2 py-3" aria-label="Active specialist filters">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 uppercase tracking-wider mr-1">
-        <Filter className="w-3.5 h-3.5 text-blue-400" />
+      <div className="flex items-center gap-1.5 text-xs font-medium text-secondary uppercase tracking-wider mr-1">
+        <Filter className="w-3.5 h-3.5 text-accent" />
         <span>Active Filters ({chips.length}):</span>
       </div>
 
@@ -139,14 +139,14 @@ export const ActiveFilterChips: FC<ActiveFilterChipsProps> = ({
         <span
           key={chip.id}
           id={chip.id}
-          className="inline-flex min-h-11 items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-lg text-xs font-medium bg-zinc-900 border border-zinc-800 text-zinc-200 shadow-xs group hover:border-zinc-700 transition-colors"
+          className="inline-flex min-h-11 items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-lg text-xs font-medium bg-surface border border-border-subtle text-primary shadow-xs group hover:border-border-strong transition-colors"
         >
-          <span className="text-blue-400 text-[10px] font-mono font-medium uppercase">{chip.category}:</span>
-          <span className="font-medium text-zinc-100">{chip.label}</span>
+          <span className="text-accent text-xs font-mono font-medium uppercase">{chip.category}:</span>
+          <span className="font-medium text-primary">{chip.label}</span>
           <button
             type="button"
             onClick={chip.onRemove}
-            className="inline-flex min-h-9 min-w-9 items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors cursor-pointer"
+            className="inline-flex min-h-9 min-w-9 items-center justify-center text-muted hover:text-primary hover:bg-surface-raised rounded-md transition-colors cursor-pointer"
             title={`Remove ${chip.label}`}
             aria-label={`Remove ${chip.category} filter: ${chip.label}`}
           >
@@ -159,7 +159,7 @@ export const ActiveFilterChips: FC<ActiveFilterChipsProps> = ({
         id="clear-all-filters-chip-btn"
         type="button"
         onClick={onResetFilters}
-        className="inline-flex min-h-11 items-center gap-1.5 px-3 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-100 bg-zinc-900/60 hover:bg-zinc-800/80 rounded-lg border border-zinc-800 transition-colors cursor-pointer ml-auto sm:ml-1"
+        className="inline-flex min-h-11 items-center gap-1.5 px-3 py-1 text-xs font-medium text-secondary hover:text-primary bg-surface/60 hover:bg-surface-raised/80 rounded-lg border border-border-subtle transition-colors cursor-pointer ml-auto sm:ml-1"
       >
         <RotateCcw className="w-3 h-3" />
         Clear all

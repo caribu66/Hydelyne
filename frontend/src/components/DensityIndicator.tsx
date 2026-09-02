@@ -27,10 +27,10 @@ export const DensityIndicator: FC<DensityIndicatorProps> = ({
   return (
     <div
       id="visual-density-indicator"
-      className={`inline-flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-[11px] text-zinc-400 select-none ${className}`}
+      className={`inline-flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-surface/90 border border-border-subtle text-xs text-secondary select-none ${className}`}
       title={`${matchedCount} of ${totalCount} active specialists (${percentage}% of specialist roster - ${getDensityTier()})`}
     >
-      <span className="text-zinc-500 font-medium hidden xs:inline">Roster</span>
+      <span className="text-muted font-medium hidden xs:inline">Roster</span>
       
       {/* 5-segment micro density meter */}
       <div className="flex items-center gap-0.5" aria-label={`Density: ${percentage}%`}>
@@ -41,15 +41,15 @@ export const DensityIndicator: FC<DensityIndicatorProps> = ({
               key={i}
               className={`w-1.5 h-2.5 rounded-xs transition-all duration-300 ${
                 isActive
-                  ? 'bg-blue-400'
-                  : 'bg-zinc-800'
+                  ? 'bg-accent'
+                  : 'bg-surface-raised'
               }`}
             />
           );
         })}
       </div>
 
-      <span className="font-mono text-zinc-300 font-medium text-[10px]">
+      <span className="font-mono text-secondary font-medium text-xs">
         {percentage}%
       </span>
     </div>

@@ -70,7 +70,7 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
 
   return (
     <div
-      className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-xs"
+      className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-4 bg-canvas/80 backdrop-blur-xs"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -78,27 +78,27 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
     >
       <div
         ref={dialogRef}
-        className="ui-surface-enter w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col max-h-[85vh] overflow-hidden shadow-2xl text-zinc-100"
+        className="ui-surface-enter w-full max-w-2xl bg-surface border border-border-subtle rounded-[14px] flex flex-col max-h-[85vh] overflow-hidden shadow-2xl text-primary"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+        <div className="p-5 border-b border-border-subtle flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-blue-950/60 border border-blue-800/60 text-blue-400">
+            <div className="p-2 rounded-[10px] bg-accent-soft/60 border border-border-strong/60 text-accent">
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h3 id="shortlist-title" className="font-semibold text-base text-zinc-100">
-                Shortlisted Specialists ({shortlistedProfiles.length})
+              <h3 id="shortlist-title" className="font-semibold text-base text-primary">
+                Shortlisted specialists ({shortlistedProfiles.length})
               </h3>
-              <p className="text-xs text-zinc-400 font-light">
+              <p className="text-xs text-secondary font-light">
                 Specialist review, CSV export, and batch clipboard summary
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="min-h-10 min-w-10 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer inline-flex items-center justify-center"
+            className="min-h-10 min-w-10 p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors cursor-pointer inline-flex items-center justify-center"
             aria-label="Close modal"
           >
             <X className="w-4 h-4" />
@@ -108,10 +108,10 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
         {/* Content list */}
         <div className="flex-1 overflow-y-auto p-5 space-y-2.5 divide-y divide-zinc-800/40">
           {shortlistedProfiles.length === 0 ? (
-            <div className="text-center py-12 text-zinc-500 space-y-2">
+            <div className="text-center py-12 text-muted space-y-2">
               <p className="text-sm">No specialists currently saved to shortlist.</p>
-              <p className="text-xs text-zinc-600">
-                Click the bookmark icon or press <kbd className="font-mono bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">S</kbd> while viewing any specialist.
+              <p className="text-xs text-muted">
+                Use “Save to shortlist” or press <kbd className="rounded border border-border-subtle bg-canvas px-1.5 py-0.5 font-mono">S</kbd> while viewing a specialist.
               </p>
             </div>
           ) : (
@@ -138,22 +138,22 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
                     src={profile.avatar}
                     alt={profile.name}
                     referrerPolicy="no-referrer"
-                    className="w-10 h-10 rounded-lg object-cover border border-zinc-800 shrink-0"
+                    className="w-10 h-10 rounded-lg object-cover border border-border-subtle shrink-0"
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="font-semibold text-xs text-zinc-200 group-hover:text-blue-400 transition-colors truncate">
+                      <h4 className="font-semibold text-xs text-primary group-hover:text-accent transition-colors truncate">
                         {profile.name}
                       </h4>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-surface-raised text-secondary font-mono">
                         {profile.department}
                       </span>
                     </div>
-                    <p className="text-[11px] text-zinc-400 truncate">{profile.title}</p>
-                    <div className="text-[10px] text-zinc-500 flex items-center gap-2">
+                    <p className="text-xs text-secondary truncate">{profile.title}</p>
+                    <div className="text-xs text-muted flex items-center gap-2">
                       <span>{profile.location}</span>
                       <span>•</span>
-                      <span className="text-emerald-400">{profile.availability}</span>
+                      <span className="text-positive">{profile.availability}</span>
                       {profile.dayRate && (
                         <>
                           <span>•</span>
@@ -170,7 +170,7 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
                       event.stopPropagation();
                       onRemoveProfile(profile.id);
                     }}
-                    className="min-h-10 min-w-10 p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer inline-flex items-center justify-center"
+                    className="min-h-10 min-w-10 p-1.5 rounded-lg text-muted hover:text-danger hover:bg-surface-raised transition-colors cursor-pointer inline-flex items-center justify-center"
                     title="Remove from shortlist"
                     aria-label={`Remove ${profile.name} from shortlist`}
                   >
@@ -184,11 +184,11 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
 
         {/* Footer actions */}
         {shortlistedProfiles.length > 0 && (
-          <div className="p-4 border-t border-zinc-800 bg-zinc-950/60 flex items-center justify-between gap-3 flex-wrap">
+          <div className="p-4 border-t border-border-subtle bg-canvas/60 flex items-center justify-between gap-3 flex-wrap">
             <button
               type="button"
               onClick={onClear}
-              className="min-h-10 px-2 text-xs text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+              className="min-h-10 px-2 text-xs text-muted hover:text-danger transition-colors cursor-pointer"
             >
               Clear all
             </button>
@@ -197,16 +197,16 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex min-h-10 items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer"
+                className="inline-flex min-h-10 items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-primary text-xs font-medium transition-colors cursor-pointer"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-positive" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied summary!' : 'Copy summary'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleDownloadCSV}
-                className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-1.5 rounded-[10px] bg-action hover:bg-action-hover text-on-action text-xs font-semibold transition-colors cursor-pointer shadow-xs"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Export CSV</span>

@@ -108,7 +108,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
     >
       <div
         ref={dialogRef}
-        className="ui-surface-enter bg-zinc-900 border border-zinc-700/80 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+        className="ui-surface-enter bg-surface border border-border-strong/80 rounded-[14px] w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -116,14 +116,14 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
         aria-describedby="document-preview-description"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-sm">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-950/80 border border-blue-800/80 flex items-center justify-center text-blue-400 shrink-0">
-              <FileCheck className="w-5 h-5 text-blue-400" />
+            <div className="w-10 h-10 rounded-[10px] bg-accent-soft/80 border border-border-strong/80 flex items-center justify-center text-accent shrink-0">
+              <FileCheck className="w-5 h-5 text-accent" />
             </div>
             <div className="min-w-0">
-              <h2 id="document-preview-title" className="text-base font-bold text-zinc-100 truncate">{doc.title}</h2>
-              <p id="document-preview-description" className="text-xs text-zinc-400 truncate">
+              <h2 id="document-preview-title" className="text-base font-bold text-primary truncate">{doc.title}</h2>
+              <p id="document-preview-description" className="text-xs text-secondary truncate">
                 {profile.name} • {profile.department}
               </p>
             </div>
@@ -134,7 +134,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               type="button"
               onClick={handleDownload}
               disabled={!originalFileAvailable}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-action hover:bg-action-hover text-on-action text-xs font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-surface-raised disabled:text-muted"
               title={originalFileAvailable ? 'Download original file' : 'Original file unavailable'}
             >
               <Download className="w-3.5 h-3.5" />
@@ -144,7 +144,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors cursor-pointer hidden sm:inline-flex"
+              className="p-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary transition-colors cursor-pointer hidden sm:inline-flex"
               title="Print Document Record"
             >
               <Printer className="w-4 h-4" />
@@ -154,7 +154,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               <button
                 type="button"
                 onClick={handleDelete}
-                className="p-2 rounded-xl bg-zinc-800 hover:bg-rose-900/50 hover:text-rose-400 text-zinc-400 transition-colors cursor-pointer"
+                className="p-2 rounded-[10px] bg-surface-raised hover:bg-danger-soft/50 hover:text-danger text-secondary transition-colors cursor-pointer"
                 title="Delete Document"
               >
                 <Trash2 className="w-4 h-4" />
@@ -164,7 +164,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+              className="p-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
               title="Close modal"
             >
               <X className="w-4 h-4" />
@@ -173,24 +173,24 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
         </div>
 
         {/* Compliance Status Ribbon */}
-        <div className="px-5 py-2.5 bg-zinc-950/40 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="px-5 py-2.5 bg-canvas/40 border-b border-border-subtle flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-zinc-400 font-mono">Status:</span>
+            <span className="text-secondary font-mono">Status:</span>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${compliance.badgeClass}`}>
               {compliance.label}
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-zinc-400 text-[11px] font-mono">
+          <div className="flex items-center gap-4 text-secondary text-xs font-mono">
             {doc.issueDate && (
               <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                <Calendar className="w-3.5 h-3.5 text-secondary" />
                 Issued: {doc.issueDate}
               </span>
             )}
             {doc.expiryDate && (
               <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                <Clock className="w-3.5 h-3.5 text-secondary" />
                 Expires: {doc.expiryDate}
               </span>
             )}
@@ -199,90 +199,90 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
         </div>
 
         {/* Body / Document Preview Surface */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-zinc-950/90">
+        <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-canvas/90">
           {/* Note or reference box */}
           {doc.notes && (
-            <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+            <div className="p-3 rounded-[10px] bg-surface border border-border-subtle text-xs text-secondary flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-accent shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold text-zinc-200 block">Verification Note:</span>
-                <p className="text-zinc-400 leading-relaxed mt-0.5">{doc.notes}</p>
+                <span className="font-semibold text-primary block">Verification Note:</span>
+                <p className="text-secondary leading-relaxed mt-0.5">{doc.notes}</p>
               </div>
             </div>
           )}
 
           {/* Visual Certificate / Document Sheet */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-inner relative overflow-hidden">
+          <div className="bg-surface border border-border-subtle rounded-[14px] p-6 sm:p-8 space-y-6 shadow-inner relative overflow-hidden">
             {/* Watermark */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[90px] font-black text-zinc-800/20 pointer-events-none select-none tracking-widest font-mono rotate-[-20deg]">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[90px] font-black text-muted/20 pointer-events-none select-none tracking-widest font-mono rotate-[-20deg]">
               HYDENLYNE
             </div>
 
             {/* Document Header */}
-            <div className="flex items-start justify-between border-b border-zinc-800 pb-4 relative z-10">
+            <div className="flex items-start justify-between border-b border-border-subtle pb-4 relative z-10">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded-md font-bold">
+                  <span className="text-xs font-mono uppercase px-2 py-0.5 bg-accent-soft text-accent border border-border-strong rounded-md font-bold">
                     {originalFileAvailable ? 'Original Specialist Document' : 'Compliance Record — No Original File'}
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-400">REF: {doc.id}</span>
+                  <span className="text-xs font-mono text-secondary">REF: {doc.id}</span>
                 </div>
-                <h3 className="text-lg font-bold text-zinc-100 mt-2">{doc.title}</h3>
-                <p className="text-xs text-zinc-400 font-mono mt-0.5">File: {doc.fileName}</p>
+                <h3 className="text-lg font-bold text-primary mt-2">{doc.title}</h3>
+                <p className="text-xs text-secondary font-mono mt-0.5">File: {doc.fileName}</p>
               </div>
 
               <div className="text-right">
-                <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-blue-400 font-serif font-bold text-xl mx-auto mb-1">
+                <div className="w-12 h-12 rounded-[10px] bg-surface-raised border border-border-strong flex items-center justify-center text-accent font-serif font-bold text-xl mx-auto mb-1">
                   H
                 </div>
-                <span className="text-[10px] font-mono text-zinc-400">Hydenlyne QA</span>
+                <span className="text-xs font-mono text-secondary">Hydenlyne QA</span>
               </div>
             </div>
 
             {/* Document Details Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10 text-xs">
-              <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/80 space-y-1">
-                <span className="text-zinc-400 font-mono text-[10px] block uppercase">Specialist / Holder</span>
-                <span className="text-zinc-100 font-semibold text-sm block">{profile.name}</span>
-                <span className="text-zinc-400 text-xs block">{profile.title}</span>
+              <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/80 space-y-1">
+                <span className="text-secondary font-mono text-xs block uppercase">Specialist / Holder</span>
+                <span className="text-primary font-semibold text-sm block">{profile.name}</span>
+                <span className="text-secondary text-xs block">{profile.title}</span>
               </div>
 
-              <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/80 space-y-1">
-                <span className="text-zinc-400 font-mono text-[10px] block uppercase">Accreditation Category</span>
-                <span className="text-blue-400 font-semibold text-sm block uppercase tracking-wide">
+              <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/80 space-y-1">
+                <span className="text-secondary font-mono text-xs block uppercase">Accreditation Category</span>
+                <span className="text-accent font-semibold text-sm block uppercase tracking-wide">
                   {doc.category.replace('_', ' ')}
                 </span>
-                <span className="text-zinc-400 text-xs block">
+                <span className="text-secondary text-xs block">
                   {originalFileAvailable ? 'Original file available for review' : 'Metadata recorded; original file unavailable'}
                 </span>
               </div>
 
-              <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/80 space-y-1">
-                <span className="text-zinc-400 font-mono text-[10px] block uppercase">Validity Timeline</span>
+              <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/80 space-y-1">
+                <span className="text-secondary font-mono text-xs block uppercase">Validity Timeline</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-zinc-200 font-medium">Issued: {doc.issueDate || 'Current'}</span>
+                  <span className="text-primary font-medium">Issued: {doc.issueDate || 'Current'}</span>
                   <span>→</span>
-                  <span className="text-zinc-200 font-medium">Expiry: {doc.expiryDate || 'Permanent'}</span>
+                  <span className="text-primary font-medium">Expiry: {doc.expiryDate || 'Permanent'}</span>
                 </div>
               </div>
 
-              <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/80 space-y-1">
-                <span className="text-zinc-400 font-mono text-[10px] block uppercase">Audit Check</span>
-                <div className={`flex items-center gap-1.5 font-semibold ${doc.isVerified ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {doc.isVerified ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-amber-400" />}
+              <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/80 space-y-1">
+                <span className="text-secondary font-mono text-xs block uppercase">Audit Check</span>
+                <div className={`flex items-center gap-1.5 font-semibold ${doc.isVerified ? 'text-positive' : 'text-warning'}`}>
+                  {doc.isVerified ? <CheckCircle2 className="w-4 h-4 text-positive" /> : <AlertTriangle className="w-4 h-4 text-warning" />}
                   <span>{doc.isVerified ? 'Verified by Hydenlyne Compliance' : 'Pending Hydenlyne Compliance Review'}</span>
                 </div>
               </div>
             </div>
 
             {/* Document Content Abstract / Preview */}
-            <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-800/60 text-xs text-zinc-300 space-y-2 relative z-10 leading-relaxed font-light">
+            <div className="p-4 bg-canvas/40 rounded-[10px] border border-border-subtle/60 text-xs text-secondary space-y-2 relative z-10 leading-relaxed font-light">
               <p>
                 {originalFileAvailable
                   ? 'The original file is available for review. This record contains the associated registration and compliance metadata.'
                   : 'This compliance record contains registration metadata only. The original document file is not available in this workspace.'}
               </p>
-              <p className="text-zinc-400 text-[11px]">
+              <p className="text-secondary text-xs">
                 Uploaded on: {new Date(doc.uploadedAt).toLocaleDateString()}
                 {originalFileAvailable ? ' • Original file attached to this record.' : ' • No original file attached.'}
               </p>
@@ -292,31 +292,31 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
           {/* Extracted Content — what the pipeline actually recovered from
               this document, not just its metadata. */}
           {hasExtractedContent && (
-            <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-800/60 text-xs text-zinc-300 space-y-3 relative z-10">
-              <h4 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-zinc-400" />
+            <div className="p-4 bg-canvas/40 rounded-[10px] border border-border-subtle/60 text-xs text-secondary space-y-3 relative z-10">
+              <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-secondary" />
                 Extracted Content
               </h4>
               {extractedFullName && (
                 <div>
-                  <span className="text-zinc-500 text-[10px] uppercase block">Name on file</span>
-                  <span className="text-zinc-200 font-medium">{extractedFullName}</span>
+                  <span className="text-muted text-xs uppercase block">Name on file</span>
+                  <span className="text-primary font-medium">{extractedFullName}</span>
                 </div>
               )}
               {extractedSummary && (
                 <div>
-                  <span className="text-zinc-500 text-[10px] uppercase block mb-1">Professional Summary</span>
-                  <p className="text-zinc-300 leading-relaxed whitespace-pre-line">{extractedSummary}</p>
+                  <span className="text-muted text-xs uppercase block mb-1">Professional Summary</span>
+                  <p className="text-secondary leading-relaxed whitespace-pre-line">{extractedSummary}</p>
                 </div>
               )}
               {extractedPersonalInfo && Object.keys(extractedPersonalInfo).length > 0 && (
                 <div>
-                  <span className="text-zinc-500 text-[10px] uppercase block mb-1">Personal Information</span>
+                  <span className="text-muted text-xs uppercase block mb-1">Personal Information</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                     {Object.entries(extractedPersonalInfo).map(([label, value]) => (
                       <div key={label} className="flex justify-between gap-2">
-                        <span className="text-zinc-500">{label.replace(/_/g, ' ')}</span>
-                        <span className="text-zinc-200 text-right">{value}</span>
+                        <span className="text-muted">{label.replace(/_/g, ' ')}</span>
+                        <span className="text-primary text-right">{value}</span>
                       </div>
                     ))}
                   </div>
@@ -324,10 +324,10 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               )}
               {extractedCertifications.length > 0 && (
                 <div>
-                  <span className="text-zinc-500 text-[10px] uppercase block mb-1">Certifications Found</span>
+                  <span className="text-muted text-xs uppercase block mb-1">Certifications Found</span>
                   <div className="flex flex-wrap gap-1.5">
                     {extractedCertifications.map((cert) => (
-                      <span key={cert} className="px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+                      <span key={cert} className="px-2 py-0.5 rounded-lg bg-surface border border-border-subtle text-secondary">
                         {cert}
                       </span>
                     ))}
@@ -336,10 +336,10 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               )}
               {extractedSkills.length > 0 && (
                 <div>
-                  <span className="text-zinc-500 text-[10px] uppercase block mb-1">Skills</span>
+                  <span className="text-muted text-xs uppercase block mb-1">Skills</span>
                   <div className="flex flex-wrap gap-1.5">
                     {extractedSkills.map((skill) => (
-                      <span key={skill} className="px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+                      <span key={skill} className="px-2 py-0.5 rounded-lg bg-surface border border-border-subtle text-secondary">
                         {skill}
                       </span>
                     ))}
@@ -352,20 +352,20 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
           {/* Raw extracted text — always available as a fallback/reference,
               regardless of whether structured fields were recovered. */}
           {doc.extractedText && (
-            <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-800/60 text-xs relative z-10">
+            <div className="p-4 bg-canvas/40 rounded-[10px] border border-border-subtle/60 text-xs relative z-10">
               <button
                 type="button"
                 onClick={() => setShowRawText((v) => !v)}
-                className="w-full flex items-center justify-between text-[11px] font-semibold text-zinc-400 uppercase tracking-wider font-mono cursor-pointer"
+                className="w-full flex items-center justify-between text-xs font-semibold text-secondary uppercase tracking-wider font-mono cursor-pointer"
               >
                 <span className="flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                  <FileText className="w-3.5 h-3.5 text-secondary" />
                   Raw Extracted Text
                 </span>
-                <span className="text-zinc-500 normal-case font-sans">{showRawText ? 'Hide' : 'Show'}</span>
+                <span className="text-muted normal-case font-sans">{showRawText ? 'Hide' : 'Show'}</span>
               </button>
               {showRawText && (
-                <pre className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-zinc-300 text-[11px] leading-relaxed font-mono bg-zinc-950/60 rounded-lg p-3 border border-zinc-800/60">
+                <pre className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-secondary text-xs leading-relaxed font-mono bg-canvas/60 rounded-lg p-3 border border-border-subtle/60">
                   {doc.extractedText}
                 </pre>
               )}
@@ -374,12 +374,12 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-5 py-3.5 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-xs">
-          <span className="text-zinc-400 font-mono">Doc ID: {doc.id}</span>
+        <div className="px-5 py-3.5 bg-canvas border-t border-border-subtle flex items-center justify-between text-xs">
+          <span className="text-secondary font-mono">Doc ID: {doc.id}</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-primary font-medium transition-colors cursor-pointer"
           >
             Close Preview
           </button>

@@ -93,33 +93,33 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
   };
 
   return (
-    <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-zinc-950/80 backdrop-blur-md">
+    <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-canvas/80 backdrop-blur-md">
       <motion.div
         ref={modalRef}
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-6xl max-h-[92vh] flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-6xl max-h-[92vh] flex flex-col bg-surface border border-border-subtle rounded-[14px] shadow-2xl overflow-hidden"
         role="dialog"
         aria-modal="true"
         aria-labelledby="compare-modal-title"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-sm shrink-0">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-border-subtle bg-surface/95 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-950/60 border border-blue-800/60 text-blue-400">
+            <div className="flex items-center justify-center w-9 h-9 rounded-[10px] bg-accent-soft/60 border border-border-strong/60 text-accent">
               <Scale className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="compare-modal-title" className="text-base font-semibold text-zinc-100 flex items-center gap-2">
-                Specialist Comparison Matrix
-                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
+              <h2 id="compare-modal-title" className="text-base font-semibold text-primary flex items-center gap-2">
+                Compare specialists
+                <span className="text-xs font-mono font-normal px-2 py-0.5 rounded-full bg-surface-raised text-secondary">
                   {compareProfiles.length} of 4 selected
                 </span>
               </h2>
-              <p className="text-xs text-zinc-400">
-                Side-by-side technical evaluation across rates, offshore tickets, and survey track record.
+              <p className="text-xs text-secondary">
+                Review rates, credentials, and survey history side by side.
               </p>
             </div>
           </div>
@@ -129,7 +129,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
               type="button"
               onClick={handlePrint}
               aria-label="Print specialist comparison"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-xs font-medium text-secondary hover:text-primary transition-colors cursor-pointer"
               title="Print comparison table"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -139,7 +139,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
               type="button"
               onClick={handleExportCSV}
               aria-label="Export specialist comparison as CSV"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-xs font-medium text-secondary hover:text-primary transition-colors cursor-pointer"
               title="Download CSV report"
             >
               <Download className="w-3.5 h-3.5" />
@@ -148,7 +148,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              className="p-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
               aria-label="Close comparison"
             >
               <X className="w-4 h-4" />
@@ -158,10 +158,10 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
 
         {/* Content Body */}
         {compareProfiles.length === 0 ? (
-          <div className="p-12 text-center text-zinc-400 space-y-3">
-            <Scale className="w-10 h-10 text-zinc-600 mx-auto" />
-            <h3 className="text-sm font-medium text-zinc-200">No specialists selected for comparison</h3>
-            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+          <div className="p-12 text-center text-secondary space-y-3">
+            <Scale className="w-10 h-10 text-muted mx-auto" />
+            <h3 className="text-sm font-medium text-primary">No specialists selected for comparison</h3>
+            <p className="text-xs text-secondary max-w-sm mx-auto">
               Select 2 to 4 specialists from the results or shortlist to compare their credentials side-by-side.
             </p>
           </div>
@@ -179,12 +179,12 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                 return (
                   <div
                     key={p.id}
-                    className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 flex flex-col justify-between space-y-3 relative group"
+                    className="p-4 rounded-[10px] bg-canvas/60 border border-border-subtle flex flex-col justify-between space-y-3 relative group"
                   >
                     <button
                       type="button"
                       onClick={() => onRemoveProfile(p.id)}
-                      className="absolute top-2.5 right-2.5 p-1 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-zinc-900 transition-colors"
+                      className="absolute top-2.5 right-2.5 p-1 rounded-lg text-muted hover:text-danger hover:bg-surface transition-colors"
                       title="Remove from comparison"
                       aria-label={`Remove ${p.name} from comparison`}
                     >
@@ -195,39 +195,39 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                       <img
                         src={p.avatar}
                         alt={p.name}
-                        className="w-12 h-12 rounded-xl object-cover border border-zinc-700/80 shrink-0"
+                        className="w-12 h-12 rounded-[10px] object-cover border border-border-strong/80 shrink-0"
                       />
                       <div className="min-w-0 pr-4">
                         <button
                           type="button"
                           onClick={() => onSelectProfileDetail(p)}
-                          className="font-semibold text-sm text-zinc-100 hover:text-blue-400 text-left transition-colors truncate block"
+                          className="font-semibold text-sm text-primary hover:text-accent text-left transition-colors truncate block"
                         >
                           {p.name}
                         </button>
-                        <p className="text-[11px] text-zinc-400 line-clamp-1">{p.title}</p>
-                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 mt-1">
+                        <p className="text-xs text-secondary line-clamp-1">{p.title}</p>
+                        <div className="flex items-center gap-1.5 text-xs text-muted mt-1">
                           <MapPin className="w-3 h-3 shrink-0" />
                           <span className="truncate">{p.location}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-850 text-xs">
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border-subtle text-xs">
                       <div>
-                        <span className="text-[10px] text-zinc-500 block uppercase font-mono">Day Rate</span>
-                        <span className="font-semibold text-zinc-200 font-mono">
+                        <span className="text-xs text-muted block uppercase font-mono">Day Rate</span>
+                        <span className="font-semibold text-primary font-mono">
                           {p.dayRate ? `£${p.dayRate}/d` : 'Negotiable'}
                         </span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-zinc-500 block uppercase font-mono">Status</span>
+                        <span className="text-xs text-muted block uppercase font-mono">Status</span>
                         <span
                           className={`inline-flex items-center gap-1 font-medium ${
-                            isAvailableNow ? 'text-emerald-400' : 'text-zinc-400'
+                            isAvailableNow ? 'text-positive' : 'text-secondary'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isAvailableNow ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
                           <span className="truncate">{(p.availability || 'Available').split(' ')[0]}</span>
                         </span>
                       </div>
@@ -237,7 +237,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                       <button
                         type="button"
                         onClick={() => onRequestMobilization(p)}
-                        className="w-full py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        className="w-full py-1.5 px-3 rounded-lg bg-action hover:bg-action-hover text-on-action font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <Send className="w-3 h-3" />
                         <span>Request</span>
@@ -251,9 +251,9 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
             {/* Matrix Rows */}
             <div className="space-y-4 pt-2">
               {/* Row: Experience & Seniority */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/40">
-                <div className="px-4 py-2 bg-zinc-850/60 border-b border-zinc-800 font-mono text-xs font-semibold text-zinc-300 flex items-center gap-2">
-                  <Briefcase className="w-3.5 h-3.5 text-blue-400" />
+              <div className="border border-border-subtle rounded-[10px] overflow-hidden bg-canvas/40">
+                <div className="px-4 py-2 bg-surface-raised/60 border-b border-border-subtle font-mono text-xs font-semibold text-secondary flex items-center gap-2">
+                  <Briefcase className="w-3.5 h-3.5 text-accent" />
                   <span>Experience & Operational Seniority</span>
                 </div>
                 <div
@@ -265,19 +265,19 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                   {compareProfiles.map((p) => (
                     <div key={p.id} className="first:pl-0 pl-4 space-y-1.5">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-bold text-zinc-100 font-mono">{p.yearsOfExperience}</span>
-                        <span className="text-xs text-zinc-400">years offshore / industry</span>
+                        <span className="text-lg font-bold text-primary font-mono">{p.yearsOfExperience}</span>
+                        <span className="text-xs text-secondary">years offshore / industry</span>
                       </div>
-                      <p className="text-xs text-zinc-300 leading-relaxed line-clamp-3">{p.bio}</p>
+                      <p className="text-xs text-secondary leading-relaxed line-clamp-3">{p.bio}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Row: Mandatory Offshore Certifications */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/40">
-                <div className="px-4 py-2 bg-zinc-850/60 border-b border-zinc-800 font-mono text-xs font-semibold text-zinc-300 flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="border border-border-subtle rounded-[10px] overflow-hidden bg-canvas/40">
+                <div className="px-4 py-2 bg-surface-raised/60 border-b border-border-subtle font-mono text-xs font-semibold text-secondary flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-positive" />
                   <span>Accreditations & Offshore Safety Tickets</span>
                 </div>
                 <div
@@ -295,7 +295,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                           ))}
                         </div>
                       ) : (
-                        <span className="text-xs text-zinc-500 italic">No formal certifications listed</span>
+                        <span className="text-xs text-muted italic">No formal certifications listed</span>
                       )}
                     </div>
                   ))}
@@ -303,14 +303,14 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
               </div>
 
               {/* Row: Core Technical Competencies & Software */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/40">
-                <div className="px-4 py-2 bg-zinc-850/60 border-b border-zinc-800 font-mono text-xs font-semibold text-zinc-300 flex items-center justify-between">
+              <div className="border border-border-subtle rounded-[10px] overflow-hidden bg-canvas/40">
+                <div className="px-4 py-2 bg-surface-raised/60 border-b border-border-subtle font-mono text-xs font-semibold text-secondary flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-blue-400" />
+                    <Check className="w-3.5 h-3.5 text-accent" />
                     <span>Technical Competencies & Specialized Tools</span>
                   </div>
                   {sharedSkills.length > 0 && (
-                    <span className="text-[11px] text-blue-400 font-normal">
+                    <span className="text-xs text-accent font-normal">
                       ({sharedSkills.length} competencies shared across cohort)
                     </span>
                   )}
@@ -331,8 +331,8 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                               key={skill}
                               className={`px-2 py-0.5 rounded-lg text-xs font-medium border ${
                                 isShared
-                                  ? 'bg-blue-950/50 border-blue-800/60 text-blue-300 font-semibold'
-                                  : 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                                  ? 'bg-accent-soft/50 border-border-strong/60 text-accent font-semibold'
+                                  : 'bg-surface border-border-subtle text-secondary'
                               }`}
                             >
                               {skill}
@@ -346,9 +346,9 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
               </div>
 
               {/* Row: Survey Disciplines & Track Record */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/40">
-                <div className="px-4 py-2 bg-zinc-850/60 border-b border-zinc-800 font-mono text-xs font-semibold text-zinc-300 flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+              <div className="border border-border-subtle rounded-[10px] overflow-hidden bg-canvas/40">
+                <div className="px-4 py-2 bg-surface-raised/60 border-b border-border-subtle font-mono text-xs font-semibold text-secondary flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-secondary" />
                   <span>Survey Types & Major Project Track Record</span>
                 </div>
                 <div
@@ -360,16 +360,16 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                   {compareProfiles.map((p) => (
                     <div key={p.id} className="first:pl-0 pl-4 space-y-2 text-xs">
                       <div>
-                        <span className="text-[10px] text-zinc-500 uppercase font-mono block">Survey Types</span>
-                        <p className="text-zinc-300 font-medium">{p.surveyTypes?.join(' • ') || 'General Marine'}</p>
+                        <span className="text-xs text-muted uppercase font-mono block">Survey Types</span>
+                        <p className="text-secondary font-medium">{p.surveyTypes?.join(' • ') || 'General Marine'}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-zinc-500 uppercase font-mono block">Past Operators / Clients</span>
-                        <p className="text-zinc-400">{p.pastCompanies?.join(', ') || 'N/A'}</p>
+                        <span className="text-xs text-muted uppercase font-mono block">Past Operators / Clients</span>
+                        <p className="text-secondary">{p.pastCompanies?.join(', ') || 'N/A'}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-zinc-500 uppercase font-mono block">Featured Campaigns</span>
-                        <p className="text-zinc-400">{p.featuredProjects?.join(' | ') || 'N/A'}</p>
+                        <span className="text-xs text-muted uppercase font-mono block">Featured Campaigns</span>
+                        <p className="text-secondary">{p.featuredProjects?.join(' | ') || 'N/A'}</p>
                       </div>
                     </div>
                   ))}
@@ -377,9 +377,9 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
               </div>
 
               {/* Row: Academic Credentials */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/40">
-                <div className="px-4 py-2 bg-zinc-850/60 border-b border-zinc-800 font-mono text-xs font-semibold text-zinc-300 flex items-center gap-2">
-                  <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+              <div className="border border-border-subtle rounded-[10px] overflow-hidden bg-canvas/40">
+                <div className="px-4 py-2 bg-surface-raised/60 border-b border-border-subtle font-mono text-xs font-semibold text-secondary flex items-center gap-2">
+                  <GraduationCap className="w-3.5 h-3.5 text-warning" />
                   <span>Education & Academic Background</span>
                 </div>
                 <div
@@ -389,7 +389,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                   }}
                 >
                   {compareProfiles.map((p) => (
-                    <div key={p.id} className="first:pl-0 pl-4 text-xs text-zinc-300">
+                    <div key={p.id} className="first:pl-0 pl-4 text-xs text-secondary">
                       {p.education}
                     </div>
                   ))}
@@ -399,14 +399,14 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
 
             {/* Quick Add more candidates selector */}
             {compareProfiles.length < 4 && availableToAdd.length > 0 && (
-              <div className="p-4 rounded-xl bg-zinc-950/40 border border-dashed border-zinc-800 flex items-center justify-between gap-3">
-                <div className="text-xs text-zinc-400">
-                  <span className="font-semibold text-zinc-200 block">Add another specialist to this comparison</span>
+              <div className="p-4 rounded-[10px] bg-canvas/40 border border-dashed border-border-subtle flex items-center justify-between gap-3">
+                <div className="text-xs text-secondary">
+                  <span className="font-semibold text-primary block">Add another specialist to this comparison</span>
                   Compare up to 4 specialists simultaneously.
                 </div>
                 <div className="flex items-center gap-2">
                   <select
-                    className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-750 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
+                    className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-strong text-xs text-primary focus:outline-none focus:border-border-strong"
                     onChange={(e) => {
                       const selected = availableToAdd.find((p) => p.id === e.target.value);
                       if (selected) {

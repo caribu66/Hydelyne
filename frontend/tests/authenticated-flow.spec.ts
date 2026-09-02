@@ -19,15 +19,16 @@ const crewMember = {
   updatedAt: '2025-01-01T00:00:00Z',
 };
 
-async function authenticate(page: Page) {
-  await page.addInitScript(() => {
+async function authenticate(page: Page, theme: 'dark' | 'light' = 'dark') {
+  await page.addInitScript((selectedTheme) => {
     localStorage.setItem('hydenlyne_token', 'test-token');
     localStorage.setItem('hydenlyne_user', JSON.stringify({
       id: 'user-1',
       fullName: 'Test Recruiter',
       email: 'recruiter@example.com',
     }));
-  });
+    localStorage.setItem('hydenlyne_theme_preference', selectedTheme);
+  }, theme);
 }
 
 async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: typeof crewMember } = {}) {
@@ -66,6 +67,23 @@ async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: 
 }
 
 test.describe('authenticated specialist workspace', () => {
+  test('matches the Hydenlyne workspace baseline', async ({ page }) => {
+    await authenticate(page);
+    await mockCrewApi(page);
+    await page.goto('/?q=hydrography');
+    await expect(page.getByRole('button', { name: /View Alex Morgan dossier/ })).toBeVisible();
+    await expect(page).toHaveScreenshot('authenticated-workspace.png', { fullPage: true });
+  });
+
+  test('matches the Hydenlyne light workspace baseline', async ({ page }) => {
+    await authenticate(page, 'light');
+    await mockCrewApi(page);
+    await page.goto('/?q=hydrography');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.getByRole('button', { name: /View Alex Morgan dossier/ })).toBeVisible();
+    await expect(page).toHaveScreenshot('authenticated-workspace-light.png', { fullPage: true });
+  });
+
   test('supports keyboard navigation and opening a dossier', async ({ page }) => {
     await authenticate(page);
     await mockCrewApi(page);
@@ -112,13 +130,13 @@ test.describe('authenticated specialist workspace', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'Add specialist' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add Specialist' });
+    const dialog = page.getByRole('dialog', { name: 'Add specialist' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel('Full Name')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Add Specialist', exact: true })).toBeDisabled();
+    await expect(dialog.getByLabel('Full name')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Add specialist', exact: true })).toBeDisabled();
     const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(accessibility.violations).toEqual([]);
-    await dialog.getByRole('button', { name: 'Add Specialist', exact: true }).scrollIntoViewIfNeeded();
+    await dialog.getByRole('button', { name: 'Add specialist', exact: true }).scrollIntoViewIfNeeded();
     const dimensions = await dialog.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }));
     expect(dimensions.clientHeight).toBeLessThanOrEqual(dimensions.scrollHeight);
     await page.keyboard.press('Escape');

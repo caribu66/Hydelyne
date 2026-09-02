@@ -37,20 +37,20 @@ export const ExperienceRangeSlider: FC<ExperienceRangeSliderProps> = ({
     <div id="experience-slider-container" className="space-y-3.5">
       {/* Visual Badge Display */}
       <div className="flex items-center justify-between text-xs">
-        <span className="text-zinc-400 font-medium flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5 text-zinc-400" />
+        <span className="text-secondary font-medium flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-secondary" />
           Experience Span
         </span>
-        <span className="font-mono font-semibold text-zinc-200 bg-zinc-800 border border-zinc-700 px-2.5 py-1 rounded-lg">
+        <span className="font-mono font-semibold text-primary bg-surface-raised border border-border-strong px-2.5 py-1 rounded-lg">
           {min} {min === 1 ? 'yr' : 'yrs'} — {max >= 20 ? '20+ yrs' : `${max} yrs`}
         </span>
       </div>
 
       {/* Dual Slider Track */}
       <div className="relative pt-2 pb-2 px-1">
-        <div className="h-2 w-full bg-zinc-800 rounded-full relative overflow-hidden">
+        <div className="h-2 w-full bg-surface-raised rounded-full relative overflow-hidden">
           <div
-            className="absolute h-2 bg-blue-500 rounded-full shadow-sm"
+            className="absolute h-2 bg-action rounded-full shadow-sm"
             style={{
               left: `${minPercent}%`,
               width: `${Math.max(0, maxPercent - minPercent)}%`,
@@ -94,8 +94,8 @@ export const ExperienceRangeSlider: FC<ExperienceRangeSliderProps> = ({
               onClick={() => onChange(r.minVal, r.maxVal)}
               className={`min-h-11 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-all duration-150 text-left truncate cursor-pointer ${
                 isActive
-                  ? 'bg-blue-500/15 border-blue-500/40 text-blue-300 font-semibold shadow-sm'
-                  : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-200 hover:border-zinc-700'
+                  ? 'bg-action/15 border-border-strong/40 text-accent font-semibold shadow-sm'
+                  : 'bg-surface/60 border-border-subtle text-secondary hover:bg-surface-raised/80 hover:text-primary hover:border-border-strong'
               }`}
             >
               {r.label}

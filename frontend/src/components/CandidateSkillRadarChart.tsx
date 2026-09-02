@@ -76,25 +76,25 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
   }, [radarData]);
 
   return (
-    <div className="bg-zinc-950/70 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 flex flex-col items-center relative overflow-hidden shadow-inner">
+    <div className="bg-canvas/70 border border-border-subtle/90 rounded-[14px] p-4 sm:p-5 flex flex-col items-center relative overflow-hidden shadow-inner">
       {/* Header */}
       <div className="w-full flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300">
+          <div className="w-7 h-7 rounded-lg bg-surface border border-border-subtle flex items-center justify-center text-secondary">
             <Activity className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-zinc-200 tracking-tight flex items-center gap-1.5 font-mono">
+            <h4 className="text-xs font-semibold text-primary tracking-tight flex items-center gap-1.5 font-mono">
               <span>Competency Radar Analysis</span>
             </h4>
-            <p className="text-[10px] text-zinc-500">
+            <p className="text-xs text-muted">
               Evaluated across {radarData.length} core offshore disciplines
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-mono font-medium">
-          <Award className="w-3.5 h-3.5 text-zinc-400" />
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface border border-border-subtle text-primary text-xs font-mono font-medium">
+          <Award className="w-3.5 h-3.5 text-secondary" />
           <span>{avgScore}% Composite</span>
         </div>
       </div>
@@ -110,8 +110,8 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
           <defs>
             {/* Enterprise Solid Gradient for radar polygon */}
             <linearGradient id={`radarGrad-${profile.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#2563eb" stopOpacity="0.30" />
-              <stop offset="100%" stopColor="#1e40af" stopOpacity="0.15" />
+              <stop offset="0%" stopColor="var(--ui-focus)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="var(--ui-accent)" stopOpacity="0.08" />
             </linearGradient>
           </defs>
 
@@ -129,7 +129,7 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
               <g key={`level-${level}`}>
                 <polygon
                   points={levelPoints.join(' ')}
-                  className="stroke-zinc-800/80 fill-zinc-900/10"
+                  className="stroke-border-subtle/80 fill-surface/10"
                   strokeWidth="1"
                   strokeDasharray={level === 100 ? 'none' : '3 3'}
                 />
@@ -137,7 +137,7 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
                 <text
                   x={centerX + 4}
                   y={centerY - levelRadius + 3}
-                  className="fill-zinc-600 font-mono text-[8px] font-semibold"
+                  className="fill-muted font-mono text-xs font-semibold"
                 >
                   {level}%
                 </text>
@@ -177,7 +177,7 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
                   x2={lineX}
                   y2={lineY}
                   className={`transition-colors duration-200 ${
-                    isHovered ? 'stroke-blue-400 stroke-[1.5]' : 'stroke-zinc-800/90'
+                    isHovered ? 'stroke-focus stroke-[1.5]' : 'stroke-border-subtle/90'
                   }`}
                   strokeWidth="1"
                 />
@@ -187,12 +187,12 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
                   x={labelX}
                   y={labelY + 4}
                   textAnchor={textAnchor}
-                  className={`font-mono text-[10px] font-medium transition-all duration-200 ${
+                  className={`font-mono text-xs font-medium transition-all duration-200 ${
                     isHovered
-                      ? 'fill-zinc-100 font-semibold'
+                      ? 'fill-primary font-semibold'
                       : d.value >= 80
-                      ? 'fill-zinc-300'
-                      : 'fill-zinc-500'
+                      ? 'fill-secondary'
+                      : 'fill-muted'
                   }`}
                 >
                   {d.axis}
@@ -205,7 +205,7 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
           <path
             d={pathD}
             fill={`url(#radarGrad-${profile.id})`}
-            stroke="#3b82f6"
+            stroke="var(--ui-focus)"
             strokeWidth="1.5"
             className="transition-all duration-200 ease-out"
           />
@@ -228,8 +228,8 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
                   r={isHovered ? 6 : 3}
                   className={`transition-all duration-200 ${
                     isHovered
-                      ? 'fill-blue-500/20 stroke-blue-400 stroke-1'
-                      : 'fill-blue-500/10'
+                      ? 'fill-accent/20 stroke-focus stroke-1'
+                      : 'fill-accent/10'
                   }`}
                 />
                 {/* Inner point */}
@@ -237,7 +237,7 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
                   cx={x}
                   cy={y}
                   r={isHovered ? 3.5 : 2}
-                  className="fill-zinc-100 stroke-blue-600 stroke-[1]"
+                  className="fill-primary stroke-focus stroke-[1]"
                 />
               </g>
             );
@@ -246,21 +246,21 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
 
         {/* Hovered Axis Tooltip overlay */}
         {hoveredAxis && (
-          <div className="absolute top-2 right-2 bg-zinc-900 border border-zinc-700/80 shadow-xl rounded-xl p-2.5 max-w-[200px] pointer-events-none text-left backdrop-blur-md z-10 transition-all">
-            <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-1 mb-1.5">
-              <span className="font-semibold text-xs text-zinc-100">{hoveredAxis.axis}</span>
-              <span className="font-mono text-xs font-semibold text-zinc-200">{hoveredAxis.value}%</span>
+          <div className="absolute top-2 right-2 bg-surface border border-border-strong/80 shadow-xl rounded-[10px] p-2.5 max-w-[200px] pointer-events-none text-left backdrop-blur-md z-10 transition-all">
+            <div className="flex items-center justify-between gap-2 border-b border-border-subtle pb-1 mb-1.5">
+              <span className="font-semibold text-xs text-primary">{hoveredAxis.axis}</span>
+              <span className="font-mono text-xs font-semibold text-primary">{hoveredAxis.value}%</span>
             </div>
             <div className="flex items-center gap-1 mb-1">
-              <span className="text-[10px] text-zinc-400">Rating:</span>
-              <span className="text-[10px] font-medium text-zinc-300 uppercase tracking-wide">
+              <span className="text-xs text-secondary">Rating:</span>
+              <span className="text-xs font-medium text-secondary uppercase tracking-wide">
                 {hoveredAxis.level}
               </span>
             </div>
             {hoveredAxis.details && hoveredAxis.details.length > 0 && (
-              <div className="text-[9px] text-zinc-400 flex flex-wrap gap-1 mt-1">
+              <div className="text-xs text-secondary flex flex-wrap gap-1 mt-1">
                 {hoveredAxis.details.map((item, i) => (
-                  <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                  <span key={i} className="px-1.5 py-0.5 rounded bg-surface-raised text-secondary">
                     {item}
                   </span>
                 ))}
@@ -272,7 +272,7 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
 
       {/* Axis Breakdown Pills */}
       {showLegend && (
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-zinc-800/80">
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-border-subtle/80">
           {radarData.map((d) => {
             const isHovered = hoveredAxis?.axis === d.axis;
             return (
@@ -282,15 +282,15 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
                 onMouseLeave={() => setHoveredAxis(null)}
                 className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
                   isHovered
-                    ? 'bg-zinc-800/80 border-zinc-700 text-zinc-100'
-                    : 'bg-zinc-900/40 hover:bg-zinc-900 border-zinc-800/60 text-zinc-400'
+                    ? 'bg-surface-raised/80 border-border-strong text-primary'
+                    : 'bg-surface/40 hover:bg-surface border-border-subtle/60 text-secondary'
                 }`}
               >
                 <div className="min-w-0">
-                  <span className="text-[11px] font-medium block truncate">{d.axis}</span>
-                  <span className="text-[9px] text-zinc-500 font-mono">{d.level}</span>
+                  <span className="text-xs font-medium block truncate">{d.axis}</span>
+                  <span className="text-xs text-muted font-mono">{d.level}</span>
                 </div>
-                <span className="font-mono text-xs font-semibold text-zinc-300 shrink-0">
+                <span className="font-mono text-xs font-semibold text-secondary shrink-0">
                   {d.value}%
                 </span>
               </div>
@@ -300,12 +300,12 @@ export const CandidateSkillRadarChart: FC<CandidateSkillRadarChartProps> = ({
       )}
 
       {/* Footer hint */}
-      <div className="w-full flex items-center justify-between text-[10px] text-zinc-500 mt-2.5 pt-1.5 border-t border-zinc-900">
+      <div className="w-full flex items-center justify-between text-xs text-muted mt-2.5 pt-1.5 border-t border-border-subtle">
         <span className="flex items-center gap-1">
-          <Info className="w-3 h-3 text-zinc-500" />
+          <Info className="w-3 h-3 text-muted" />
           <span>Vector Radar Analytics</span>
         </span>
-        <span className="font-mono text-zinc-500">Hydenlyne Standard</span>
+        <span className="font-mono text-muted">Hydenlyne Standard</span>
       </div>
     </div>
   );

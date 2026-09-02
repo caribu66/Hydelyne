@@ -78,7 +78,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
   return (
     <div
       className={`w-full flex flex-col items-center justify-center transition-all duration-500 ease-out ${
-        isCalmState ? `${isAuthenticated ? 'min-h-[64vh]' : 'min-h-[calc(100dvh-4rem)]'} py-10 sm:py-14` : 'py-3'
+        isCalmState ? `${isAuthenticated ? 'min-h-[48vh]' : 'min-h-[calc(100dvh-4rem)]'} py-10 sm:py-14` : 'py-3'
       }`}
     >
       <div className="w-full max-w-2xl px-4 flex flex-col items-center">
@@ -86,12 +86,12 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
         {isCalmState && (
           <div className="text-center space-y-4 mb-10 w-full animate-in fade-in slide-in-from-bottom-3 duration-500">
             {/* Editorial Title */}
-            <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08] font-semibold tracking-[-0.025em] text-zinc-100 font-sans">
+            <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08] font-semibold tracking-[-0.025em] text-primary font-sans">
               Find the right specialist for the next campaign.
             </h1>
 
             {/* Enterprise Subtitle */}
-            <p className="text-sm text-zinc-400 font-normal max-w-md mx-auto leading-6">
+            <p className="text-sm text-secondary font-normal max-w-md mx-auto leading-6">
               Search the private network by discipline, certification, region, or availability.
             </p>
           </div>
@@ -101,15 +101,15 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
         <div className="relative w-full">
           {/* Search Box */}
           <div
-              className={`relative flex items-center gap-3 min-h-16 px-4 py-3 rounded-2xl bg-zinc-900/70 border shadow-xl shadow-black/10 transition-all duration-150 ${
+              className={`relative flex min-h-16 items-center gap-3 rounded-[14px] border bg-surface px-4 py-3 shadow-lg shadow-black/5 transition-all duration-150 ${
               isFocused
-                ? 'border-zinc-500 ring-1 ring-zinc-500/20 bg-zinc-900'
-                : 'border-zinc-800 hover:border-zinc-700'
+                ? 'border-border-strong ring-1 ring-focus/20 bg-surface'
+                : 'border-border-subtle hover:border-border-strong'
             }`}
           >
             <Search
               className={`w-5 h-5 shrink-0 transition-colors ${
-                isFocused ? 'text-zinc-200' : 'text-zinc-500'
+                isFocused ? 'text-primary' : 'text-muted'
               }`}
             />
 
@@ -127,7 +127,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               placeholder={isAuthenticated ? 'Ask in plain English — e.g. “Who has medical experience?”' : 'Sign in to search the private network'}
               readOnly={!isAuthenticated}
               aria-label={isAuthenticated ? 'Search specialists' : 'Sign in to search specialists'}
-              className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 focus:outline-none text-base sm:text-lg font-light resize-none leading-relaxed antialiased"
+              className="w-full bg-transparent text-primary placeholder:text-muted focus:outline-none text-base sm:text-lg font-light resize-none leading-relaxed antialiased"
               spellCheck="false"
             />
 
@@ -135,7 +135,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               <button
                 type="button"
                 onClick={onClear}
-                className="min-h-11 min-w-11 p-1 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
+                className="min-h-11 min-w-11 p-1 rounded-lg text-muted hover:text-secondary hover:bg-surface-raised transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
                 title="Clear"
                 aria-label="Clear search"
               >
@@ -144,17 +144,17 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
             )}
 
             {aiLoading && (
-              <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+              <Loader2 className="w-4 h-4 text-accent animate-spin shrink-0" />
             )}
 
             <button
               type="button"
               onClick={() => onSearch(query)}
               disabled={isAuthenticated && !query.trim()}
-              className={`min-h-11 min-w-11 p-2 rounded-xl transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
+              className={`min-h-11 min-w-11 p-2 rounded-[10px] transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
                 query.trim() || !isAuthenticated
-                  ? 'bg-zinc-100 hover:bg-white text-zinc-950 shadow-sm'
-                  : 'bg-zinc-800/80 text-zinc-600 cursor-not-allowed'
+                  ? 'bg-action hover:bg-action-hover text-on-action shadow-sm'
+                  : 'bg-surface-raised/80 text-muted cursor-not-allowed'
               }`}
               title="Search"
               aria-label={isAuthenticated ? 'Search specialists' : 'Sign in to search specialists'}
@@ -163,22 +163,22 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
             </button>
           </div>
 
-          <div className="mt-3 flex min-h-6 items-center justify-center px-1 text-xs text-zinc-400 sm:justify-between">
+          <div className="mt-3 flex min-h-6 items-center justify-center px-1 text-xs text-secondary sm:justify-between">
             <span className={isAuthenticated ? 'hidden sm:inline' : 'inline'}>
               {isAuthenticated ? 'Search by role, qualification, or availability' : 'Private workforce system · Access is monitored'}
             </span>
-            {isAuthenticated && <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-zinc-500">
-              <kbd className="rounded-md border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">↵</kbd>
+            {isAuthenticated && <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted">
+              <kbd className="rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-xs text-secondary">↵</kbd>
               <span>to search</span>
-              <span className="mx-1 text-zinc-700">·</span>
-              <kbd className="rounded-md border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">/</kbd>
+              <span className="mx-1 text-muted">·</span>
+              <kbd className="rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-xs text-secondary">/</kbd>
               <span>to focus</span>
             </span>}
           </div>
 
           {/* Suggested searches help discovery before the result workspace opens. */}
           {isCalmState && isAuthenticated && <div className="mt-5 flex items-center justify-center flex-wrap gap-2 px-1">
-            <span className="text-[11px] text-zinc-500 font-medium mr-1 hidden sm:inline">
+            <span className="text-xs text-muted font-medium mr-1 hidden sm:inline">
               Suggested:
             </span>
             {QUICK_DISCOVERY_CHIPS.map((chip) => {
@@ -201,8 +201,8 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
                   }}
                   className={`inline-flex min-h-11 items-center px-3 py-1 rounded-full text-xs transition-all cursor-pointer border ${
                     isActive
-                      ? 'bg-zinc-800 border-zinc-600 text-zinc-100 font-medium shadow-xs'
-                        : 'bg-transparent hover:bg-zinc-900/70 border-zinc-800/80 hover:border-zinc-700 text-zinc-400 hover:text-zinc-200 font-normal'
+                      ? 'bg-surface-raised border-border-strong text-primary font-medium shadow-xs'
+                        : 'bg-transparent hover:bg-surface/70 border-border-subtle/80 hover:border-border-strong text-secondary hover:text-primary font-normal'
                   }`}
                 >
                   {chip.label}
@@ -213,7 +213,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               <button
                 type="button"
                 onClick={onOpenFilters}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-secondary transition-colors hover:bg-surface hover:text-primary"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                 More filters
@@ -226,7 +226,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               <button
                 type="button"
                 onClick={onOpenFilters}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-secondary transition-colors hover:bg-surface hover:text-primary"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
                 Refine filters
@@ -239,12 +239,12 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               {[
                 { icon: Search, label: 'Discover', detail: 'Search the network' },
                 { icon: Bookmark, label: 'Shortlist', detail: 'Save your strongest fits' },
-                { icon: Send, label: 'Mobilize', detail: 'Send an inquiry' },
+                { icon: Send, label: 'Request', detail: 'Plan mobilization' },
               ].map(({ icon: Icon, label, detail }) => (
-                <div key={label} className="border-r border-zinc-800/70 px-3 last:border-r-0">
-                  <Icon className="mx-auto mb-2 h-4 w-4 text-zinc-500" aria-hidden="true" />
-                  <p className="text-xs font-semibold text-zinc-300">{label}</p>
-                  <p className="mt-1 text-[11px] leading-4 text-zinc-500">{detail}</p>
+                <div key={label} className="border-r border-border-subtle/70 px-3 last:border-r-0">
+                  <Icon className="mx-auto mb-2 h-4 w-4 text-muted" aria-hidden="true" />
+                  <p className="text-xs font-semibold text-secondary">{label}</p>
+                  <p className="mt-1 text-xs leading-4 text-muted">{detail}</p>
                 </div>
               ))}
             </div>

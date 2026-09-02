@@ -35,6 +35,7 @@ import { Toast } from './components/Toast';
 import { ServiceStatus } from './components/ServiceStatus';
 import { DensityIndicator } from './components/DensityIndicator';
 import { SkeletonResults } from './components/SkeletonResults';
+import { SegmentedControl } from './components/ui';
 import {
   MapPin,
   Bookmark,
@@ -69,14 +70,14 @@ const SpecialistDossierPane = lazy(() => import('./components/SpecialistDossierP
 const SpecialistTableView = lazy(() => import('./components/SpecialistTableView').then((module) => ({ default: module.SpecialistTableView })));
 
 const LazySurfaceFallback = () => (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/70" role="status" aria-live="polite">
-    <span className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-xs text-zinc-300">Loading workspace…</span>
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-canvas/70" role="status" aria-live="polite">
+    <span className="rounded-[10px] border border-border-subtle bg-surface px-4 py-3 text-xs text-secondary">Loading workspace…</span>
   </div>
 );
 
 const DossierFallback = () => (
-  <div className="flex h-full min-h-80 items-center justify-center rounded-2xl bg-zinc-900/40" role="status" aria-live="polite">
-    <span className="text-sm text-zinc-400">Opening dossier…</span>
+  <div className="flex h-full min-h-80 items-center justify-center rounded-[14px] bg-surface/40" role="status" aria-live="polite">
+    <span className="text-sm text-secondary">Opening dossier…</span>
   </div>
 );
 
@@ -245,7 +246,7 @@ export default function App() {
 
   const handleToggleTheme = useCallback(() => {
     toggleTheme();
-    showToast(isDark ? 'Switched to High-Contrast Light Theme' : 'Switched to Deep Zinc Dark Theme');
+    showToast(isDark ? 'Light theme enabled' : 'Dark theme enabled');
   }, [toggleTheme, isDark, showToast]);
 
   const handleDeleteCrewMember = useCallback(async (profile: UserProfile) => {
@@ -377,9 +378,9 @@ export default function App() {
   // Auth gate: block until we know session state
   if (!authInitialized) {
     return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center font-sans antialiased">
-        <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono">
-          <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+      <div className="min-h-screen bg-canvas text-primary flex items-center justify-center font-sans antialiased">
+        <div className="flex items-center gap-2 text-xs text-muted font-mono">
+          <span className="h-2 w-2 rounded-full bg-action animate-pulse" />
           Loading session…
         </div>
       </div>
@@ -391,10 +392,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans antialiased selection:bg-blue-600/30 selection:text-blue-100 relative overflow-x-hidden">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-canvas font-sans text-primary antialiased selection:bg-action selection:text-on-action">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-zinc-100 focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-zinc-950"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-action focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-on-action"
       >
         Skip to main content
       </a>
@@ -411,19 +412,16 @@ export default function App() {
       </div>
 
       {/* Minimal Top Navbar */}
-      <header className="w-full border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-5 min-w-0">
+      <header className="w-full border-b border-border-subtle/60 bg-canvas/80 backdrop-blur-xl sticky top-0 z-30">
+        <div className="mx-auto flex h-16 max-w-7xl min-w-0 items-center justify-between gap-5 px-4 sm:px-6">
           {/* Logo / Brand Name */}
           <button
             type="button"
             onClick={handleResetAll}
-            className="flex items-center gap-2.5 cursor-pointer select-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
-            aria-label="Go to Hydenlyne Talent home"
+            className="flex items-center gap-2.5 cursor-pointer select-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-lg"
+            aria-label="Go to Hydenlyne home"
           >
             <img src={isDark ? hydenlyneLogoWhite : hydenlyneLogoColour} alt="Hydenlyne" className="w-[104px] h-auto" />
-            <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
-              / talent
-            </span>
           </button>
 
           {/* Right Nav */}
@@ -434,7 +432,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsCompareModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/80 border border-blue-800 text-blue-300 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-accent-soft/80 border border-border-strong text-accent hover:text-primary text-xs font-semibold transition-colors cursor-pointer"
                 title="Compare specialists side-by-side"
               >
                 <Scale className="w-3.5 h-3.5" />
@@ -444,14 +442,14 @@ export default function App() {
 
             {isSearchActive && isAuthenticated && (
               /* View Mode Switcher */
-              <div className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-xl text-xs">
+              <div className="flex items-center bg-surface border border-border-subtle p-0.5 rounded-[10px] text-xs">
                 <button
                   type="button"
                   onClick={() => setViewMode('split')}
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                     viewMode === 'split'
-                      ? 'bg-zinc-800 text-white font-medium shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      ? 'bg-surface-raised text-primary font-medium shadow-xs'
+                      : 'text-muted hover:text-secondary'
                   }`}
                   title="Split Command View"
                   aria-label="Split command view"
@@ -466,8 +464,8 @@ export default function App() {
                   onClick={() => setViewMode('grid')}
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                     viewMode === 'grid'
-                      ? 'bg-zinc-800 text-white font-medium shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      ? 'bg-surface-raised text-primary font-medium shadow-xs'
+                      : 'text-muted hover:text-secondary'
                   }`}
                   title="Cards View"
                   aria-label="Cards view"
@@ -482,8 +480,8 @@ export default function App() {
                   onClick={() => setViewMode('table')}
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                     viewMode === 'table'
-                      ? 'bg-zinc-800 text-white font-medium shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      ? 'bg-surface-raised text-primary font-medium shadow-xs'
+                      : 'text-muted hover:text-secondary'
                   }`}
                   title="Matrix View"
                   aria-label="Table view"
@@ -499,7 +497,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsShortcutsOpen(true)}
-                className="min-h-10 min-w-10 p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
+                className="min-h-10 min-w-10 p-2 rounded-[10px] bg-surface border border-border-subtle text-secondary hover:text-primary transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
               title="Keyboard shortcuts (?)"
               aria-label="Open keyboard shortcuts"
             >
@@ -511,12 +509,12 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsAddCrewMemberOpen(true)}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer shrink-0"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer shrink-0"
                 title="Add a specialist to the network"
                 aria-label="Add specialist"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Add Specialist</span>
+                <span className="hidden md:inline">Add specialist</span>
               </button>
             )}
 
@@ -525,45 +523,45 @@ export default function App() {
               type="button"
               id="app-theme-toggle-btn"
               onClick={handleToggleTheme}
-              className="inline-flex min-h-10 items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer text-xs font-medium shrink-0"
+              className="inline-flex min-h-10 items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary hover:text-primary transition-colors cursor-pointer text-xs font-medium shrink-0"
               title={isDark ? 'Switch to High-Contrast Light Theme (T)' : 'Switch to Deep Zinc Dark Theme (T)'}
               aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
             >
               {isDark ? (
                 <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <Sun className="w-3.5 h-3.5 text-warning" />
                   <span className="hidden md:inline">Light</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-zinc-600" />
+                  <Moon className="w-3.5 h-3.5 text-muted" />
                   <span className="hidden md:inline">Dark</span>
                 </>
               )}
             </button>
 
             {/* Shortlist Filter & Exporter Action */}
-            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-0.5 rounded-xl shrink-0">
+            <div className="flex items-center gap-1 bg-surface border border-border-subtle p-0.5 rounded-[10px] shrink-0">
               <button
                 type="button"
                 onClick={() => isAuthenticated ? setShowSavedOnly(!showSavedOnly) : requestLogin()}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   showSavedOnly
-                    ? 'bg-zinc-100 text-zinc-950 font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-action text-on-action font-semibold'
+                    : 'text-secondary hover:text-primary'
                 }`}
                 title={showSavedOnly ? 'Show all results' : 'Filter by shortlist'}
               >
-                <Bookmark className={`w-3.5 h-3.5 ${showSavedOnly ? 'fill-zinc-950' : ''}`} />
+                <Bookmark className={`w-3.5 h-3.5 ${showSavedOnly ? 'fill-on-action' : ''}`} />
                 <span className="hidden xs:inline">Shortlist</span>
-                <span className="text-[11px] text-zinc-300 font-mono">({shortlistCount})</span>
+                <span className="text-xs text-secondary font-mono">({shortlistCount})</span>
               </button>
 
               {shortlistCount > 0 && (
                 <button
                   type="button"
                   onClick={() => setIsExportShortlistOpen(true)}
-                  className="p-1 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+                  className="p-1 rounded-lg text-secondary hover:text-accent hover:bg-surface-raised transition-colors cursor-pointer"
                   title="Export / View Shortlist"
                   aria-label="Export or view shortlist"
                 >
@@ -575,28 +573,28 @@ export default function App() {
             </div>
 
             {/* User + Authentication */}
-            <div className="flex items-center gap-1.5 ml-1 pl-2 sm:gap-2 sm:ml-0 sm:pl-3 border-l border-zinc-800 shrink-0">
-            {isAuthenticated ? <div className="hidden sm:flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-2 py-1">
-              <span className="text-[11px] text-zinc-400 max-w-[120px] truncate" title={user?.email}>
+            <div className="flex items-center gap-1.5 ml-1 pl-2 sm:gap-2 sm:ml-0 sm:pl-3 border-l border-border-subtle shrink-0">
+            {isAuthenticated ? <div className="hidden sm:flex items-center gap-2 rounded-[10px] border border-border-subtle bg-surface/60 px-2 py-1">
+              <span className="text-xs text-secondary max-w-[120px] truncate" title={user?.email}>
                 {user?.email}
               </span>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-rose-300 hover:border-rose-800/60 transition-colors cursor-pointer"
+                className="p-2 rounded-[10px] bg-surface border border-border-subtle text-secondary hover:text-danger hover:border-danger-border/60 transition-colors cursor-pointer"
                 title="Sign out"
                 aria-label="Sign out"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div> : (
-              <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-xl bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-white cursor-pointer">
+              <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-[10px] bg-action px-3 py-1.5 text-xs font-semibold text-on-action transition-colors hover:bg-action-hover cursor-pointer">
                 Sign in
               </button>
             )}
             {isAuthenticated && (
               <span
-                className="sm:hidden max-w-[132px] truncate rounded-lg bg-zinc-900/60 px-2 py-1.5 text-[10px] text-zinc-400"
+                className="sm:hidden max-w-[132px] truncate rounded-lg bg-surface/60 px-2 py-1.5 text-xs text-secondary"
                 title={user?.email || undefined}
               >
                 {user?.email}
@@ -607,30 +605,30 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isAuthenticated && (
-              <span className="hidden max-w-[180px] truncate text-xs text-zinc-400 sm:inline" title={user?.email}>
+              <span className="hidden max-w-[180px] truncate text-xs text-secondary sm:inline" title={user?.email}>
                 {user?.email}
               </span>
             )}
             {!isAuthenticated && (
-              <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-xl bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-white cursor-pointer">
+              <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-[10px] bg-action px-3 py-1.5 text-xs font-semibold text-on-action transition-colors hover:bg-action-hover cursor-pointer">
                 Sign in
               </button>
             )}
             {isAuthenticated && (
-              <button type="button" onClick={() => setIsAddCrewMemberOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer" aria-label="Add specialist" title="Add a specialist to the network">
+              <button type="button" onClick={() => setIsAddCrewMemberOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Add specialist" title="Add a specialist to the network">
                 <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Add Specialist</span>
+                <span className="hidden sm:inline">Add specialist</span>
               </button>
             )}
             {user?.role === 'admin' && <ServiceStatus />}
             {isAuthenticated && (
-              <button type="button" onClick={() => setShowSavedOnly(!showSavedOnly)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${showSavedOnly ? 'border-zinc-500 bg-zinc-100 text-zinc-950' : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100'}`} aria-pressed={showSavedOnly} title={showSavedOnly ? 'Show all specialists' : 'View shortlist'}>
-                <Bookmark className={`h-3.5 w-3.5 ${showSavedOnly ? 'fill-zinc-950' : ''}`} aria-hidden="true" />
+              <button type="button" onClick={() => setShowSavedOnly(!showSavedOnly)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${showSavedOnly ? 'border-border-strong bg-action text-on-action' : 'border-border-subtle bg-surface text-secondary hover:border-border-strong hover:bg-surface-raised hover:text-primary'}`} aria-pressed={showSavedOnly} title={showSavedOnly ? 'Show all specialists' : 'View shortlist'}>
+                <Bookmark className={`h-3.5 w-3.5 ${showSavedOnly ? 'fill-on-action' : ''}`} aria-hidden="true" />
                 <span className="hidden sm:inline">Shortlist</span>
-                <span className="font-mono text-[11px]">({shortlistCount})</span>
+                <span className="font-mono text-xs">({shortlistCount})</span>
               </button>
             )}
-            <button type="button" onClick={() => setIsMenuOpen(true)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 transition-colors hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer" aria-label="Open workspace menu" aria-expanded={isMenuOpen}>
+            <button type="button" onClick={() => setIsMenuOpen(true)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border border-border-subtle bg-surface text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Open workspace menu" aria-expanded={isMenuOpen}>
               <Menu className="h-4 w-4" />
             </button>
           </div>
@@ -658,14 +656,14 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main id="main-content" className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 flex flex-col justify-start" aria-label="Specialist network workspace">
+      <main id="main-content" className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-start px-4 sm:px-6" aria-label="Specialist network workspace">
         {/* Live-data required banner (prod, no demo fallback) */}
         {isAuthenticated && !profilesLoading && !isLive && !demoActive && (
-          <div className="mt-4 rounded-2xl border border-rose-800/60 bg-rose-950/30 px-4 py-3 flex items-start gap-3" role="alert">
-            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+          <div className="mt-4 rounded-[14px] border border-danger-border/60 bg-danger-soft/30 px-4 py-3 flex items-start gap-3" role="alert">
+            <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h2 className="text-sm font-semibold text-rose-200">Live specialist data unavailable</h2>
-              <p className="text-xs text-rose-300/80 mt-0.5">
+              <h2 className="text-sm font-semibold text-danger">Live specialist data unavailable</h2>
+              <p className="text-xs text-danger/80 mt-0.5">
                 The backend returned no data{profilesError ? ` (${profilesError})` : ''}. Demo profiles
                 are disabled in this build — sign in and confirm the API is reachable.
               </p>
@@ -673,14 +671,14 @@ export default function App() {
             <button
               type="button"
               onClick={refetchProfiles}
-              className="shrink-0 min-h-11 px-3 py-1.5 rounded-lg bg-rose-950/60 border border-rose-700/60 text-rose-200 hover:bg-rose-900/60 text-xs font-medium transition-colors cursor-pointer"
+              className="shrink-0 min-h-11 px-3 py-1.5 rounded-lg bg-danger-soft/60 border border-danger-border/60 text-danger hover:bg-danger-soft/60 text-xs font-medium transition-colors cursor-pointer"
             >
               Retry
             </button>
           </div>
         )}
         {/* Modern Search Bar: stays available while scanning a long result set. */}
-        <div className={isSearchActive ? 'sticky top-16 z-20 -mx-4 px-4 bg-zinc-950/90 backdrop-blur-md sm:-mx-6 sm:px-6' : ''}>
+        <div className={isSearchActive ? 'sticky top-16 z-20 -mx-4 px-4 bg-canvas/90 backdrop-blur-md sm:-mx-6 sm:px-6' : ''}>
           <ModernHeroSearch
             query={query}
             onChange={(val) => {
@@ -704,14 +702,14 @@ export default function App() {
 
         {/* Results Header (Active Search Only) */}
         {isSearchActive && (
-          <div className="flex flex-col gap-3 py-2 text-xs text-zinc-400 border-b border-zinc-800/60 sm:flex-row sm:items-center sm:justify-between">
+          <div className="ui-panel mb-3 flex flex-col gap-3 px-3 py-2.5 text-xs text-secondary sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 flex-wrap" aria-live="polite">
               <span>
-                Found <strong className="text-zinc-100 font-semibold">{results.length}</strong> {results.length === 1 ? 'specialist' : 'specialists'}
+                Found <strong className="text-primary font-semibold">{results.length}</strong> {results.length === 1 ? 'specialist' : 'specialists'}
               </span>
               {isResultsUpdating && (
-                <span className="inline-flex items-center gap-1.5 text-zinc-500">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" aria-hidden="true" />
+                <span className="inline-flex items-center gap-1.5 text-muted">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
                   Updating results…
                 </span>
               )}
@@ -735,13 +733,30 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex w-full items-center gap-3 sm:w-auto sm:justify-end">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+              <SegmentedControl
+                label="Result view"
+                value={viewMode}
+                onChange={setViewMode}
+                className="hidden md:inline-flex"
+                options={[
+                  { value: 'split', label: 'Split', icon: <Columns className="h-3.5 w-3.5" aria-hidden="true" /> },
+                  { value: 'grid', label: 'Cards', icon: <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" /> },
+                  { value: 'table', label: 'Matrix', icon: <Table className="h-3.5 w-3.5" aria-hidden="true" /> },
+                ]}
+              />
+              {compareIds.length > 0 && (
+                <button type="button" onClick={() => setIsCompareModalOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 font-semibold text-primary transition-colors hover:bg-surface-raised">
+                  <Scale className="h-3.5 w-3.5" aria-hidden="true" />
+                  Compare {compareIds.length}
+                </button>
+              )}
               {/* Sort Dropdown */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
                 aria-label="Sort specialists"
-                className="min-h-11 min-w-0 flex-1 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs rounded-lg px-2.5 py-1 focus:outline-none focus:border-zinc-700 cursor-pointer font-medium sm:flex-none"
+                className="ui-control min-w-0 flex-1 px-2.5 text-xs font-medium text-secondary sm:flex-none"
               >
                 <option value="relevance">Sort: Relevance & Match</option>
                 <option value="experience-desc">Sort: Experience (High to Low)</option>
@@ -754,7 +769,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleResetAll}
-                  className="min-h-11 shrink-0 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer text-xs underline"
+                  className="min-h-11 shrink-0 rounded-lg px-2 text-xs font-medium text-secondary transition-colors hover:bg-surface-raised hover:text-primary"
                 >
                   Clear all
                 </button>
@@ -788,9 +803,9 @@ export default function App() {
               viewMode === 'split' ? (
                 isFocusMode ? (
                   /* Focused Specialist Workspace (Enlarged & Centered for comfortable working) */
-                  <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-zinc-950/95 px-2 py-3 sm:p-4 backdrop-blur-sm">
+                  <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-canvas/95 px-2 py-3 sm:p-4 backdrop-blur-sm">
                     {/* Crew Selector Navigation Strip */}
-                    <div className="w-full max-w-6xl mx-auto flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-2.5 sm:p-3 rounded-2xl backdrop-blur-md shadow-xl gap-3 shrink-0">
+                    <div className="w-full max-w-6xl mx-auto flex items-center justify-between bg-surface/90 border border-border-subtle p-2.5 sm:p-3 rounded-[14px] backdrop-blur-md shadow-xl gap-3 shrink-0">
                       <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none max-w-2xl">
                         {results.map((profile, idx) => {
                           const isSel = (activeSelectedProfile?.id || selectedProfileId) === profile.id;
@@ -800,20 +815,20 @@ export default function App() {
                               id={`specialist-result-${profile.id}`}
                               type="button"
                               onClick={() => setSelectedProfileId(profile.id)}
-                              className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl text-xs font-medium shrink-0 transition-all cursor-pointer ${
+                              className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-[10px] text-xs font-medium shrink-0 transition-all cursor-pointer ${
                                 isSel
-                                  ? 'bg-zinc-800 text-white border border-zinc-600 shadow-md font-semibold'
-                                  : 'bg-zinc-950/60 border border-zinc-850 text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-200'
+                                  ? 'bg-surface-raised text-primary border border-border-strong shadow-md font-semibold'
+                                  : 'bg-canvas/60 border border-border-subtle text-secondary hover:bg-surface-raised/80 hover:text-primary'
                               }`}
                             >
                               <img
                                 src={profile.avatar}
                                 alt={profile.name}
                                 referrerPolicy="no-referrer"
-                                className="w-5 h-5 rounded-full object-cover border border-zinc-700"
+                                className="w-5 h-5 rounded-full object-cover border border-border-strong"
                               />
                               <span className="truncate max-w-[110px]">{profile.name}</span>
-                              <span className="font-mono text-[10px] opacity-60">#{idx + 1}</span>
+                              <span className="font-mono text-xs opacity-60">#{idx + 1}</span>
                             </button>
                           );
                         })}
@@ -823,11 +838,11 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setIsFocusMode(false)}
-                          className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                          className="px-3.5 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-primary text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
                           title="Exit Focus Mode (F / Esc)"
                         >
                           <span>Exit Focus</span>
-                          <span className="font-mono text-[10px] text-zinc-400">Esc</span>
+                          <span className="font-mono text-xs text-secondary">Esc</span>
                         </button>
                       </div>
                     </div>
@@ -879,9 +894,9 @@ export default function App() {
                   <div className="scan-workspace grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch min-h-0 md:min-h-[520px] py-2 sm:py-3">
                     {/* Left Column: Animated List */}
                     <section aria-label="Specialist search results" className="md:col-span-5 min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2">
-                      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-zinc-950/95 px-1 pb-2 pt-1 backdrop-blur-sm">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Results</span>
-                        <span className="font-mono text-xs text-zinc-500">Select to view dossier</span>
+                      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Results</span>
+                        <span className="font-mono text-xs text-muted">Select to view dossier</span>
                       </div>
                       <AnimatePresence mode="popLayout">
                         {results.map((profile, index) => {
@@ -903,10 +918,10 @@ export default function App() {
                                 ease: [0.16, 1, 0.3, 1],
                               }}
                               key={profile.id}
-                              className={`group relative p-3.5 rounded-2xl border transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
+                              className={`group relative p-3.5 rounded-[14px] border transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
                                 isSelected
-                                  ? 'bg-zinc-900 border-zinc-700 shadow-lg shadow-black/10'
-                                  : 'bg-transparent hover:bg-zinc-900/60 border-transparent hover:border-zinc-800'
+                                  ? 'bg-surface border-border-strong shadow-lg shadow-black/10'
+                                  : 'bg-transparent hover:bg-surface/60 border-transparent hover:border-border-subtle'
                               }`}
                             >
                               <button
@@ -926,11 +941,11 @@ export default function App() {
                                     src={profile.avatar}
                                     alt={profile.name}
                                     referrerPolicy="no-referrer"
-                                    className="w-11 h-11 rounded-lg object-cover border border-zinc-800/90 group-hover:border-zinc-700 transition-colors"
+                                    className="w-11 h-11 rounded-lg object-cover border border-border-subtle/90 group-hover:border-border-strong transition-colors"
                                   />
                                   {isAvailableNow && (
                                     <span
-                                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-zinc-950"
+                                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-positive border-2 border-border-subtle"
                                       title="Available immediately"
                                     />
                                   )}
@@ -939,37 +954,37 @@ export default function App() {
                                 <div className="min-w-0 space-y-1 flex-1">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-1.5 min-w-0">
-                                    <h3 className={`font-semibold text-sm tracking-tight truncate ${isSelected ? 'text-blue-300' : 'text-zinc-100 group-hover:text-zinc-50'}`}>
+                                    <h3 className={`font-semibold text-sm tracking-tight truncate ${isSelected ? 'text-accent' : 'text-primary group-hover:text-primary'}`}>
                                         <HighlightText text={profile.name} query={committedQuery} />
                                       </h3>
                                       {profile.isHighlyRecommended && (
-                                        <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" /></span>
+                                        <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                                       )}
                                     </div>
 
-                                    <span className="text-xs font-mono font-semibold text-zinc-200 shrink-0">
+                                    <span className="text-xs font-mono font-semibold text-primary shrink-0">
                                       {profile.dayRate ? `£${profile.dayRate}/d` : 'Rate n/a'}
                                     </span>
                                   </div>
 
-                                  <p className="text-xs text-zinc-400 truncate font-normal">
+                                  <p className="text-xs text-secondary truncate font-normal">
                                     <HighlightText text={profile.title} query={committedQuery} />
                                   </p>
 
-                                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400 pt-1">
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-secondary pt-1">
                                     <span className="badge-accent px-1.5 py-0.5 rounded font-medium">
                                       {profile.department}
                                     </span>
                                     <span className={`px-1.5 py-0.5 rounded font-medium ${isAvailableNow ? 'badge-positive' : 'badge-neutral'}`}>
                                       {profile.availability.replace('Available ', '')}
                                     </span>
-                                    <span className="truncate text-zinc-400">{profile.location.split(',')[0]}</span>
-                                    <span className="font-mono text-zinc-300">{profile.yearsOfExperience}y</span>
-                                    {profile.rating && <span className="font-mono text-amber-300">★ {profile.rating.toFixed(1)}</span>}
+                                    <span className="truncate text-secondary">{profile.location.split(',')[0]}</span>
+                                    <span className="font-mono text-secondary">{profile.yearsOfExperience}y</span>
+                                    {profile.rating && <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>}
                                   </div>
-                                  <div className="flex items-center gap-1.5 pt-1 text-[11px] text-zinc-500">
+                                  <div className="flex items-center gap-1.5 pt-1 text-xs text-muted">
                                     {profile.skills.slice(0, 2).map((skill) => (
-                                      <span key={skill} className="truncate rounded-md border border-zinc-800 bg-zinc-950/60 px-1.5 py-0.5 text-zinc-400">
+                                      <span key={skill} className="truncate rounded-md border border-border-subtle bg-canvas/60 px-1.5 py-0.5 text-secondary">
                                         <HighlightText text={skill} query={committedQuery} />
                                       </span>
                                     ))}
@@ -1007,8 +1022,8 @@ export default function App() {
                     {/* Right Column: Live Specialist Dossier */}
                     <div className="hidden md:col-span-7 md:block min-h-0 h-full overflow-hidden md:sticky md:top-20">
                       <div className="mb-2 flex items-center justify-between px-1 md:hidden">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Selected dossier</span>
-                        <span className="text-[11px] text-zinc-500">Scroll for details</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Selected dossier</span>
+                        <span className="text-xs text-muted">Scroll for details</span>
                       </div>
                       <AnimatePresence mode="wait">
                         <motion.div
@@ -1100,7 +1115,7 @@ export default function App() {
                             ease: [0.16, 1, 0.3, 1],
                           }}
                           key={profile.id}
-                          className="group bg-zinc-900/35 hover:bg-zinc-900/70 border border-transparent hover:border-zinc-800 rounded-2xl p-5 transition-[background-color,border-color,box-shadow] duration-200 flex flex-col justify-between space-y-4 hover:shadow-xl hover:shadow-black/10"
+                          className="group bg-surface/35 hover:bg-surface/70 border border-transparent hover:border-border-subtle rounded-[14px] p-5 transition-[background-color,border-color,box-shadow] duration-200 flex flex-col justify-between space-y-4 hover:shadow-xl hover:shadow-black/10"
                         >
                           {/* Header Row */}
                           <div className="flex items-start justify-between gap-3">
@@ -1110,11 +1125,11 @@ export default function App() {
                                   src={profile.avatar}
                                   alt={profile.name}
                                   referrerPolicy="no-referrer"
-                                  className="w-11 h-11 rounded-xl object-cover border border-zinc-800"
+                                  className="w-11 h-11 rounded-[10px] object-cover border border-border-subtle"
                                 />
                                 {isAvailableNow && (
                                   <span
-                                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-zinc-950"
+                                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-positive border border-border-subtle"
                                     title="Available immediately"
                                   />
                                 )}
@@ -1122,19 +1137,19 @@ export default function App() {
 
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <h3 className="font-medium text-sm text-zinc-100 group-hover:text-blue-400 transition-colors truncate">
+                                  <h3 className="font-medium text-sm text-primary group-hover:text-accent transition-colors truncate">
                                     <HighlightText text={profile.name} query={committedQuery} />
                                   </h3>
                                   {profile.isHighlyRecommended && (
-                                    <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" /></span>
+                                    <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                                   )}
                                 </div>
-                                <p className="text-xs text-zinc-400 truncate font-light">
+                                <p className="text-xs text-secondary truncate font-light">
                                   <HighlightText text={profile.title} query={committedQuery} />
                                 </p>
                                 {profile.isHighlyRecommended && (
-                                  <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-blue-300">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                                     Strong match
                                   </span>
                                 )}
@@ -1156,23 +1171,23 @@ export default function App() {
                           </div>
 
                           {/* Compact Specs Line */}
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400 border-t border-b border-zinc-800/50 py-1.5">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary border-t border-b border-border-subtle/50 py-1.5">
                             <span className="flex items-center gap-1 truncate">
-                              <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
-                              <HighlightText text={profile.location.split(',')[0]!} query={committedQuery} />
+                              <MapPin className="w-3 h-3 text-muted shrink-0" />
+                              <HighlightText text={profile.location.split(',')[0] ?? profile.location} query={committedQuery} />
                             </span>
                             <span>•</span>
                             <span>{profile.yearsOfExperience} yrs exp</span>
                             {profile.dayRate && (
                               <>
                                 <span>•</span>
-                                <span className="text-emerald-400 font-medium">£{profile.dayRate}/day</span>
+                                <span className="text-positive font-medium">£{profile.dayRate}/day</span>
                               </>
                             )}
-                            <span className={isAvailableNow ? 'text-emerald-300 font-medium' : 'text-zinc-400'}>
+                            <span className={isAvailableNow ? 'text-positive font-medium' : 'text-secondary'}>
                               {profile.availability.replace('Available ', '')}
                             </span>
-                            {profile.rating && <span className="font-mono text-amber-300">★ {profile.rating.toFixed(1)}</span>}
+                            {profile.rating && <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>}
                           </div>
 
                           {/* Certifications with Tooltips */}
@@ -1193,23 +1208,23 @@ export default function App() {
                           )}
 
                           {/* Bio snippet */}
-                          <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed font-light">
+                          <p className="text-xs text-secondary line-clamp-2 leading-relaxed font-light">
                             <HighlightText text={profile.bio} query={committedQuery} />
                           </p>
 
                           {/* Footer / Skills */}
-                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-850">
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {profile.skills.slice(0, 3).map((skill) => (
                                 <span
                                   key={skill}
-                                  className="px-2 py-0.5 rounded-md bg-zinc-800/80 text-zinc-400 text-[11px]"
+                                  className="px-2 py-0.5 rounded-md bg-surface-raised/80 text-secondary text-xs"
                                 >
                                   <HighlightText text={skill} query={committedQuery} />
                                 </span>
                               ))}
                               {profile.skills.length > 3 && (
-                                <span className="text-[11px] text-zinc-500 font-mono">
+                                <span className="text-xs text-muted font-mono">
                                   +{profile.skills.length - 3}
                                 </span>
                               )}
@@ -1220,7 +1235,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => setModalProfile(profile)}
                                 aria-label={`Open ${profile.name} dossier`}
-                                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-blue-800/60 bg-blue-950/40 px-2.5 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:border-blue-600/70 hover:bg-blue-900/50 hover:text-blue-100 shrink-0"
+                                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-border-strong/60 bg-accent-soft/40 px-2.5 py-1.5 text-xs font-semibold text-accent transition-colors hover:border-border-strong/70 hover:bg-accent-soft/50 hover:text-accent shrink-0"
                               >
                                 Open dossier <ArrowUpRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                               </button>
@@ -1239,23 +1254,23 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.97, y: -10 }}
                 transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="text-center py-14 px-4 border border-zinc-800/60 rounded-2xl bg-zinc-900/20 space-y-3"
+                className="text-center py-14 px-4 border border-border-subtle/60 rounded-[14px] bg-surface/20 space-y-3"
               >
-                <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mx-auto">
-                  <Compass className="w-6 h-6 text-zinc-500" />
+                <div className="w-12 h-12 rounded-[14px] bg-surface border border-border-subtle flex items-center justify-center text-muted mx-auto">
+                  <Compass className="w-6 h-6 text-muted" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-zinc-200">No close matches found</h3>
-                  <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  <h3 className="text-sm font-semibold text-primary">No close matches found</h3>
+                  <p className="text-xs text-muted max-w-sm mx-auto">
                     {committedQuery.trim()
-                      ? <>Nothing in the network matches <span className="text-zinc-300">“{committedQuery.trim()}”</span> yet. Try a broader role, skill, or region.</>
+                      ? <>Nothing in the network matches <span className="text-secondary">“{committedQuery.trim()}”</span> yet. Try a broader role, skill, or region.</>
                       : 'No active specialists match the selected filters. Try widening your search.'}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleResetAll}
-                  className="min-h-11 px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 transition-colors cursor-pointer font-medium"
+                  className="min-h-11 px-3.5 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-xs text-primary transition-colors cursor-pointer font-medium"
                 >
                   Reset all filters
                 </button>

@@ -57,11 +57,11 @@ export const MatchEvidence: FC<MatchEvidenceProps> = ({
   if (uniqueEvidence.length === 0) return null;
 
   return (
-    <div className={compact ? 'mt-1.5 flex items-start gap-1.5 text-[10px] leading-4 text-emerald-200/85' : 'rounded-lg border border-emerald-900/45 bg-emerald-950/20 px-2.5 py-2'}>
-      <CheckCircle2 className={compact ? 'mt-0.5 h-3 w-3 shrink-0 text-emerald-400' : 'mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400'} aria-hidden="true" />
+    <div className={compact ? 'mt-1.5 flex items-start gap-1.5 text-xs leading-4 text-positive/85' : 'rounded-lg border border-positive-border/45 bg-positive-soft/20 px-2.5 py-2'}>
+      <CheckCircle2 className={compact ? 'mt-0.5 h-3 w-3 shrink-0 text-positive' : 'mt-0.5 h-3.5 w-3.5 shrink-0 text-positive'} aria-hidden="true" />
       <div className="min-w-0">
-        {!compact && <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300/75">Why matched</p>}
-        <p className={compact ? 'truncate' : 'text-[11px] leading-5 text-emerald-100/90'}>
+        {!compact && <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-positive/75">Why matched</p>}
+        <p className={compact ? 'truncate' : 'text-xs leading-5 text-positive/90'}>
           {uniqueEvidence.join(' · ')}
         </p>
       </div>

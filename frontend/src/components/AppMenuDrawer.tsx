@@ -71,25 +71,25 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="app-menu-title"
-        className="ui-drawer-enter absolute right-0 top-0 flex h-full w-[min(100%,360px)] flex-col border-l border-zinc-800 bg-zinc-950 p-5 shadow-2xl"
+        className="ui-drawer-enter absolute right-0 top-0 flex h-full w-[min(100%,360px)] flex-col border-l border-border-subtle bg-canvas p-5 shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+        <div className="flex items-center justify-between border-b border-border-subtle pb-4">
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">Workspace</p>
-            <h2 id="app-menu-title" className="mt-1 text-base font-semibold text-zinc-100">Menu</h2>
+            <p className="text-xs font-mono uppercase tracking-[0.18em] text-muted">Workspace</p>
+            <h2 id="app-menu-title" className="mt-1 text-base font-semibold text-primary">Menu</h2>
           </div>
-          <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-100 cursor-pointer" aria-label="Close menu">
+          <button type="button" onClick={onClose} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border border-border-subtle bg-surface text-secondary hover:text-primary cursor-pointer" aria-label="Close menu">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-5">
-          <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">Workspace actions</p>
+          <p className="mb-2 text-xs font-mono uppercase tracking-[0.18em] text-muted">Workspace actions</p>
           <div className="space-y-1">
             {isAuthenticated && (
               <button type="button" onClick={() => closeAfter(onOpenAddSpecialist)} className="menu-drawer-action menu-drawer-action-primary">
                 <UserPlus className="h-4 w-4" aria-hidden="true" />
-                <span>Add Specialist</span>
+                <span>Add specialist</span>
               </button>
             )}
             {compareCount > 0 && isAuthenticated && (
@@ -106,15 +106,15 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
               </button>
             )}
             {isSearchActive && isAuthenticated && (
-              <div className="mt-4 border-t border-zinc-800 pt-4">
-                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">Result view</p>
-                <div className="grid grid-cols-3 gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+              <div className="mt-4 border-t border-border-subtle pt-4">
+                <p className="mb-2 text-xs font-mono uppercase tracking-[0.18em] text-muted">Result view</p>
+                <div className="grid grid-cols-3 gap-1 rounded-[10px] border border-border-subtle bg-surface p-1">
                   {([
                     ['split', Columns, 'Split'],
                     ['grid', LayoutGrid, 'Cards'],
                     ['table', Table, 'Matrix'],
                   ] as const).map(([mode, Icon, label]) => (
-                    <button key={mode} type="button" onClick={() => onViewModeChange(mode)} className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg text-xs cursor-pointer ${viewMode === mode ? 'bg-zinc-100 text-zinc-950 font-semibold' : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`} aria-pressed={viewMode === mode}>
+                    <button key={mode} type="button" onClick={() => onViewModeChange(mode)} className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-lg text-xs cursor-pointer ${viewMode === mode ? 'bg-action text-on-action font-semibold' : 'text-muted hover:bg-surface-raised hover:text-primary'}`} aria-pressed={viewMode === mode}>
                       <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                       {label}
                     </button>
@@ -124,7 +124,7 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
             )}
           </div>
 
-          <p className="mb-2 mt-6 text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">Preferences</p>
+          <p className="mb-2 mt-6 text-xs font-mono uppercase tracking-[0.18em] text-muted">Preferences</p>
           <div className="space-y-1">
             <button type="button" onClick={() => closeAfter(onToggleTheme)} className="menu-drawer-action">
               {isDark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
@@ -133,16 +133,16 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
             <button type="button" onClick={() => closeAfter(onOpenShortcuts)} className="menu-drawer-action">
               <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
               <span>Keyboard shortcuts</span>
-              <kbd className="ml-auto rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500">?</kbd>
+              <kbd className="ml-auto rounded border border-border-strong px-1.5 py-0.5 text-xs text-muted">?</kbd>
             </button>
           </div>
         </div>
 
-        <div className="border-t border-zinc-800 pt-4">
+        <div className="border-t border-border-subtle pt-4">
           {isAuthenticated ? (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-              <span className="min-w-0 truncate text-xs text-zinc-400">{email}</span>
-              <button type="button" onClick={() => closeAfter(onLogout)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:border-rose-800/60 hover:text-rose-300 cursor-pointer" aria-label="Sign out">
+            <div className="flex items-center justify-between gap-3 rounded-[10px] border border-border-subtle bg-surface/60 p-3">
+              <span className="min-w-0 truncate text-xs text-secondary">{email}</span>
+              <button type="button" onClick={() => closeAfter(onLogout)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border-subtle text-secondary hover:border-danger-border/60 hover:text-danger cursor-pointer" aria-label="Sign out">
                 <LogOut className="h-4 w-4" />
               </button>
             </div>

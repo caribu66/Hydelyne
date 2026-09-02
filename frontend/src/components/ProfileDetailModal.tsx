@@ -112,7 +112,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
     >
       <div
         ref={dialogRef}
-        className="ui-surface-enter flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-100 shadow-2xl sm:max-h-[92vh]"
+        className="ui-surface-enter flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[14px] border border-border-subtle bg-surface text-primary shadow-2xl sm:max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -120,7 +120,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
         aria-describedby="profile-modal-description"
       >
         {/* Header Hero Area */}
-        <div className="sticky top-0 z-10 p-4 sm:p-6 bg-zinc-950/95 border-b border-zinc-800 backdrop-blur-sm">
+        <div className="sticky top-0 z-10 p-4 sm:p-6 bg-canvas/95 border-b border-border-subtle backdrop-blur-sm">
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="flex items-start gap-4 min-w-0">
               <div className="relative shrink-0">
@@ -128,11 +128,11 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   src={profile.avatar}
                   alt={profile.name}
                   referrerPolicy="no-referrer"
-                  className="w-16 h-16 rounded-2xl object-cover border border-zinc-700 shadow-md"
+                  className="w-16 h-16 rounded-[14px] object-cover border border-border-strong shadow-md"
                 />
                 {isAvailableNow && (
                   <span
-                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-zinc-900 shadow-xs"
+                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-positive border-2 border-border-subtle shadow-xs"
                     title="Available for immediate deployment"
                   />
                 )}
@@ -140,28 +140,28 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 id="profile-modal-name" className="text-lg font-bold text-zinc-100">
+                  <h2 id="profile-modal-name" className="text-lg font-bold text-primary">
                     {profile.name}
                   </h2>
                   {profile.isHighlyRecommended && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-950/80 border border-blue-800/60 text-xs text-blue-300 font-medium">
-                      <BadgeCheck className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-accent-soft/80 border border-border-strong/60 text-xs text-accent font-medium">
+                      <BadgeCheck className="w-3.5 h-3.5 text-accent" />
                       <span>Verified Specialist</span>
                     </span>
                   )}
                 </div>
-                <p id="profile-modal-description" className="text-xs sm:text-sm text-zinc-300 font-medium">
+                <p id="profile-modal-description" className="text-xs sm:text-sm text-secondary font-medium">
                   {profile.title}
                 </p>
-                <div className="flex items-center gap-2 text-xs text-zinc-400 pt-0.5 flex-wrap">
+                <div className="flex items-center gap-2 text-xs text-secondary pt-0.5 flex-wrap">
                   <span className="flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    <MapPin className="w-3.5 h-3.5 text-secondary shrink-0" />
                     <span>{profile.location}</span>
                   </span>
                   <span>•</span>
-                  <span className="text-blue-400 font-medium">{profile.department}</span>
+                  <span className="text-accent font-medium">{profile.department}</span>
                   <span>•</span>
-                  <span className="font-mono text-zinc-300">{profile.yearsOfExperience} yrs experience</span>
+                  <span className="font-mono text-secondary">{profile.yearsOfExperience} yrs experience</span>
                 </div>
               </div>
             </div>
@@ -172,10 +172,10 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   type="button"
                   onClick={() => onToggleCompare(profile)}
                   aria-label={isCompared ? `Remove ${profile.name} from comparison` : `Compare ${profile.name}`}
-                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border transition-colors cursor-pointer ${
                     isCompared
-                      ? 'bg-blue-950/70 border-blue-700 text-blue-300'
-                      : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-white'
+                      ? 'bg-accent-soft/70 border-border-strong text-accent'
+                      : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
                   }`}
                   title={isCompared ? 'Remove from compare' : 'Add to compare'}
                 >
@@ -188,7 +188,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   type="button"
                   onClick={() => onPrintDossier(profile)}
                   aria-label={`Print ${profile.name} profile`}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-zinc-800/80 border border-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised/80 border border-border-strong text-secondary hover:text-primary transition-colors cursor-pointer"
                   title="Print specialist profile"
                 >
                   <Printer className="w-4 h-4" />
@@ -200,7 +200,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   type="button"
                   onClick={() => setIsDeleteConfirmOpen(true)}
                   aria-label={`Delete ${profile.name}`}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-rose-900/80 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 hover:text-rose-100 transition-colors cursor-pointer"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border border-danger-border/80 bg-danger-soft/40 text-danger hover:bg-danger-soft/60 hover:text-danger transition-colors cursor-pointer"
                   title="Delete specialist"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -211,15 +211,15 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 type="button"
                 onClick={() => onToggleBookmark(profile.id)}
                 aria-label={isBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
-                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border transition-colors cursor-pointer ${
                   isBookmarked
-                    ? 'bg-blue-600 text-white border-blue-500'
-                    : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-white'
+                    ? 'bg-action text-on-action border-border-strong'
+                    : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
                 }`}
                 title={isBookmarked ? 'Remove from shortlist' : 'Save to shortlist'}
               >
                 {isBookmarked ? (
-                  <BookmarkCheck className="w-4 h-4 fill-white" />
+                  <BookmarkCheck className="w-4 h-4 fill-on-action" />
                 ) : (
                   <Bookmark className="w-4 h-4" />
                 )}
@@ -229,7 +229,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close specialist profile"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Close"
               >
                 <X className="w-4 h-4" />
@@ -238,52 +238,52 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="mt-5 grid grid-cols-2 border-y border-zinc-800/70 py-3 sm:grid-cols-4">
-            <div className="px-3 sm:border-r sm:border-zinc-800/70 sm:pl-0">
-              <span className="text-[10px] text-zinc-400 block uppercase font-mono">Mobilization</span>
+          <div className="mt-5 grid grid-cols-2 border-y border-border-subtle/70 py-3 sm:grid-cols-4">
+            <div className="px-3 sm:border-r sm:border-border-subtle/70 sm:pl-0">
+              <span className="text-xs text-secondary block uppercase font-mono">Mobilization</span>
               <span
                 className={`inline-flex items-center gap-1.5 text-xs font-semibold mt-0.5 ${
-                  isAvailableNow ? 'text-emerald-400' : 'text-zinc-300'
+                  isAvailableNow ? 'text-positive' : 'text-secondary'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${isAvailableNow ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                <span className={`w-2 h-2 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
                 <span>{profile.availability}</span>
               </span>
             </div>
 
-            <div className="border-l border-zinc-800/70 px-3 sm:border-l-0 sm:border-r">
-              <span className="text-[10px] text-zinc-400 block uppercase font-mono">Rating</span>
-              <span className="font-semibold text-xs text-amber-300 block mt-0.5 font-mono">
+            <div className="border-l border-border-subtle/70 px-3 sm:border-l-0 sm:border-r">
+              <span className="text-xs text-secondary block uppercase font-mono">Rating</span>
+              <span className="font-semibold text-xs text-warning block mt-0.5 font-mono">
                 ★ {profile.rating ? profile.rating.toFixed(1) : '—'}
-                {profile.reviewCount ? <span className="ml-1 text-zinc-500 font-normal">({profile.reviewCount})</span> : null}
+                {profile.reviewCount ? <span className="ml-1 text-muted font-normal">({profile.reviewCount})</span> : null}
               </span>
             </div>
 
-            <div className="mt-3 border-t border-zinc-800/70 px-3 pt-3 sm:mt-0 sm:border-t-0 sm:border-r sm:pt-0">
-              <span className="text-[10px] text-zinc-400 block uppercase font-mono">Day Rate</span>
-              <span className="font-semibold text-xs text-emerald-400 block mt-0.5 font-mono">
+            <div className="mt-3 border-t border-border-subtle/70 px-3 pt-3 sm:mt-0 sm:border-t-0 sm:border-r sm:pt-0">
+              <span className="text-xs text-secondary block uppercase font-mono">Day Rate</span>
+              <span className="font-semibold text-xs text-positive block mt-0.5 font-mono">
                 {profile.dayRate ? `£${profile.dayRate}/day` : 'Upon Request'}
               </span>
             </div>
 
-            <div className="mt-3 border-l border-t border-zinc-800/70 px-3 pt-3 sm:mt-0 sm:border-t-0 sm:pr-0 sm:pt-0">
-              <span className="text-[10px] text-zinc-400 block uppercase font-mono">Experience</span>
-              <span className="font-semibold text-xs text-zinc-200 block mt-0.5 font-mono">
+            <div className="mt-3 border-l border-t border-border-subtle/70 px-3 pt-3 sm:mt-0 sm:border-t-0 sm:pr-0 sm:pt-0">
+              <span className="text-xs text-secondary block uppercase font-mono">Experience</span>
+              <span className="font-semibold text-xs text-primary block mt-0.5 font-mono">
                 {profile.yearsOfExperience} years
               </span>
             </div>
           </div>
 
           {/* Subtabs */}
-          <div role="group" aria-label={`${profile.name} profile sections`} className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-800 flex-wrap">
+          <div role="group" aria-label={`${profile.name} profile sections`} className="flex items-center gap-2 mt-4 pt-3 border-t border-border-subtle flex-wrap">
             <button
               type="button"
               aria-pressed={activeTab === 'profile'}
               onClick={() => setActiveTab('profile')}
               className={`min-h-11 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'profile'
-                  ? 'bg-zinc-800 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-surface-raised text-primary shadow-xs'
+                  : 'text-secondary hover:text-primary'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -296,11 +296,11 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               onClick={() => setActiveTab('radar')}
               className={`min-h-11 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'radar'
-                  ? 'bg-zinc-800 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-surface-raised text-primary shadow-xs'
+                  : 'text-secondary hover:text-primary'
               }`}
             >
-              <Activity className="w-3.5 h-3.5 text-zinc-400" />
+              <Activity className="w-3.5 h-3.5 text-secondary" />
               <span>Skills Radar</span>
             </button>
 
@@ -310,13 +310,13 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               onClick={() => setActiveTab('documents')}
               className={`min-h-11 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'documents'
-                  ? 'bg-zinc-800 text-white shadow-xs'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-surface-raised text-primary shadow-xs'
+                  : 'text-secondary hover:text-primary'
               }`}
             >
-              <FileCheck className="w-3.5 h-3.5 text-zinc-400" />
+              <FileCheck className="w-3.5 h-3.5 text-secondary" />
               <span>Compliance Documents</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px]">
+              <span className="px-1.5 py-0.2 rounded-full bg-surface-raised text-secondary font-mono text-xs">
                 {documents.length}
               </span>
             </button>
@@ -337,8 +337,8 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
           ) : activeTab === 'radar' ? (
             <div className="space-y-4">
               <CandidateSkillRadarChart profile={profile} size="lg" showLegend={true} />
-              <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800 text-xs text-zinc-400">
-                <span className="font-semibold text-zinc-200 block mb-1 font-mono text-[11px] uppercase">
+              <div className="bg-canvas/50 p-4 rounded-[10px] border border-border-subtle text-xs text-secondary">
+                <span className="font-semibold text-primary block mb-1 font-mono text-xs uppercase">
                   Offshore Competency Breakdown
                 </span>
                 <p>
@@ -350,17 +350,17 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
             <>
               {/* Bio Overview */}
               <div className="space-y-1.5">
-                <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px]">
+                <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs">
                   Specialist Overview
                 </h3>
-                <p className="text-zinc-300 leading-relaxed">{profile.bio}</p>
+                <p className="text-secondary leading-relaxed">{profile.bio}</p>
               </div>
 
               {/* D3 Radar Chart Summary Card with Expand/Collapse Toggle */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5 font-mono">
-                    <Activity className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5 font-mono">
+                    <Activity className="w-3.5 h-3.5 text-secondary" />
                     <span>Competency Radar Analysis</span>
                   </h3>
                   <div className="flex items-center gap-2">
@@ -368,20 +368,20 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                       type="button"
                       id="modal-toggle-radar-collapse-btn"
                       onClick={() => setIsRadarExpanded(!isRadarExpanded)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-950/70 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer shadow-2xs"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-canvas/70 hover:bg-surface-raised border border-border-subtle text-secondary hover:text-primary transition-colors cursor-pointer shadow-2xs"
                       title={isRadarExpanded ? 'Collapse radar breakdown' : 'Expand radar breakdown'}
                     >
                       <span>{isRadarExpanded ? 'Collapse' : 'Expand'}</span>
                       {isRadarExpanded ? (
-                        <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                        <ChevronUp className="w-3.5 h-3.5 text-secondary" />
                       ) : (
-                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                        <ChevronDown className="w-3.5 h-3.5 text-secondary" />
                       )}
                     </button>
                     <button
                       type="button"
                       onClick={() => setActiveTab('radar')}
-                      className="text-xs text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+                      className="text-xs text-accent hover:text-accent font-medium cursor-pointer"
                     >
                       Full Radar →
                     </button>
@@ -410,28 +410,28 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.98 }}
                       transition={{ duration: 0.15 }}
-                      className="w-full p-3 rounded-xl bg-zinc-950/60 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700 flex items-center justify-between text-left transition-colors cursor-pointer group"
+                      className="w-full p-3 rounded-[10px] bg-canvas/60 hover:bg-surface border border-border-subtle/80 hover:border-border-strong flex items-center justify-between text-left transition-colors cursor-pointer group"
                       title="Expand competency radar chart"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-zinc-200 shrink-0">
+                        <div className="w-7 h-7 rounded-lg bg-surface border border-border-subtle flex items-center justify-center text-secondary group-hover:text-primary shrink-0">
                           <Activity className="w-3.5 h-3.5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-zinc-300 group-hover:text-white truncate">
+                          <p className="text-xs font-semibold text-secondary group-hover:text-primary truncate">
                             Competency overview
                           </p>
-                          <p className="text-[10px] text-zinc-500 font-mono">
+                          <p className="text-xs text-muted font-mono">
                             Six measured competency areas
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2.5 shrink-0">
-                        <span className="px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[11px] font-medium flex items-center gap-1">
-                          <Award className="w-3 h-3 text-zinc-400" />
+                        <span className="px-2 py-0.5 rounded-full bg-surface border border-border-subtle text-secondary font-mono text-xs font-medium flex items-center gap-1">
+                          <Award className="w-3 h-3 text-secondary" />
                           {avgScore}% Composite
                         </span>
-                        <span className="text-xs text-blue-400 font-medium group-hover:underline flex items-center gap-0.5">
+                        <span className="text-xs text-accent font-medium group-hover:underline flex items-center gap-0.5">
                           <span>Show Radar</span>
                           <ChevronDown className="w-3.5 h-3.5" />
                         </span>
@@ -444,15 +444,15 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               {/* Survey Disciplines */}
               {profile.surveyTypes && profile.surveyTypes.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Compass className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <Compass className="w-3.5 h-3.5 text-secondary" />
                     <span>Survey & Operations Disciplines</span>
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {profile.surveyTypes.map((type) => (
                       <span
                         key={type}
-                        className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium text-xs"
+                        className="px-2.5 py-1 rounded-lg bg-surface border border-border-subtle text-secondary font-medium text-xs"
                       >
                         {type}
                       </span>
@@ -464,8 +464,8 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               {/* Offshore Certifications with Tooltips */}
               {profile.certifications && profile.certifications.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
                     <span>Offshore Safety & Marine Tickets</span>
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
@@ -478,12 +478,12 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
               {profile.certificationDetails && profile.certificationDetails.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px]">Certification Dates</h3>
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs">Certification Dates</h3>
                   <div className="space-y-1">
                     {profile.certificationDetails.map((cert) => (
-                      <div key={cert.id} className="flex items-center justify-between gap-3 text-xs text-zinc-300">
+                      <div key={cert.id} className="flex items-center justify-between gap-3 text-xs text-secondary">
                         <span>{cert.name}</span>
-                        <span className="text-zinc-500">
+                        <span className="text-muted">
                           {cert.issueDate ? `Completed ${cert.issueDate}` : 'Completion date not recorded'}
                           {cert.expiryDate ? ` · Expires ${cert.expiryDate}` : ' · No expiry recorded'}
                         </span>
@@ -496,14 +496,14 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               {/* Skills */}
               {profile.skills && profile.skills.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px]">
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs">
                     Skills & Equipment Competencies
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {profile.skills.map((skill) => (
                       <span
                         key={skill}
-                        className="px-2.5 py-1 rounded-lg bg-zinc-800 text-zinc-200 border border-zinc-700/60 text-xs"
+                        className="px-2.5 py-1 rounded-lg bg-surface-raised text-primary border border-border-strong/60 text-xs"
                       >
                         {skill}
                       </span>
@@ -514,13 +514,13 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
               {profile.geographicalExperience && profile.geographicalExperience.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-secondary" />
                     <span>Geographical Experience</span>
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {profile.geographicalExperience.map((place) => (
-                      <span key={place} className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium text-xs">
+                      <span key={place} className="px-2.5 py-1 rounded-lg bg-surface border border-border-subtle text-secondary font-medium text-xs">
                         {place}
                       </span>
                     ))}
@@ -530,13 +530,13 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
               {profile.systemsExperience && profile.systemsExperience.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-secondary" />
                     <span>Systems Experience</span>
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {profile.systemsExperience.map((system) => (
-                      <span key={system} className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium text-xs">{system}</span>
+                      <span key={system} className="px-2.5 py-1 rounded-lg bg-surface border border-border-subtle text-secondary font-medium text-xs">{system}</span>
                     ))}
                   </div>
                 </div>
@@ -544,15 +544,15 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
               {profile.trainingDetails && profile.trainingDetails.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <GraduationCap className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-secondary" />
                     <span>Training / Qualifications</span>
                   </h3>
                   <div className="space-y-1.5">
                     {profile.trainingDetails.map((item) => (
-                      <div key={item.id} className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-2.5 py-2 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-zinc-300 text-xs">{item.name}</span>
-                        <span className="text-zinc-500 text-[11px]">{item.completedDate ? `Completed ${item.completedDate.slice(0, 4)}` : 'Date not recorded'}{item.expiryDate ? ` · Expires ${item.expiryDate.slice(0, 4)}` : ''}</span>
+                      <div key={item.id} className="rounded-lg bg-canvas/70 border border-border-subtle px-2.5 py-2 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-secondary text-xs">{item.name}</span>
+                        <span className="text-muted text-xs">{item.completedDate ? `Completed ${item.completedDate.slice(0, 4)}` : 'Date not recorded'}{item.expiryDate ? ` · Expires ${item.expiryDate.slice(0, 4)}` : ''}</span>
                       </div>
                     ))}
                   </div>
@@ -562,17 +562,17 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               {/* Featured Projects */}
               {profile.featuredProjects && profile.featuredProjects.length > 0 && (
                 <div className="space-y-1.5">
-                  <h3 className="text-zinc-400 font-semibold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                  <h3 className="text-secondary font-semibold uppercase tracking-wider text-xs flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-secondary" />
                     <span>Featured Campaigns & Surveys</span>
                   </h3>
                   <div className="space-y-1">
                     {profile.featuredProjects.map((project) => (
                       <div
                         key={project}
-                        className="p-2 rounded-lg bg-zinc-950/70 border border-zinc-850 text-zinc-300 text-xs flex items-center gap-2"
+                        className="p-2 rounded-lg bg-canvas/70 border border-border-subtle text-secondary text-xs flex items-center gap-2"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
                         <span>{project}</span>
                       </div>
                     ))}
@@ -583,16 +583,16 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               {/* Past Operators / Clients & Education */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 {profile.pastCompanies && profile.pastCompanies.length > 0 && (
-                  <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/60 space-y-1.5">
-                    <div className="text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-zinc-400" />
+                  <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/60 space-y-1.5">
+                    <div className="text-secondary font-semibold flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-secondary" />
                       <span>Past Operators & Clients</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {profile.pastCompanies.map((comp) => (
                         <span
                           key={comp}
-                          className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 text-[11px] border border-zinc-800"
+                          className="px-2 py-0.5 rounded bg-surface text-secondary text-xs border border-border-subtle"
                         >
                           {comp}
                         </span>
@@ -602,12 +602,12 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 )}
 
                 {profile.education && (
-                  <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/60 space-y-1.5">
-                    <div className="text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5 text-zinc-400" />
+                  <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/60 space-y-1.5">
+                    <div className="text-secondary font-semibold flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-secondary" />
                       <span>Education & Academics</span>
                     </div>
-                    <p className="text-zinc-300 text-xs">{profile.education}</p>
+                    <p className="text-secondary text-xs">{profile.education}</p>
                   </div>
                 )}
               </div>
@@ -616,10 +616,10 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="flex flex-col items-stretch gap-3 border-t border-zinc-800 bg-zinc-950 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex flex-col items-stretch gap-3 border-t border-border-subtle bg-canvas p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0">
-            <span className="text-xs text-zinc-400 font-mono block truncate">{profile.email}</span>
-            <span className="text-[10px] text-zinc-400">Hydenlyne Verified Specialist Network</span>
+            <span className="text-xs text-secondary font-mono block truncate">{profile.email}</span>
+            <span className="text-xs text-secondary">Hydenlyne Verified Specialist Network</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
@@ -633,10 +633,10 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open ${profile.name} LinkedIn profile`}
-              className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+              className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary text-xs font-medium transition-colors cursor-pointer"
               title="Open LinkedIn Profile (new tab)"
             >
-              <Linkedin className="w-4 h-4 text-[#0a66c2]" />
+              <Linkedin className="h-4 w-4 text-accent" />
               <span className="hidden sm:inline">LinkedIn</span>
             </a>
 
@@ -644,10 +644,10 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               type="button"
               onClick={handleCopyEmail}
               aria-label={`Copy ${profile.name} email address`}
-              className={`relative min-h-11 px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all duration-200 cursor-pointer overflow-hidden ${
+              className={`relative min-h-11 px-3.5 py-2 rounded-[10px] text-xs font-medium flex items-center gap-1.5 transition-all duration-200 cursor-pointer overflow-hidden ${
                 copiedEmail
-                  ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 shadow-xs ring-1 ring-emerald-500/30'
-                  : 'bg-zinc-800 hover:bg-zinc-750 border border-zinc-700/60 text-zinc-200 hover:text-white'
+                  ? 'bg-positive-soft/80 border border-positive-border/50 text-positive shadow-xs ring-1 ring-positive/30'
+                  : 'bg-surface-raised hover:bg-surface-selected border border-border-strong/60 text-primary hover:text-primary'
               }`}
               title="Copy email address to clipboard"
             >
@@ -666,9 +666,9 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                       animate={{ scale: [0, 1.25, 1] }}
                       transition={{ duration: 0.22, ease: 'backOut' }}
                     >
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <Check className="w-3.5 h-3.5 text-positive" />
                     </motion.span>
-                    <span className="font-medium text-emerald-300">Copied!</span>
+                    <span className="font-medium text-positive">Copied!</span>
                   </motion.div>
                 ) : (
                   <motion.div
@@ -679,7 +679,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                     transition={{ duration: 0.15, ease: 'easeOut' }}
                     className="flex items-center gap-1.5"
                   >
-                    <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                    <Copy className="w-3.5 h-3.5 text-secondary" />
                     <span>Copy Email</span>
                   </motion.div>
                 )}
@@ -690,7 +690,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDeleteConfirmOpen(true)}
-                className="min-h-11 px-3.5 py-2 rounded-xl border border-rose-800 bg-rose-950/50 hover:bg-rose-900/70 text-rose-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="min-h-11 px-3.5 py-2 rounded-[10px] border border-danger-border bg-danger-soft/50 hover:bg-danger-soft/70 text-danger hover:text-primary text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete specialist</span>
@@ -701,17 +701,17 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => onRequestMobilization(profile)}
-                className="min-h-11 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                className="min-h-11 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover text-on-action text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Request mobilization</span>
               </button>
             ) : (
               <a
-                href={`mailto:${profile.email}?subject=Hydenlyne%20Survey%20Deployment%20Inquiry%20-%20${encodeURIComponent(
+                href={`mailto:${profile.email}?subject=Hydenlyne%20Mobilization%20Request%20-%20${encodeURIComponent(
                   profile.title
                 )}`}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                className="px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover text-on-action text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
               >
                 <Mail className="w-3.5 h-3.5" />
                 <span>Request mobilization</span>
