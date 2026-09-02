@@ -37,7 +37,7 @@ jobs:
           ruff format --check app tests
 
       - name: Type check (mypy)
-        run: mypy app --ignore-missing-imports --no-strict-optional
+        run: mypy app
 
       - name: SAST (bandit)
         run: bandit -r app/ -q

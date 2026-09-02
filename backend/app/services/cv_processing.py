@@ -8,6 +8,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_session_factory
@@ -456,7 +457,7 @@ class CVProcessingService:
 
     async def _create_certifications(
         self,
-        session,
+        session: AsyncSession,
         crew_member: CrewMember,
         data: dict[str, Any],
         document_id: str | None,
@@ -531,7 +532,6 @@ class CVProcessingService:
             "OGUK Medical": ("oguk", "medical"),
             "NEBOSH Diploma": ("nebosh",),
             "QPS QINSy": ("qps", "qinsy"),
-            "GWO Wind": ("gwo",),
         }.get(cert_type, (cert_type.lower(),))
         expiry_map = data.get("certification_expiry_dates") or {}
         issue_map = data.get("certification_issue_dates") or {}
@@ -565,7 +565,7 @@ class CVProcessingService:
 
     async def _create_work_history(
         self,
-        session,
+        session: AsyncSession,
         crew_member: CrewMember,
         data: dict[str, Any],
         document_id: str | None,

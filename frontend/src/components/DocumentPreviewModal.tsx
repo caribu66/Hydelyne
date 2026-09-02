@@ -14,10 +14,8 @@ import {
   Calendar,
   Clock,
   Trash2,
-  ExternalLink,
   CheckCircle2,
   AlertTriangle,
-  Award,
   FileCheck,
 } from 'lucide-react';
 

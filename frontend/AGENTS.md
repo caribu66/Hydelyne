@@ -28,7 +28,16 @@ history, shared with the backend.
 - Async effects must handle cancellation/stale responses and expose loading,
   empty, error, and success states.
 - Do not use `any` to bypass a type-design problem. Narrow unknown boundary
-  data and model component props explicitly.
+  data and model component props explicitly. This is enforced, not advisory —
+  `tsconfig.json` has `strict: true` plus `noUncheckedIndexedAccess`, and
+  `@typescript-eslint/no-explicit-any` is a blocking ESLint error. See
+  `docs/ENGINEERING_STANDARDS.md` § Type safety for the full any/cast/ignore
+  policy, including when `@types/<package>` should exist and doesn't (check
+  before assuming a library is untyped — most current ones ship real types).
+- A non-null assertion (`!`) needs a one-line comment stating the invariant
+  that makes it safe (e.g. "guarded by the length check above"); it's an
+  ESLint warning, not an error, specifically so it stays visible in review
+  instead of silently multiplying.
 
 ## Product UI contract
 

@@ -1,3 +1,5 @@
+import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import strawberry
@@ -25,7 +27,6 @@ settings = get_settings()
 
 def configure_logging() -> None:
     """Configure structured JSON logging for production."""
-    import logging
     import sys
 
     level = getattr(logging, (settings.LOG_LEVEL or "INFO").upper(), logging.INFO)
@@ -35,7 +36,7 @@ def configure_logging() -> None:
         return
 
     class JsonFormatter(logging.Formatter):
-        def format(self, record):
+        def format(self, record: logging.LogRecord) -> str:
             import json as _json
 
             base = {
@@ -96,7 +97,7 @@ def validate_prod_secrets() -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     validate_prod_secrets()
     init_sentry()
@@ -110,8 +111,6 @@ async def lifespan(app: FastAPI):
 
         await bootstrap_admin()
     except Exception as e:
-        import logging
-
         logging.getLogger(__name__).warning(f"Admin bootstrap skipped: {e}")
     # Setup Meilisearch indexes if available (non-blocking)
     try:
@@ -184,7 +183,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router)
 
     @app.get("/")
-    async def root():
+    async def root() -> dict[str, str]:
         return {
             "name": "Hydenlyne Crew DMS",
             "version": "1.0.0",

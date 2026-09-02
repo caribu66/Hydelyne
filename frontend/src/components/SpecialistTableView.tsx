@@ -9,16 +9,12 @@ import {
   BookmarkCheck,
   Copy,
   Check,
-  Linkedin,
   BadgeCheck,
-  ArrowUpRight,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Scale,
   Send,
   SlidersHorizontal,
-  Eye,
 } from 'lucide-react';
 
 interface SpecialistTableViewProps {
@@ -36,6 +32,23 @@ interface SpecialistTableViewProps {
 
 type SortField = 'name' | 'department' | 'experience' | 'dayRate' | 'rating' | 'availability';
 type SortDirection = 'asc' | 'desc';
+
+function sortValue(profile: UserProfile, field: SortField): string | number {
+  switch (field) {
+    case 'name':
+      return profile.name;
+    case 'department':
+      return profile.department;
+    case 'experience':
+      return profile.yearsOfExperience;
+    case 'dayRate':
+      return profile.dayRate ?? 0;
+    case 'rating':
+      return profile.rating ?? 0;
+    case 'availability':
+      return profile.availability;
+  }
+}
 
 interface ColumnVisibility {
   discipline: boolean;
@@ -89,17 +102,16 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
   const sortedProfiles = useMemo(() => {
     if (!sortField) return profiles;
     return [...profiles].sort((a, b) => {
-      let valA: any = a[sortField === 'experience' ? 'yearsOfExperience' : sortField];
-      let valB: any = b[sortField === 'experience' ? 'yearsOfExperience' : sortField];
+      const valA = sortValue(a, sortField);
+      const valB = sortValue(b, sortField);
 
       if (typeof valA === 'string') {
-        valA = valA.toLowerCase();
-        valB = (valB || '').toLowerCase();
-        return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        const strA = valA.toLowerCase();
+        const strB = String(valB).toLowerCase();
+        return sortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
       }
-      valA = valA || 0;
-      valB = valB || 0;
-      return sortDirection === 'asc' ? valA - valB : valB - valA;
+      const numB = typeof valB === 'number' ? valB : 0;
+      return sortDirection === 'asc' ? valA - numB : numB - valA;
     });
   }, [profiles, sortField, sortDirection]);
 

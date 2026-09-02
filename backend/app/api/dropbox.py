@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.auth.decorators import get_current_user_rest
 from app.config import get_settings
 from app.database import get_session_factory
+from app.models import CrewMember
 from app.models import Document as DocumentModel
 from app.services.audit import audit_service
 from app.services.cache import cache_service
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/api/dropbox", tags=["dropbox"])
 
 
 @router.get("/webhook")
-async def dropbox_webhook_challenge(request: Request):
+async def dropbox_webhook_challenge(request: Request) -> dict[str, str]:
     """Handle Dropbox webhook verification challenge."""
     challenge = request.query_params.get("challenge")
     if challenge:
@@ -40,7 +41,9 @@ async def dropbox_webhook_challenge(request: Request):
 
 
 @router.post("/webhook")
-async def dropbox_webhook_handler(request: Request, background_tasks: BackgroundTasks):
+async def dropbox_webhook_handler(
+    request: Request, background_tasks: BackgroundTasks
+) -> dict[str, str]:
     """Handle Dropbox webhook notifications for file changes."""
     raw_body = await request.body()
     signature = request.headers.get("X-Dropbox-Signature", "")
@@ -92,7 +95,8 @@ async def get_dropbox_cursor(account_id: str) -> Optional[str]:
     try:
         key = f"dropbox:cursor:{account_id}"
         redis = await cache_service._get_redis()
-        return await redis.get(key)
+        value = await redis.get(key)
+        return value if isinstance(value, str) else None
     except Exception:
         return None
 
@@ -260,8 +264,10 @@ async def save_dropbox_cursor(account_id: str, cursor: Optional[str]) -> None:
 
 @router.post("/download/{document_id}")
 async def download_dropbox_file(
-    document_id: str, request: Request, current_user=Depends(get_current_user_rest)
-):
+    document_id: str,
+    request: Request,
+    current_user: CrewMember = Depends(get_current_user_rest),
+) -> dict[str, Any]:
     """Download a file from Dropbox by document ID."""
     async with get_session_factory()() as session:
         stmt = select(DocumentModel).where(DocumentModel.id == document_id)

@@ -49,6 +49,12 @@ extraction is deterministic by design; do not add an LLM call there.
   frontend code or domain modules. Use an owned backend adapter/service.
 - Do not create a second source of truth for enums, aliases, field names,
   status values, prompts, or API contracts. Search for the existing owner.
+- No `any`/`Any`, unexplained `cast()`/`as X`/non-null assertion, or bare
+  `# type: ignore`/`@ts-expect-error`. Backend mypy and frontend ESLint/tsc
+  both run at real strictness and enforce this; see
+  `docs/ENGINEERING_STANDARDS.md` § Type safety for the exact rules and the
+  reasoning (weak types here is exactly the debt that turns into a rewrite
+  later — fix the root cause, don't suppress the symptom).
 - Never add an external dependency without explaining why the standard library
   and existing dependencies are insufficient, checking maintenance/security
   impact, and updating the correct lock or requirements file.

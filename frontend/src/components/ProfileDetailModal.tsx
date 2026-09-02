@@ -26,7 +26,6 @@ import {
   Send,
   Printer,
   FileCheck,
-  Sparkles,
   Activity,
   Layers,
   ChevronDown,

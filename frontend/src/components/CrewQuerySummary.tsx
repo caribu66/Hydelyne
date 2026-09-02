@@ -25,7 +25,7 @@ export const CrewQuerySummary: FC<CrewQuerySummaryProps> = ({ data, loading, onR
 
   if (!data || (!data.summary && Object.keys(data.criteria || {}).length === 0)) return null;
   const criteria = data.criteria || {};
-  const criteriaLabels: Array<Criterion | null> = [
+  const criteriaLabels = [
     criteria.nationality ? { key: 'nationality', label: `${String(criteria.nationality)} nationality` } : null,
     criteria.medical_valid ? { key: 'medical', label: 'Current medical' } : criteria.medical_required ? { key: 'medical', label: 'Medical record' } : null,
     ...(Array.isArray(criteria.certification_keywords)

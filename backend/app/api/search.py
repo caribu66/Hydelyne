@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth.decorators import get_current_user_rest
+from app.models import CrewMember
 from app.services.meilisearch import meilisearch_client
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,8 @@ async def search_crew(
     availability: Optional[str] = Query(None, description="Filter by availability status"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user=Depends(get_current_user_rest),
-):
+    current_user: CrewMember = Depends(get_current_user_rest),
+) -> dict[str, Any]:
     """Search crew members using Meilisearch."""
     filters = None
     if availability:
@@ -44,8 +45,8 @@ async def search_documents(
     crew_id: Optional[str] = Query(None, description="Filter by crew member ID"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user=Depends(get_current_user_rest),
-):
+    current_user: CrewMember = Depends(get_current_user_rest),
+) -> dict[str, Any]:
     """Search documents using Meilisearch."""
     filters_parts = []
     if classification:
@@ -66,8 +67,8 @@ async def search_documents(
 
 @router.post("/index/crew/{crew_id}")
 async def index_crew_member(
-    crew_id: str, request: Request, current_user=Depends(get_current_user_rest)
-):
+    crew_id: str, request: Request, current_user: CrewMember = Depends(get_current_user_rest)
+) -> dict[str, Any]:
     """Index a crew member in Meilisearch."""
     from sqlalchemy import select
 
@@ -98,7 +99,7 @@ async def index_crew_member(
 
 
 @router.get("/health")
-async def search_health():
+async def search_health() -> dict[str, str]:
     """Check Meilisearch health."""
     healthy = await meilisearch_client.health_check()
     return {"status": "healthy" if healthy else "unhealthy", "service": "meilisearch"}

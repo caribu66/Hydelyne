@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import logging
 
-logger = logging.getLogger(__name__)
-
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
@@ -13,11 +11,11 @@ from app.services.extraction import extraction_service
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-sync_engine = None
-SyncSessionFactory = None
+sync_engine: Engine | None = None
+SyncSessionFactory: sessionmaker[Session] | None = None
 
 
-def get_sync_engine():
+def get_sync_engine() -> Engine:
     global sync_engine, SyncSessionFactory
     if sync_engine is None:
         db_url = settings.DATABASE_URL
@@ -52,6 +50,8 @@ def get_sync_engine():
 
 def get_sync_session() -> Session:
     get_sync_engine()
+    if SyncSessionFactory is None:
+        raise RuntimeError("get_sync_session: session factory was not initialized")
     return SyncSessionFactory()
 
 
@@ -103,9 +103,15 @@ class SyncDocumentProcessor:
                         doc.classification = classification_result.get("classification", "other")
                         session.commit()
 
+                    # doc.classification is a nullable ORM attribute; mypy can't
+                    # narrow it across the assignment above, and the `or` also
+                    # guards a caller that skips the not-classified branch above
+                    # while classification is still somehow empty.
+                    classification: str = doc.classification or "other"
+
                     from app.services.cv_processing import CVProcessingService
 
-                    if doc.classification == "cv":
+                    if classification == "cv":
                         # CVs never go through the LLM — see
                         # CVProcessingService.extract_cv_deterministically
                         # and backend/docs/consultant-knowledge-core.md.
@@ -114,7 +120,7 @@ class SyncDocumentProcessor:
                         )
                     else:
                         extraction_result = extraction_service.extract_document_sync(
-                            text, doc.classification
+                            text, classification
                         )
 
                 status, _ = extraction_service.determine_review_status(extraction_result)
@@ -133,6 +139,8 @@ class SyncDocumentProcessor:
                     from app.database import dispose_engine
                     from app.services.cv_processing import cv_processing_service
 
+                    crew_member_id = doc.crew_member_id
+
                     async def _enrich_profile_and_release_engine() -> None:
                         # This processor is called by synchronous Celery tasks;
                         # run the async profile-enrichment service to completion,
@@ -145,7 +153,7 @@ class SyncDocumentProcessor:
                         # fresh engine bound to its own fresh loop.
                         try:
                             await cv_processing_service.process_cv_extraction(
-                                crew_member_id=doc.crew_member_id,
+                                crew_member_id=crew_member_id,
                                 extracted_data=extraction_result,
                                 document_id=document_id,
                             )

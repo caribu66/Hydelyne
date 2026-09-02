@@ -10,20 +10,14 @@ import {
   UploadCloud,
   Download,
   Eye,
-  Trash2,
-  Calendar,
-  AlertTriangle,
   CheckCircle2,
   FileCheck,
   FileBadge,
   Activity,
   FolderArchive,
-  ExternalLink,
   ArrowUpDown,
   Clock,
-  Search,
   Sparkles,
-  Check,
 } from 'lucide-react';
 
 export type DocumentSortOption = 'uploaded-desc' | 'uploaded-asc' | 'expiry-asc' | 'title-asc';
@@ -51,15 +45,14 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [sortOption, setSortOption] = useState<DocumentSortOption>('uploaded-desc');
-  const [searchQuery, setSearchQuery] = useState('');
+  // setSearchQuery is unused: searchQuery filtering exists but no input
+  // control calls it yet. Kept (not deleted) pending that UI being wired up.
+  const [searchQuery, _setSearchQuery] = useState('');
 
   // Compute metrics
   const totalCount = documents.length;
   const expiredCount = documents.filter((d) => getDocumentComplianceStatus(d).status === 'expired').length;
   const expiringSoonCount = documents.filter((d) => getDocumentComplianceStatus(d).status === 'expiring_soon').length;
-  const validCount = documents.filter(
-    (d) => getDocumentComplianceStatus(d).status === 'valid' || getDocumentComplianceStatus(d).status === 'no_expiry'
-  ).length;
 
   // Auto-sort documents by upload date (newest first) by default
   const sortedAndFilteredDocs = useMemo(() => {
@@ -327,7 +320,7 @@ All documents have been digitally archived for offshore mobilization verificatio
                         {doc.title}
                       </h4>
                       {doc.isVerified && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" title="Verified Credential" />
+                        <span title="Verified Credential"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /></span>
                       )}
                       {isLatest && (
                         <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono text-[9px] font-medium shrink-0">

@@ -252,7 +252,6 @@ async def test_helena_lindqvist_cv_extracts_personal_information_and_training():
 
     from app.services.cv_table_extractor import extract_cv_tables
 
-    fixture_path = os.path.join(os.path.dirname(__file__), "fixtures_helena_cv.txt")
     pdf_path = os.path.join(
         os.path.dirname(__file__),
         "..",

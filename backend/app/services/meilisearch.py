@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from app.config import get_settings
+
+if TYPE_CHECKING:
+    # `meilisearch` actually ships real inline types (py.typed) — no need
+    # for a hand-rolled Protocol. Imported only for type-checking so the
+    # real client construction below stays lazy (avoids importing/paying
+    # for the client library on every process that imports this module).
+    from meilisearch import Client
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -15,13 +22,13 @@ DOCUMENTS_INDEX = "documents"
 class MeilisearchClient:
     """Client for Meilisearch full-text search."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = f"http://{settings.MEILI_HOST}:{settings.MEILI_PORT}"
         self.master_key = getattr(settings, "MEILI_MASTER_KEY", "")
-        self._client = None
+        self._client: Optional["Client"] = None
 
     @property
-    def client(self):
+    def client(self) -> "Client":
         if self._client is None:
             import meilisearch
 
@@ -43,7 +50,7 @@ class MeilisearchClient:
         """Create and configure search indexes."""
         import asyncio
 
-        def _sync_setup():
+        def _sync_setup() -> None:
             # Crew members index
             try:
                 self.client.index(CREW_MEMBERS_INDEX)
@@ -115,11 +122,11 @@ class MeilisearchClient:
         except Exception as e:
             logger.error(f"Failed to setup Meilisearch indexes: {e}")
 
-    async def index_crew_member(self, crew_member: dict) -> Optional[dict]:
+    async def index_crew_member(self, crew_member: dict[str, Any]) -> Optional[dict[str, int]]:
         """Index a crew member for search."""
         import asyncio
 
-        def _sync():
+        def _sync() -> dict[str, int]:
             index = self.client.index(CREW_MEMBERS_INDEX)
             task = index.add_documents([crew_member])
             return {"task_uid": task.task_uid}
@@ -130,11 +137,13 @@ class MeilisearchClient:
             logger.error(f"Failed to index crew member: {e}")
             return None
 
-    async def index_crew_members(self, crew_members: list[dict]) -> Optional[dict]:
+    async def index_crew_members(
+        self, crew_members: list[dict[str, Any]]
+    ) -> Optional[dict[str, int]]:
         """Index multiple crew members for search."""
         import asyncio
 
-        def _sync():
+        def _sync() -> dict[str, int]:
             index = self.client.index(CREW_MEMBERS_INDEX)
             task = index.add_documents(crew_members)
             return {"task_uid": task.task_uid}
@@ -151,13 +160,13 @@ class MeilisearchClient:
         filters: Optional[str] = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search crew members."""
         import asyncio
 
-        def _sync():
+        def _sync() -> dict[str, Any]:
             index = self.client.index(CREW_MEMBERS_INDEX)
-            search_params = {
+            search_params: dict[str, Any] = {
                 "limit": limit,
                 "offset": offset,
             }
@@ -180,7 +189,7 @@ class MeilisearchClient:
         """Delete a crew member from the index."""
         import asyncio
 
-        def _sync():
+        def _sync() -> bool:
             index = self.client.index(CREW_MEMBERS_INDEX)
             index.delete_document(crew_id)
             return True
@@ -191,11 +200,11 @@ class MeilisearchClient:
             logger.error(f"Failed to delete crew member from index: {e}")
             return False
 
-    async def index_document(self, document: dict) -> Optional[dict]:
+    async def index_document(self, document: dict[str, Any]) -> Optional[dict[str, int]]:
         """Index a document for search."""
         import asyncio
 
-        def _sync():
+        def _sync() -> dict[str, int]:
             index = self.client.index(DOCUMENTS_INDEX)
             task = index.add_documents([document])
             return {"task_uid": task.task_uid}
@@ -212,13 +221,13 @@ class MeilisearchClient:
         filters: Optional[str] = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search documents."""
         import asyncio
 
-        def _sync():
+        def _sync() -> dict[str, Any]:
             index = self.client.index(DOCUMENTS_INDEX)
-            search_params = {
+            search_params: dict[str, Any] = {
                 "limit": limit,
                 "offset": offset,
             }

@@ -2,21 +2,21 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { gzipSync } from 'node:zlib';
 import path from 'path';
+import type { Plugin } from 'vite';
 import {defineConfig} from 'vite';
 
-function gzipBundleBudget() {
+function gzipBundleBudget(): Plugin {
   const entryBudget = 150 * 1024;
   const asyncBudget = 100 * 1024;
 
   return {
     name: 'gzip-bundle-budget',
-    generateBundle(_options: unknown, bundle: Record<string, { type: string; isEntry?: boolean; code?: string; source?: string | Uint8Array }>) {
+    generateBundle(_options, bundle) {
       const violations: string[] = [];
 
       for (const [fileName, output] of Object.entries(bundle)) {
         if (output.type !== 'chunk') continue;
-        const source = output.code ?? '';
-        const gzipBytes = gzipSync(source).byteLength;
+        const gzipBytes = gzipSync(output.code).byteLength;
         const budget = output.isEntry ? entryBudget : asyncBudget;
         if (gzipBytes > budget) {
           violations.push(`${fileName} is ${(gzipBytes / 1024).toFixed(1)} KiB gzip (budget ${(budget / 1024).toFixed(0)} KiB)`);

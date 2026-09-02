@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import date, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import selectinload
@@ -68,10 +68,10 @@ class AuthService:
 
     async def get_user_from_token(self, token: str) -> Optional[CrewMember]:
         """Get user from session token."""
-        result = verify_session_token(token)
-        if not result:
+        token_data = verify_session_token(token)
+        if not token_data:
             return None
-        user_id, jti = result
+        user_id, jti = token_data
         if await is_token_revoked(jti):
             return None
 
@@ -175,11 +175,11 @@ class CrewService:
 
             return crew
 
-    async def get_compliance_status(self, crew_id: str) -> dict:
+    async def get_compliance_status(self, crew_id: str) -> dict[str, Any]:
         """Get compliance status for a crew member."""
         cache_key = cache_service._make_key("compliance", crew_id)
 
-        async def fetch():
+        async def fetch() -> dict[str, Any]:
             factory = get_session_factory()
             async with factory() as session:
                 stmt = select(Certification).where(Certification.crew_member_id == crew_id)
@@ -203,11 +203,12 @@ class CrewService:
                     ),
                 }
 
-        return await cache_service.get_or_set(
+        result = await cache_service.get_or_set(
             cache_key,
             fetch,
             ttl=cache_service.COMPLIANCE_TTL,
         )
+        return result if isinstance(result, dict) else await fetch()
 
 
 class CertificationService:
@@ -278,6 +279,8 @@ class CertificationService:
 
             updated = 0
             for cert in certs:
+                if cert.expiry_date is None:
+                    continue
                 if cert.expiry_date < today:
                     cert.status = "expired"
                 else:

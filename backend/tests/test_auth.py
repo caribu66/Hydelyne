@@ -162,7 +162,12 @@ async def test_non_admin_blocked_from_upload_document_mutation(client, monkeypat
                     uploadDocument(crewId: $crewId, fileName: $fileName, fileType: $fileType, fileSize: $fileSize) { id }
                 }
             """,
-            "variables": {"crewId": "x", "fileName": "x.pdf", "fileType": "application/pdf", "fileSize": 1},
+            "variables": {
+                "crewId": "x",
+                "fileName": "x.pdf",
+                "fileType": "application/pdf",
+                "fileSize": 1,
+            },
         },
     )
     body = response.json()

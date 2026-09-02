@@ -66,7 +66,8 @@ function avatarFor(name: string): string {
   const seed = name.trim().toLowerCase()
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0
-  return SHOWCASE_AVATARS[Math.abs(hash) % SHOWCASE_AVATARS.length]
+  // Non-null: modulo a fixed non-empty array is always in bounds.
+  return SHOWCASE_AVATARS[Math.abs(hash) % SHOWCASE_AVATARS.length]!
 }
 
 function departmentFromTags(tags: string[]): string {
@@ -233,6 +234,7 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
     professionalSummary: raw.professionalSummary || undefined,
     availability,
     education: raw.education || 'Education not recorded',
+    nationality: raw.nationality || undefined,
     countryOfResidence: raw.countryOfResidence || undefined,
     dateOfBirth: raw.dateOfBirth || undefined,
     gender: raw.gender || undefined,

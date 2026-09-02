@@ -461,7 +461,7 @@ def _extract_training(
             break
 
     if header_row_index == -1:
-        column_map = {"name": 0, "place": 1, "completed": 2, "expiry": 3}
+        column_map: Optional[dict[str, int]] = {"name": 0, "place": 1, "completed": 2, "expiry": 3}
         data_rows = rows
     else:
         header = [cell.strip() if cell else "" for cell in rows[header_row_index]]
@@ -470,6 +470,11 @@ def _extract_training(
             return []
         data_rows = rows[header_row_index + 1 :]
 
+    if column_map is None:
+        # Unreachable: both branches above either assign a literal map or
+        # return early on None — kept as a real check, not assert, since
+        # `python -O` strips asserts and this guards a dict-index below.
+        raise RuntimeError("_extract_training_table: column_map was not resolved")
     out: list[TrainingRecord] = []
     for row in data_rows:
         cells = [cell.strip() if cell else "" for cell in row]

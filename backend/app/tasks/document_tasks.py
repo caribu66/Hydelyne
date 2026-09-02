@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
+from celery import Task
 from sqlalchemy import and_, select
 
 from app.config import get_settings
@@ -28,7 +30,7 @@ def _maybe_queue_embeddings(document_id: str) -> None:
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=10)
-def process_document_extraction(self, document_id: str) -> dict:
+def process_document_extraction(self: Task, document_id: str) -> dict[str, Any]:
     """Process document extraction via LLM (synchronous for Celery).
 
     Args:
@@ -48,7 +50,7 @@ def process_document_extraction(self, document_id: str) -> dict:
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=10)
-def process_dropbox_document(self, document_id: str) -> dict:
+def process_dropbox_document(self: Task, document_id: str) -> dict[str, Any]:
     """Process a document from Dropbox.
 
     Args:
@@ -93,6 +95,8 @@ def check_expiring_certifications() -> dict:
 
             updated = 0
             for cert in certs:
+                if cert.expiry_date is None:
+                    continue
                 if cert.expiry_date < today:
                     cert.status = "expired"
                 else:

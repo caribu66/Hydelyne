@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
@@ -10,6 +11,7 @@ from sqlalchemy import text
 from app.auth.decorators import require_admin_rest, require_api_key
 from app.config import get_settings
 from app.database import get_engine
+from app.models import CrewMember
 from app.services.cache import get_redis
 
 settings = get_settings()
@@ -22,7 +24,7 @@ def _is_prod() -> bool:
     return settings.APP_ENV == "production"
 
 
-def _redacted_or_detail(detail: str) -> dict:
+def _redacted_or_detail(detail: str) -> dict[str, str]:
     """Return redacted detail in prod, full detail in dev."""
     if _is_prod():
         return {"status": "unhealthy", "detail": "Service temporarily unavailable"}
@@ -81,7 +83,7 @@ async def _dependency_statuses() -> dict[str, str]:
 
 
 @router.get("/")
-async def health_check():
+async def health_check() -> dict[str, Any]:
     """Basic health check — always public."""
     return {
         "status": "healthy",
@@ -91,7 +93,7 @@ async def health_check():
 
 
 @router.get("/services")
-async def service_status(current_user=Depends(require_admin_rest)):
+async def service_status(current_user: CrewMember = Depends(require_admin_rest)) -> dict[str, Any]:
     """Live dependency indicators for the authenticated admin test console."""
     return {
         "services": await _dependency_statuses(),
@@ -102,8 +104,8 @@ async def service_status(current_user=Depends(require_admin_rest)):
 @router.get("/db")
 async def database_health(
     request: Request,
-    api_key=Depends(require_api_key) if _is_prod() else Depends(lambda: True),
-):
+    api_key: bool = Depends(require_api_key) if _is_prod() else Depends(lambda: True),
+) -> dict[str, Any]:
     """Check database connectivity.
 
     In production, requires an API key and never leaks ``str(e)``.
@@ -128,8 +130,8 @@ async def database_health(
 @router.get("/redis")
 async def redis_health(
     request: Request,
-    api_key=Depends(require_api_key) if _is_prod() else Depends(lambda: True),
-):
+    api_key: bool = Depends(require_api_key) if _is_prod() else Depends(lambda: True),
+) -> dict[str, Any]:
     """Check Redis connectivity.
 
     In production, requires an API key and never leaks ``str(e)``.
@@ -153,8 +155,8 @@ async def redis_health(
 @router.get("/ollama")
 async def ollama_health(
     request: Request,
-    api_key=Depends(require_api_key) if _is_prod() else Depends(lambda: True),
-):
+    api_key: bool = Depends(require_api_key) if _is_prod() else Depends(lambda: True),
+) -> dict[str, Any]:
     """Check Ollama connectivity.
 
     In production, requires an API key and does not return the model list.
@@ -165,7 +167,7 @@ async def ollama_health(
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
             if response.status_code == 200:
-                body = {
+                body: dict[str, Any] = {
                     "status": "healthy",
                     "service": "ollama",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -186,8 +188,8 @@ async def ollama_health(
 @router.get("/qdrant")
 async def qdrant_health(
     request: Request,
-    api_key=Depends(require_api_key) if _is_prod() else Depends(lambda: True),
-):
+    api_key: bool = Depends(require_api_key) if _is_prod() else Depends(lambda: True),
+) -> dict[str, Any]:
     """Check Qdrant connectivity.
 
     In production, requires an API key and never leaks ``str(e)``.
@@ -197,7 +199,7 @@ async def qdrant_health(
 
         client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
         collections = client.get_collections()
-        body = {
+        body: dict[str, Any] = {
             "status": "healthy",
             "service": "qdrant",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -216,8 +218,8 @@ async def qdrant_health(
 @router.get("/all")
 async def full_health_check(
     request: Request,
-    api_key=Depends(require_api_key) if _is_prod() else Depends(lambda: True),
-):
+    api_key: bool = Depends(require_api_key) if _is_prod() else Depends(lambda: True),
+) -> dict[str, Any]:
     """Run all health checks.
 
     In production, requires an API key and returns only status strings.

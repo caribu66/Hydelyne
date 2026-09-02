@@ -54,8 +54,8 @@ describe('parseNaturalLanguageQuery', () => {
   });
 
   it('detects a known location by city name', () => {
-    const target = ALL_LOCATIONS[0];
-    const city = target.split(',')[0];
+    const target = ALL_LOCATIONS[0]!;
+    const city = target.split(',')[0]!;
     const result = parseNaturalLanguageQuery(`specialists based in ${city}`);
     expect(result.locations).toContain(target);
   });

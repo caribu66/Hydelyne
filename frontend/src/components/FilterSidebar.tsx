@@ -8,7 +8,6 @@ import {
 import {
   ALL_LOCATIONS,
   ALL_COMPANIES,
-  ALL_DEPARTMENTS,
   SKILL_CATEGORIES,
   ALL_SKILLS,
   FILTER_PRESETS,
@@ -16,23 +15,17 @@ import {
 import { ExperienceRangeSlider } from './ExperienceRangeSlider';
 import {
   MapPin,
-  Briefcase,
   Layers,
   GraduationCap,
   Building2,
   Clock,
-  Sparkles,
   ChevronDown,
   ChevronUp,
   RotateCcw,
   Check,
   Search,
   Zap,
-  Globe2,
   SlidersHorizontal,
-  ToggleLeft,
-  ToggleRight,
-  ShieldCheck,
 } from 'lucide-react';
 
 interface FilterSidebarProps {
@@ -107,7 +100,10 @@ export const FilterSidebar: FC<FilterSidebarProps> = ({
     }));
   };
 
-  const toggleDepartment = (dept: string) => {
+  // Unused: no department filter chips are rendered in this sidebar yet
+  // (ALL_DEPARTMENTS is imported but unused too). FilterState.departments
+  // still exists — kept pending a decision to wire this up or remove it.
+  const _toggleDepartment = (dept: string) => {
     onUpdateFilters((prev) => ({
       ...prev,
       departments: prev.departments.includes(dept)

@@ -1,17 +1,9 @@
 import { FC, useEffect } from 'react';
 import { UserProfile } from '../types';
 import {
-  MapPin,
-  Mail,
-  Building,
-  GraduationCap,
-  Calendar,
-  ShieldCheck,
   Check,
-  Compass,
   Printer,
   X,
-  Download,
 } from 'lucide-react';
 
 interface DossierPrintViewProps {

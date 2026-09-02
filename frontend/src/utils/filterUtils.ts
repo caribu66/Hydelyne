@@ -1,4 +1,4 @@
-import { UserProfile, FilterState, AIOverviewData, RemoteType, AvailabilityStatus } from '../types';
+import { UserProfile, FilterState, AIOverviewData } from '../types';
 import { ALL_SKILLS, ALL_LOCATIONS, ALL_COMPANIES } from '../data/mockProfiles';
 import { escapeRegExp, getSearchTerms } from './searchTerms';
 
@@ -54,7 +54,8 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
 
   // 3. Detect Locations
   ALL_LOCATIONS.forEach((loc) => {
-    const cityName = loc.split(',')[0].trim().toLowerCase();
+    // Non-null: String.split always returns at least one element.
+    const cityName = loc.split(',')[0]!.trim().toLowerCase();
     if (clean.includes(cityName) || clean.includes(loc.toLowerCase())) {
       detected.locations?.push(loc);
     }
@@ -84,12 +85,14 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
   // Regex for "X+ years", "X yrs", "X-Y years"
   const rangeMatch = clean.match(/(\d+)\s*[-to]+\s*(\d+)\s*(?:years|yrs)/i);
   if (rangeMatch) {
-    detected.minExperience = parseInt(rangeMatch[1], 10);
-    detected.maxExperience = parseInt(rangeMatch[2], 10);
+    // Non-null: both are required (non-optional) capture groups in the regex,
+    // so a successful match guarantees both are present.
+    detected.minExperience = parseInt(rangeMatch[1]!, 10);
+    detected.maxExperience = parseInt(rangeMatch[2]!, 10);
   } else {
     const plusMatch = clean.match(/(\d+)\s*\+?\s*(?:years|yrs)/i);
     if (plusMatch) {
-      detected.minExperience = parseInt(plusMatch[1], 10);
+      detected.minExperience = parseInt(plusMatch[1]!, 10);
     }
   }
 
@@ -152,7 +155,7 @@ export function filterProfiles(profiles: UserProfile[], filters: FilterState): U
     // 2. Locations filter
     if (filters.locations.length > 0) {
       const matchesLocation = filters.locations.some((loc) =>
-        profile.location.toLowerCase().includes(loc.toLowerCase().split(',')[0].trim())
+        profile.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]!.trim())
       );
       if (!matchesLocation) return false;
     }
@@ -240,12 +243,13 @@ export function sortProfiles(
       return list.sort((a, b) => b.yearsOfExperience - a.yearsOfExperience);
     case 'experience-asc':
       return list.sort((a, b) => a.yearsOfExperience - b.yearsOfExperience);
-    case 'recent':
+    case 'recent': {
       return list.sort((a, b) => {
         const timeA = a.dateAdded ? new Date(a.dateAdded).getTime() : 0;
         const timeB = b.dateAdded ? new Date(b.dateAdded).getTime() : 0;
         return timeB - timeA;
       });
+    }
     case 'name-asc':
       return list.sort((a, b) => a.name.localeCompare(b.name));
     case 'name-desc':
@@ -257,7 +261,7 @@ export function sortProfiles(
     case 'rating-desc':
       return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     case 'relevance':
-    default:
+    default: {
       // The backend has already ranked structured AI matches by hard
       // requirements, availability, and audited experience. Preserve that
       // order rather than letting incidental words in the original sentence
@@ -277,6 +281,7 @@ export function sortProfiles(
         const scoreB = calculateRelevanceScore(b, q, tokens) + aiBoost(b);
         return scoreB - scoreA;
       });
+    }
   }
 }
 

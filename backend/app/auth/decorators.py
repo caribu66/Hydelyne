@@ -2,13 +2,25 @@ from __future__ import annotations
 
 import hmac
 import logging
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Optional
+from typing import Optional, TypeVar
 
 from fastapi import Request
 from strawberry.types import Info
 
+from app.models import CrewMember
 from app.services.crew import auth_service
+
+# Decorators wrap resolver methods of shape (self, info, *args, **kwargs) -> T.
+# Precisely typing that shape needs ParamSpec + Concatenate, but the whole
+# point of Concatenate here would be to describe a two-fixed-positional-arg
+# prefix, which it cannot express alongside an unbounded *args tail from
+# Strawberry's generated resolver signatures. TypeVar-bound-to-Callable is
+# the standard mypy-recommended fallback for this: it keeps the *decorated*
+# function's signature exact at every call site (return type F, not Any),
+# while the wrapper body is internally permissive.
+F = TypeVar("F", bound=Callable[..., Awaitable[object]])
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +41,11 @@ class AuthorizationError(Exception):
         super().__init__(self.message)
 
 
-def require_auth(func):
+def require_auth(func: F) -> F:
     """Decorator to require authentication for a resolver."""
 
     @wraps(func)
-    async def wrapper(self, info: Info, *args, **kwargs):
+    async def wrapper(self: object, info: Info, *args: object, **kwargs: object) -> object:
         request = info.context.get("request")
         if not request:
             from graphql import GraphQLError
@@ -54,14 +66,14 @@ def require_auth(func):
         info.context["current_user"] = user
         return await func(self, info, *args, **kwargs)
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]
 
 
-def require_admin(func):
+def require_admin(func: F) -> F:
     """Decorator to require admin role for a resolver."""
 
     @wraps(func)
-    async def wrapper(self, info: Info, *args, **kwargs):
+    async def wrapper(self: object, info: Info, *args: object, **kwargs: object) -> object:
         request = info.context.get("request")
         if not request:
             from graphql import GraphQLError
@@ -93,17 +105,17 @@ def require_admin(func):
         info.context["current_user"] = user
         return await func(self, info, *args, **kwargs)
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]
 
 
 # ---- REST (FastAPI) auth dependencies ----
 
 
-async def get_current_user_rest(request: Request):
+async def get_current_user_rest(request: Request) -> CrewMember:
     """FastAPI dependency to enforce auth on REST endpoints."""
     from fastapi import HTTPException as _HTTPException
 
-    token = _extract_token(request)  # type: ignore[arg-type]
+    token = _extract_token(request)
     if not token:
         raise _HTTPException(status_code=401, detail="Authentication required")
     user = await auth_service.get_user_from_token(token)
@@ -112,7 +124,7 @@ async def get_current_user_rest(request: Request):
     return user
 
 
-async def require_admin_rest(request: Request):
+async def require_admin_rest(request: Request) -> CrewMember:
     """FastAPI dependency to require the admin role on REST endpoints."""
     from fastapi import HTTPException as _HTTPException
 
@@ -123,7 +135,7 @@ async def require_admin_rest(request: Request):
     return user
 
 
-async def require_api_key(request: Request):
+async def require_api_key(request: Request) -> bool:
     """FastAPI dependency to require a valid API key for agent access."""
     from fastapi import HTTPException as _HTTPException
 
@@ -140,12 +152,12 @@ async def require_api_key(request: Request):
     return True
 
 
-async def require_rest_auth(request: Request):
+async def require_rest_auth(request: Request) -> CrewMember:
     """Alias for Depends — returns user or raises 401."""
     return await get_current_user_rest(request)
 
 
-def _extract_token(request) -> Optional[str]:
+def _extract_token(request: Request) -> Optional[str]:
     """Extract authentication token from request."""
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -163,13 +175,3 @@ def _extract_token(request) -> Optional[str]:
         return token
 
     return None
-
-
-def get_current_user(info: Info) -> Optional[dict]:
-    """Get current authenticated user from context."""
-    return info.context.get("current_user")
-
-
-def is_authenticated(info: Info) -> bool:
-    """Check if current request is authenticated."""
-    return info.context.get("current_user") is not None

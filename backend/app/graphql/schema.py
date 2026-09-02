@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import strawberry
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from strawberry import Info
@@ -363,7 +363,7 @@ class Query:
         async with factory() as session:
             # Build report data deterministically first
             if report_type == ReportType.AVAILABILITY:
-                stmt = select(CrewMemberModel).where(
+                stmt: Select[Any] = select(CrewMemberModel).where(
                     CrewMemberModel.availability_status == "available"
                 )
                 result = await session.execute(stmt)
@@ -562,7 +562,7 @@ class Mutation:
             phone=phone,
             nationality=nationality,
             country_of_residence=country_of_residence,
-            date_of_birth=date_of_birth,
+            date_of_birth=date.fromisoformat(date_of_birth) if date_of_birth else None,
             gender=gender,
             languages=languages,
             flying_point=flying_point,
@@ -603,7 +603,7 @@ class Mutation:
             phone=phone,
             nationality=nationality,
             country_of_residence=country_of_residence,
-            date_of_birth=date_of_birth,
+            date_of_birth=date.fromisoformat(date_of_birth) if date_of_birth else None,
             gender=gender,
             languages=languages,
             flying_point=flying_point,
@@ -744,7 +744,7 @@ class Mutation:
         )
 
         doc = await document_service.create_document(
-            crew_id=dto.crew_member_id,
+            crew_id=safe_crew_id,
             file_name=dto.file_name,
             file_type=dto.file_type,
             file_size=dto.file_size,
@@ -806,8 +806,6 @@ class Mutation:
         issue_date: Optional[str] = None,
         expiry_date: Optional[str] = None,
     ) -> Certification:
-        from datetime import date
-
         dto = CertificationCreateDTO(
             crew_member_id=crew_id,
             cert_type=cert_type.value,

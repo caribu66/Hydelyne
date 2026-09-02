@@ -1,5 +1,5 @@
 import { FC, useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Search, ArrowUp, X, Activity, Bookmark, Send, Loader2, SlidersHorizontal } from 'lucide-react';
+import { Search, ArrowUp, X, Bookmark, Send, Loader2, SlidersHorizontal } from 'lucide-react';
 import { useCrewQuery, CrewQueryResult } from '../hooks/useCrewQuery';
 
 interface ModernHeroSearchProps {
@@ -52,7 +52,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
 
   // Keyboard shortcut '/' or 'Cmd+K' to focus
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (
         (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key === 'k')) &&
         document.activeElement !== textareaRef.current

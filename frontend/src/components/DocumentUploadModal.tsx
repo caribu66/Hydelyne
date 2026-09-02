@@ -4,10 +4,7 @@ import { UserProfile, DocumentCategory } from '../types';
 import {
   X,
   UploadCloud,
-  FileText,
   CheckCircle2,
-  Calendar,
-  ShieldCheck,
   AlertCircle,
   File,
 } from 'lucide-react';
@@ -30,7 +27,6 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
   onShowToast,
 }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [fileDataUrl, setFileDataUrl] = useState<string | undefined>(undefined);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<DocumentCategory>('certificate');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
@@ -74,14 +70,6 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
       setHasExpiry(true);
     }
 
-    // Read as Data URL
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setFileDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(selectedFile);
   };
 
   const handleDragOver = (e: DragEvent) => {

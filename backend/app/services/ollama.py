@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from app.config import get_settings
 
@@ -16,7 +17,7 @@ MODEL_LOAD_TIMEOUT = 30.0
 class OllamaClient:
     """Client for Ollama LLM inference with model swapping and retry logic."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = settings.OLLAMA_BASE_URL.rstrip("/")
         self.extraction_model = getattr(
             settings, "OLLAMA_EXTRACTION_MODEL", "llama3.1:8b-instruct-q4_K_M"
@@ -34,7 +35,7 @@ class OllamaClient:
         model: str | None = None,
         images: list[str] | None = None,
         json_format: bool = True,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Run inference on Ollama with retry logic.
 
         json_format=True (default) constrains Ollama's decoding to valid
@@ -61,7 +62,7 @@ class OllamaClient:
         if images:
             payload["images"] = images
 
-        last_exception = None
+        last_exception: BaseException | None = None
         for attempt in range(MAX_RETRIES):
             try:
                 async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -70,7 +71,10 @@ class OllamaClient:
                         json=payload,
                     )
                     response.raise_for_status()
-                    return response.json()
+                    body = response.json()
+                    if not isinstance(body, dict):
+                        raise ValueError(f"Ollama returned non-object JSON: {type(body)}")
+                    return body
             except httpx.TimeoutException as e:
                 last_exception = e
                 logger.warning(f"Ollama timeout (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
@@ -117,7 +121,7 @@ class OllamaClient:
         prompt: str,
         model: str | None = None,
         images: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Run inference on Ollama synchronously (for Celery tasks) with retry logic."""
         from time import sleep
 
@@ -133,7 +137,7 @@ class OllamaClient:
         if images:
             payload["images"] = images
 
-        last_exception = None
+        last_exception: BaseException | None = None
         for attempt in range(MAX_RETRIES):
             try:
                 with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
@@ -142,7 +146,10 @@ class OllamaClient:
                         json=payload,
                     )
                     response.raise_for_status()
-                    return response.json()
+                    body = response.json()
+                    if not isinstance(body, dict):
+                        raise ValueError(f"Ollama returned non-object JSON: {type(body)}")
+                    return body
             except httpx.TimeoutException as e:
                 last_exception = e
                 logger.warning(f"Ollama timeout (attempt {attempt + 1}/{MAX_RETRIES}): {e}")

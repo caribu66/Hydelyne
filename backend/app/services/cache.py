@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any, Optional
 
@@ -13,13 +14,18 @@ from app.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-_redis_pool = None
+_redis_pool: Optional[aioredis.Redis] = None
 
 
 async def get_redis() -> aioredis.Redis:
     global _redis_pool
     if _redis_pool is None:
-        _redis_pool = aioredis.from_url(
+        # redis-py ships py.typed, but `from_url` itself has no parameter/
+        # return annotations in its own source (checked directly), so this
+        # one call is genuinely unclassifiable by mypy — not a stub gap we
+        # can route around. The module-level annotation above is what gives
+        # every *caller* of get_redis() a real `Redis` type regardless.
+        _redis_pool = aioredis.from_url(  # type: ignore[no-untyped-call]
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
@@ -44,7 +50,7 @@ class CacheService:
     # practice (see ConsultantKnowledgeService.summarize).
     SUMMARY_TTL = timedelta(minutes=30)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._redis: Optional[aioredis.Redis] = None
 
     async def _get_redis(self) -> aioredis.Redis:
@@ -52,7 +58,7 @@ class CacheService:
             self._redis = await get_redis()
         return self._redis
 
-    def _make_key(self, prefix: str, *args, **kwargs) -> str:
+    def _make_key(self, prefix: str, *args: Any, **kwargs: Any) -> str:
         """Generate a cache key from prefix and arguments."""
         key_data = f"{prefix}:{json.dumps(args, sort_keys=True, default=str)}:{json.dumps(kwargs, sort_keys=True, default=str)}"
         hashed = hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
@@ -112,7 +118,7 @@ class CacheService:
     async def get_or_set(
         self,
         key: str,
-        factory,
+        factory: Callable[[], Awaitable[Any]],
         ttl: Optional[timedelta] = None,
     ) -> Any:
         """Get from cache or set using factory function."""
@@ -141,7 +147,7 @@ class CacheService:
             pipe.incr(key)
             pipe.expire(key, window_seconds)
             results = await pipe.execute()
-            return results[0]
+            return int(results[0])
         except Exception as e:
             logger.warning(f"Rate limit increment failed: {e}")
             return None

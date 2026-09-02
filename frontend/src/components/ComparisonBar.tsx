@@ -1,7 +1,7 @@
 import { FC } from 'react';
 import { UserProfile } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Scale, X, ArrowRight, Bookmark } from 'lucide-react';
+import { Scale, X, ArrowRight } from 'lucide-react';
 
 interface ComparisonBarProps {
   compareProfiles: UserProfile[];

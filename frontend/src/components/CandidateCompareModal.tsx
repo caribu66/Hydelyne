@@ -1,15 +1,13 @@
 import { FC, useRef } from 'react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { UserProfile } from '../types';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import {
   X,
   Scale,
   Check,
-  Star,
   MapPin,
   Calendar,
-  DollarSign,
   Briefcase,
   GraduationCap,
   ShieldCheck,
@@ -17,7 +15,6 @@ import {
   Printer,
   Send,
   Trash2,
-  Plus,
 } from 'lucide-react';
 import { CertificationBadge } from './CertificationBadge';
 

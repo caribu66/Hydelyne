@@ -9,7 +9,9 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import and_, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.domain.certifications import CERT_ALIASES, CERT_FAMILIES, normalize_cert_name
 from app.models import Certification as CertificationModel
@@ -193,7 +195,7 @@ For each candidate, provide:
 class CrewQueryService:
     """Service for natural language queries about crew members."""
 
-    async def process_query(self, query: str, db_session) -> dict[str, Any]:
+    async def process_query(self, query: str, db_session: AsyncSession) -> dict[str, Any]:
         """Process a natural language query about crew members."""
         intent_result = await self._classify_intent(query)
         intent = intent_result.get("intent", "general")
@@ -351,14 +353,16 @@ class CrewQueryService:
         normalized["entities"] = entities
         return normalized
 
-    async def _handle_search(self, query: str, entities: dict, db_session) -> dict[str, Any]:
+    async def _handle_search(
+        self, query: str, entities: dict[str, Any], db_session: AsyncSession
+    ) -> dict[str, Any]:
         """Handle search/filter queries with broad matching across crew data."""
         stmt = select(CrewMemberModel).options(
             selectinload(CrewMemberModel.certifications),
             selectinload(CrewMemberModel.work_history),
         )
 
-        filters = []
+        filters: list[ColumnElement[bool]] = []
         search_terms = []
 
         # Source systems may represent a medical as a certification or as a
@@ -471,7 +475,7 @@ class CrewQueryService:
 
         # Broad text search across multiple fields
         if search_terms:
-            term_filters = []
+            term_filters: list[ColumnElement[bool]] = []
             for term in search_terms:
                 term_filters.append(CrewMemberModel.full_name.ilike(f"%{term}%"))
                 term_filters.append(sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{term}%"))
@@ -513,7 +517,7 @@ class CrewQueryService:
             stmt = stmt.where(and_(*filters))
 
         result = await db_session.execute(stmt.limit(20))
-        crew_list = result.scalars().unique().all()
+        crew_list = list(result.scalars().unique().all())
 
         # Once every hard requirement is met, rank deterministically on the
         # information agents actually care about: ready to mobilize first,
@@ -585,7 +589,9 @@ class CrewQueryService:
             "summary": f"{len(results_data)} specialist{'s' if len(results_data) != 1 else ''} meet every requirement.",
         }
 
-    async def _handle_summarize(self, query: str, entities: dict, db_session) -> dict[str, Any]:
+    async def _handle_summarize(
+        self, query: str, entities: dict[str, Any], db_session: AsyncSession
+    ) -> dict[str, Any]:
         """Handle summarization queries."""
         crew_name = entities.get("crew_name")
         if not crew_name:
@@ -698,7 +704,9 @@ class CrewQueryService:
             document_data=json.dumps(doc_data, indent=2) if doc_data else "No documents",
         )
 
-    async def _handle_compliance(self, query: str, entities: dict, db_session) -> dict[str, Any]:
+    async def _handle_compliance(
+        self, query: str, entities: dict[str, Any], db_session: AsyncSession
+    ) -> dict[str, Any]:
         """Handle compliance queries."""
         today = date.today()
         threshold = today + timedelta(days=90)
@@ -779,7 +787,9 @@ class CrewQueryService:
             "total_issues": len(compliance_data),
         }
 
-    async def _handle_matching(self, query: str, entities: dict, db_session) -> dict[str, Any]:
+    async def _handle_matching(
+        self, query: str, entities: dict[str, Any], db_session: AsyncSession
+    ) -> dict[str, Any]:
         """Handle recruiter matching with every stated requirement enforced.
 
         Matching used to have a second, certification-only SQL path. It lost
@@ -791,7 +801,7 @@ class CrewQueryService:
         response["intent"] = "matching"
         return response
 
-    async def _handle_general(self, query: str, db_session) -> dict[str, Any]:
+    async def _handle_general(self, query: str, db_session: AsyncSession) -> dict[str, Any]:
         """Handle general queries."""
         return {
             "intent": "general",
@@ -800,7 +810,7 @@ class CrewQueryService:
         }
 
     async def _generate_response(
-        self, prompt_key: str, query: str, results: str, *, prose: bool = False, **kwargs
+        self, prompt_key: str, query: str, results: str, *, prose: bool = False, **kwargs: Any
     ) -> str:
         """Generate LLM response for the given prompt type.
 
@@ -818,6 +828,9 @@ class CrewQueryService:
             prompt = prompt_template.format(query=query, results=results, **kwargs)
             result = await ollama_client.extract(prompt, json_format=not prose)
             response = result.get("response", results)
+            if not isinstance(response, str):
+                logger.warning("Ollama returned a non-string response field; using fallback")
+                return results
             if prose:
                 return response.strip()
             try:

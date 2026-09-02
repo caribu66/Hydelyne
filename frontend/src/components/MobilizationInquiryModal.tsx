@@ -5,21 +5,11 @@ import { motion } from 'motion/react';
 import {
   X,
   Send,
-  Calendar,
   Anchor,
-  Clock,
   CheckCircle2,
   Copy,
   Check,
-  Download,
-  ShieldCheck,
-  Building,
-  User,
-  Mail,
-  FileText,
-  MapPin,
 } from 'lucide-react';
-import { CertificationBadge } from './CertificationBadge';
 
 interface MobilizationInquiryModalProps {
   isOpen: boolean;

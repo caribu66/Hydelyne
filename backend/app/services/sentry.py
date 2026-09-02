@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any, Literal
 
 import sentry_sdk
 from sentry_sdk.integrations.celery import CeleryIntegration
@@ -9,6 +10,11 @@ from sentry_sdk.integrations.redis import RedisIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from app.config import get_settings
+
+if TYPE_CHECKING:
+    # sentry_sdk defines these only inside `if TYPE_CHECKING:` itself (no
+    # runtime cost to the SDK) — same pattern here, safe to mirror.
+    from sentry_sdk._types import Event, Hint
 
 logger = logging.getLogger(__name__)
 
@@ -49,34 +55,39 @@ def init_sentry() -> None:
     logger.info("Sentry initialized successfully")
 
 
-def filter_sensitive_data(event, hint):
+def filter_sensitive_data(event: "Event", hint: "Hint") -> "Event":
     """Filter out sensitive data before sending to Sentry."""
     if "request" in event:
-        headers = event["request"].get("headers", {})
-        sensitive_headers = ["authorization", "cookie", "x-api-key"]
-        for header in sensitive_headers:
-            if header in headers:
-                headers[header] = "[Filtered]"
+        headers = event["request"].get("headers")
+        if isinstance(headers, dict):
+            sensitive_headers = ["authorization", "cookie", "x-api-key"]
+            for header in sensitive_headers:
+                if header in headers:
+                    headers[header] = "[Filtered]"
 
     if "exception" in event:
         frames = event["exception"].get("values", [{}])[0].get("stacktrace", {}).get("frames", [])
         for frame in frames:
-            if "vars" in frame:
+            frame_vars = frame.get("vars")
+            if isinstance(frame_vars, dict):
                 sensitive_vars = ["password", "token", "secret", "api_key"]
                 for var in sensitive_vars:
-                    if var in frame["vars"]:
-                        frame["vars"][var] = "[Filtered]"
+                    if var in frame_vars:
+                        frame_vars[var] = "[Filtered]"
 
     return event
 
 
-def capture_exception(error: Exception, **kwargs) -> None:
+def capture_exception(error: Exception, **kwargs: Any) -> None:
     """Capture an exception and send to Sentry."""
     if _sentry_initialized:
         sentry_sdk.capture_exception(error, **kwargs)
 
 
-def capture_message(message: str, level: str = "info", **kwargs) -> None:
+SentryLevel = Literal["fatal", "critical", "error", "warning", "info", "debug"]
+
+
+def capture_message(message: str, level: SentryLevel = "info", **kwargs: Any) -> None:
     """Capture a message and send to Sentry."""
     if _sentry_initialized:
         sentry_sdk.capture_message(message, level=level, **kwargs)

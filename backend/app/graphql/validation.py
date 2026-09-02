@@ -5,6 +5,7 @@ from typing import Optional
 
 from graphql import GraphQLError
 from strawberry.extensions import SchemaExtension
+from strawberry.extensions.base_extension import AsyncIteratorOrIterator
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ NESTED_FIELD_MULTIPLIER = 2
 class DepthValidationExtension(SchemaExtension):
     """Strawberry extension to enforce query depth/complexity limits."""
 
-    async def on_operation(self):
+    async def on_operation(self) -> AsyncIteratorOrIterator[None]:
         # Access parsed operation from execution context
         # Strawberry provides `self.execution_context` in newer versions
         try:
@@ -61,7 +62,7 @@ QueryDepthExtension = DepthValidationExtension
 class DisableIntrospection(SchemaExtension):
     """Extension that blocks GraphQL introspection in production."""
 
-    async def on_operation(self):
+    async def on_operation(self) -> AsyncIteratorOrIterator[None]:
         try:
             ctx = self.execution_context
             if ctx and ctx.graphql_document:
@@ -128,22 +129,6 @@ def calculate_complexity(
                 field_cost,
             )
     return total
-
-
-class QueryValidationMiddleware:
-    """Legacy alias for DepthValidationExtension."""
-
-    def __init__(
-        self,
-        max_depth: int = MAX_QUERY_DEPTH,
-        max_complexity: int = MAX_QUERY_COMPLEXITY,
-    ):
-        self.max_depth = max_depth
-        self.max_complexity = max_complexity
-
-    async def resolve(self, next_resolver, source, info, **kwargs):
-        """Resolve hook for query validation."""
-        return await next_resolver(source, info, **kwargs)
 
 
 def validate_query_depth(query: str) -> Optional[GraphQLError]:

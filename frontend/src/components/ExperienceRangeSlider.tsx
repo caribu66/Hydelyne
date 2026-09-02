@@ -1,5 +1,5 @@
 import { FC, ChangeEvent } from 'react';
-import { Clock, Zap } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 interface ExperienceRangeSliderProps {
   min: number;

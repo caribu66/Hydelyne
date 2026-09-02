@@ -1,6 +1,6 @@
 import { FC, useRef } from 'react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
-import { X, RotateCcw, SlidersHorizontal, Check, Sparkles } from 'lucide-react';
+import { X, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { FilterState, FilterPreset } from '../types';
 import { FilterSidebar } from './FilterSidebar';
 

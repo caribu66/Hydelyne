@@ -54,6 +54,21 @@ to reproduce.
   revision and, where safe, downgrade. Destructive migrations require a staged
   expand/migrate/contract plan and backup/rollback notes.
 
+## Type safety
+
+`mypy app` runs at real strictness (see `docs/ENGINEERING_STANDARDS.md` §
+Type safety for the `any`/cast/ignore rules — they apply here without
+exception). Two backend-specific notes:
+
+- `[tool.mypy] plugins = ["sqlalchemy.ext.mypy.plugin"]` is required — without
+  it, `Result.scalar_one_or_none()` and friends resolve to `Any` throughout
+  the codebase and the strict config is mostly theater.
+- Before typing an untyped-looking third-party call as `Any`, check for
+  `py.typed`: `meilisearch`, `qdrant_client`, `redis`, and `sentry_sdk` all
+  ship real types in this project's dependency set. Only `celery` genuinely
+  lacks them (already covered by the `ignore_missing_imports` override for
+  `celery.*` in `pyproject.toml`).
+
 ## Verification
 
 The target backend gate is:

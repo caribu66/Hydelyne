@@ -38,7 +38,6 @@ import { SkeletonResults } from './components/SkeletonResults';
 import {
   MapPin,
   Bookmark,
-  Linkedin,
   LayoutGrid,
   Columns,
   Table,
@@ -48,7 +47,6 @@ import {
   BadgeCheck,
   Download,
   Scale,
-  Printer,
   Sun,
   Moon,
   LogOut,
@@ -104,7 +102,7 @@ function queryFromCriteria(criteria: Record<string, unknown>): string {
 }
 
 export default function App() {
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const { initialized: authInitialized, isAuthenticated, user, logout, refreshSession } = useAuth();
   const canManageDocuments = user?.role === 'admin';
   const [deleteCrewMember] = useMutation(DELETE_CREW_MEMBER);
@@ -168,6 +166,11 @@ export default function App() {
     const nextQuery = queryFromCriteria(criteria);
     setQuery(nextQuery);
     setCommittedQuery(nextQuery);
+    // setQuery/setCommittedQuery come from useSearchWorkspace() below, so
+    // referencing them here (before that call) is a TDZ error, not just an
+    // exhaustive-deps nit. React guarantees useState setter identity is
+    // stable, so omitting them is safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiQueryData]);
 
   // Live backend profiles (falls back to MOCK_PROFILES only when demo mode enabled)
@@ -182,7 +185,6 @@ export default function App() {
 
   // Shortlist Hook - now works on live + mock unified list
   const {
-    bookmarkedIds,
     shortlistedProfiles,
     toggleBookmark: rawToggleBookmark,
     isBookmarked,
@@ -257,7 +259,15 @@ export default function App() {
     setModalProfile(null);
     await refetchProfiles();
     showToast(`${profile.name} was deleted`);
-  }, [deleteCrewMember, isBookmarked, rawToggleBookmark, refetchProfiles, showToast]);
+  }, [
+    deleteCrewMember,
+    isBookmarked,
+    rawToggleBookmark,
+    refetchProfiles,
+    showToast,
+    selectedProfileId,
+    setSelectedProfileId,
+  ]);
 
   const toggleBookmark = useCallback((id: string, e?: MouseEvent) => {
     if (e) e.stopPropagation();
@@ -327,10 +337,10 @@ export default function App() {
     onSyncQuery: useCallback((q: string) => {
       setQuery(q);
       setCommittedQuery(q.trim());
-    }, []),
+    }, [setCommittedQuery, setQuery]),
     onSyncViewMode: useCallback((mode: 'split' | 'cards' | 'table') => {
       setViewMode(mode === 'cards' ? 'grid' : mode);
-    }, []),
+    }, [setViewMode]),
   });
 
   // Document records live on the backend. Refresh the active/modal dossier
@@ -933,7 +943,7 @@ export default function App() {
                                         <HighlightText text={profile.name} query={committedQuery} />
                                       </h3>
                                       {profile.isHighlyRecommended && (
-                                        <BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" title="Verified Specialist" />
+                                        <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" /></span>
                                       )}
                                     </div>
 
@@ -1116,7 +1126,7 @@ export default function App() {
                                     <HighlightText text={profile.name} query={committedQuery} />
                                   </h3>
                                   {profile.isHighlyRecommended && (
-                                    <BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" title="Verified Specialist" />
+                                    <span title="Verified Specialist"><BadgeCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" /></span>
                                   )}
                                 </div>
                                 <p className="text-xs text-zinc-400 truncate font-light">
@@ -1149,7 +1159,7 @@ export default function App() {
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400 border-t border-b border-zinc-800/50 py-1.5">
                             <span className="flex items-center gap-1 truncate">
                               <MapPin className="w-3 h-3 text-zinc-500 shrink-0" />
-                              <HighlightText text={profile.location.split(',')[0]} query={committedQuery} />
+                              <HighlightText text={profile.location.split(',')[0]!} query={committedQuery} />
                             </span>
                             <span>•</span>
                             <span>{profile.yearsOfExperience} yrs exp</span>

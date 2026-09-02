@@ -137,7 +137,7 @@ class DropboxTokenProvider:
 
         payload = response.json()
         token = payload.get("access_token")
-        if not token:
+        if not isinstance(token, str) or not token:
             raise DropboxAuthError("Dropbox token refresh returned no access_token")
 
         expires_in = payload.get("expires_in") or DEFAULT_EXPIRES_IN

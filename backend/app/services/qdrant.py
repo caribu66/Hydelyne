@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from app.config import get_settings
+
+if TYPE_CHECKING:
+    from app.models import Document
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -15,7 +18,7 @@ QDRANT_COLLECTION = "documents"
 VECTOR_SIZE = 384
 
 
-def document_indexable_text(document) -> str:
+def document_indexable_text(document: "Document") -> str:
     """The text embedded for a Document: prefer its structured extraction,
     fall back to classification/file name. Shared by the embedding-indexing
     Celery task and ConsultantKnowledgeService.similar_documents so both
@@ -32,7 +35,7 @@ def document_indexable_text(document) -> str:
 class QdrantService:
     """Service for vector search using Qdrant."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._client: Optional[QdrantClient] = None
         self._collection_ensured = False
 
@@ -42,18 +45,18 @@ class QdrantService:
             self._client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
         if not self._collection_ensured:
             try:
-                self._ensure_collection()
+                self._ensure_collection(self._client)
             except Exception as e:
                 logger.warning(f"Qdrant not available, collection check skipped: {e}")
         return self._client
 
-    def _ensure_collection(self) -> None:
+    def _ensure_collection(self, client: QdrantClient) -> None:
         """Ensure the documents collection exists."""
         try:
-            collections = self._client.get_collections().collections  # type: ignore[union-attr]
+            collections = client.get_collections().collections
             collection_names = [c.name for c in collections]
             if QDRANT_COLLECTION not in collection_names:
-                self._client.create_collection(  # type: ignore[union-attr]
+                client.create_collection(
                     collection_name=QDRANT_COLLECTION,
                     vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
                 )
@@ -67,12 +70,12 @@ class QdrantService:
         self,
         document_id: str,
         text: str,
-        metadata: Optional[dict] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> bool:
         """Index a document embedding in Qdrant."""
         import asyncio
 
-        def _sync():
+        def _sync() -> bool:
             embedding = self._generate_embedding(text)
             point = PointStruct(
                 id=document_id,
@@ -95,11 +98,11 @@ class QdrantService:
         query_text: str,
         limit: int = 10,
         score_threshold: float = 0.7,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search for similar documents."""
         import asyncio
 
-        def _sync():
+        def _sync() -> list[dict[str, Any]]:
             query_embedding = self._generate_embedding(query_text)
             try:
                 results = self.client.query_points(
@@ -134,7 +137,7 @@ class QdrantService:
         """Delete a document from the index."""
         import asyncio
 
-        def _sync():
+        def _sync() -> bool:
             from qdrant_client.models import PointIdsList
 
             try:
@@ -170,9 +173,9 @@ class QdrantService:
             )
             if response.status_code == 200:
                 emb = response.json().get("embedding")
-                if emb:
-                    return emb
-                logger.warning("Ollama returned empty embedding")
+                if isinstance(emb, list) and emb:
+                    return [float(x) for x in emb]
+                logger.warning("Ollama returned empty or malformed embedding")
         except Exception as e:
             logger.warning(f"Ollama embedding failed: {e}")
 

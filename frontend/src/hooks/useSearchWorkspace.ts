@@ -139,7 +139,8 @@ export function useSearchWorkspace({
   useEffect(() => {
     if (results.length > 0) {
       if (!selectedProfileId || !results.some((r) => r.id === selectedProfileId)) {
-        setSelectedProfileId(results[0].id)
+        // Non-null: guarded by `results.length > 0` above.
+        setSelectedProfileId(results[0]!.id)
       }
     } else {
       setSelectedProfileId(null)
@@ -155,13 +156,15 @@ export function useSearchWorkspace({
   const handlePrevProfile = useCallback(() => {
     if (results.length === 0) return
     const prevIdx = currentSelectedIdx > 0 ? currentSelectedIdx - 1 : results.length - 1
-    setSelectedProfileId(results[prevIdx].id)
+    // Non-null: prevIdx is always within [0, results.length) given the guard above.
+    setSelectedProfileId(results[prevIdx]!.id)
   }, [results, currentSelectedIdx])
 
   const handleNextProfile = useCallback(() => {
     if (results.length === 0) return
     const nextIdx = currentSelectedIdx < results.length - 1 ? currentSelectedIdx + 1 : 0
-    setSelectedProfileId(results[nextIdx].id)
+    // Non-null: nextIdx is always within [0, results.length) given the guard above.
+    setSelectedProfileId(results[nextIdx]!.id)
   }, [results, currentSelectedIdx])
 
   return {

@@ -30,6 +30,42 @@ lines for a UI component. Crossing a threshold is not an automatic rewrite,
 but additions require the author to consider extracting a cohesive unit and to
 explain why the file remains coherent.
 
+## Type safety
+
+Backend mypy (`backend/pyproject.toml`) and frontend `tsconfig.json` are both
+configured at real strictness — `mypy app` and `npm run lint` are the actual
+gate, not a formality. Do not weaken either config to make a change pass;
+fix the change instead. Specifically:
+
+- **No `any` / `Any` without a reason.** `@typescript-eslint/no-explicit-any`
+  is a blocking ESLint error; Python's `Any` is allowed only at a genuine
+  external boundary (unshaped JSON from an HTTP response, a third-party
+  return value) — never propagated through a function signature you own. If
+  a third-party package lacks types, check for `py.typed` first
+  (`python -c "import pkg, os; print(os.path.dirname(pkg.__file__))"` then
+  look for a `py.typed` marker) — most do, and the real types are almost
+  always better than a hand-written guess. If it's genuinely untyped, wrap
+  the exact methods you call in a local `Protocol`, not a blanket `Any`.
+- **No unexplained casts.** A `cast()` / `as X` / non-null assertion (`!`) is
+  allowed only with a one-line comment stating the invariant that makes it
+  safe (e.g. "guarded by the length check above"). An assertion with no
+  comment is a rejected review finding, not a style nit.
+- **`# type: ignore` and `@ts-expect-error` need a specific code** —
+  `# type: ignore[attr-defined]`, never a bare `# type: ignore` — and a
+  reason. Backend mypy has `enable_error_code = ["ignore-without-code"]` to
+  make a bare ignore a hard error.
+- **Prefer a real fix over a suppression.** Before reaching for `Any`/cast/
+  ignore, check whether the actual bug is a wrong model/type annotation
+  (SQLAlchemy's own column-type class used where the Python value type
+  belongs is a real recurring mistake — `Mapped[Optional[date]]`, not
+  `Mapped[Optional[Date]]`), a variable reused for two unrelated types, or a
+  missing null-guard. Strict mode's job is to surface exactly these; treating
+  its complaint as a formality to silence defeats the point.
+- **Don't paper over stale/dead state with a suppression.** An unused
+  variable, import, or parameter is either dead (delete it) or a half-wired
+  feature (leave a one-line comment saying what's missing, prefixed `_` to
+  satisfy the linter) — never silence the warning without deciding which.
+
 ## API and compatibility
 
 - Validate length, shape, range, enum membership, and ownership at boundaries.

@@ -35,7 +35,11 @@ export function useAuth() {
   }, [])
 
   const login = useCallback(
-    async (email: string, password: string, remember = true): Promise<{ ok: boolean; message?: string }> => {
+    // `remember` is currently a no-op: the backend login mutation has no
+    // session-duration parameter, so the "Remember me" checkbox in
+    // LoginPage.tsx does not change behavior yet. Kept in the signature so
+    // that isn't lost, not because it does anything today.
+    async (email: string, password: string, _remember = true): Promise<{ ok: boolean; message?: string }> => {
       try {
         const { data } = await loginMutation({ variables: { email, password } })
         const result = data?.login

@@ -5,6 +5,7 @@ import logging
 import re
 import tempfile
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
@@ -83,7 +84,7 @@ def _validate_magic_bytes(ext: str, magic: bytes) -> bool:
 class DocumentUploadService:
     """Service for handling document uploads to Dropbox with local caching."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.storage_path = Path(settings.DOCUMENT_STORAGE_PATH)
         self.cache_path = self.storage_path / ".cache"
         try:
@@ -135,7 +136,14 @@ class DocumentUploadService:
 
         Returns:
             Tuple of (document_id, storage_path, file_size)
+
+        Raises:
+            ValueError: if ``file.filename`` is empty. Callers are expected to
+                have already run ``validate_file``, but this method must not
+                trust that and crash confusingly on a missing filename.
         """
+        if not file.filename:
+            raise ValueError("No filename provided")
         safe_crew_id = safe_path_component(crew_id, "crew_id")
         safe_classification = (
             safe_path_component(classification, "classification") if classification else None
@@ -283,13 +291,13 @@ class DocumentUploadService:
 
         return None
 
-    def stream_file(self, storage_path: str):
+    def stream_file(self, storage_path: str) -> Optional[Iterator[bytes]]:
         """Stream file content in chunks."""
         content = self.get_file(storage_path)
         if content is None:
             return None
 
-        def file_iterator():
+        def file_iterator() -> Iterator[bytes]:
             for i in range(0, len(content), CHUNK_SIZE):
                 yield content[i : i + CHUNK_SIZE]
 

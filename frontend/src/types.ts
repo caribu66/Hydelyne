@@ -50,6 +50,7 @@ export interface UserProfile {
   professionalSummary?: string;
   availability: AvailabilityStatus;
   education: string;
+  nationality?: string;
   countryOfResidence?: string;
   dateOfBirth?: string;
   gender?: string;

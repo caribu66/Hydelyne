@@ -4,13 +4,14 @@ import asyncio
 import logging
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.auth.decorators import get_current_user_rest, require_admin_rest, require_api_key
 from app.database import get_session_factory
+from app.models import CrewMember
 from app.models import Document as DocumentModel
 from app.services.audit import audit_service
 from app.services.upload import DropboxStorageError, document_upload_service
@@ -24,8 +25,8 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 @router.post("/preview-cv")
 async def preview_cv(
     file: UploadFile = File(...),
-    current_user=Depends(require_admin_rest),
-):
+    current_user: CrewMember = Depends(require_admin_rest),
+) -> dict[str, Any]:
     """Extract CV identity fields before a crew record is created.
 
     This is intentionally a preview only: it never stores the uploaded bytes
@@ -83,8 +84,8 @@ async def upload_document(
     crew_id: str = Form(...),
     file: UploadFile = File(...),
     classification: Optional[str] = Form(None),
-    current_user=Depends(require_admin_rest),
-):
+    current_user: CrewMember = Depends(require_admin_rest),
+) -> dict[str, Any]:
     """Upload a document for a crew member."""
     is_valid, error_msg = document_upload_service.validate_file(file)
     if not is_valid:
@@ -114,7 +115,7 @@ async def upload_document(
         document_id, storage_path, file_size = await document_upload_service.save_file(
             file, crew_id, classification
         )
-        file_type = document_upload_service.get_file_type(file.filename)
+        file_type = document_upload_service.get_file_type(file.filename or "upload")
 
         # Determine storage type based on path
         storage_type = "dropbox" if storage_path.startswith("/hydenlyne/") else "local"
@@ -163,8 +164,8 @@ async def upload_document(
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: str,
-    current_user=Depends(get_current_user_rest),
-):
+    current_user: CrewMember = Depends(get_current_user_rest),
+) -> StreamingResponse:
     """Download a document."""
     async with get_session_factory()() as session:
         from sqlalchemy import select
@@ -200,8 +201,8 @@ async def download_document(
 
 @router.get("/{document_id}/status")
 async def get_document_status(
-    document_id: str, request: Request, current_user=Depends(get_current_user_rest)
-):
+    document_id: str, request: Request, current_user: CrewMember = Depends(get_current_user_rest)
+) -> dict[str, Any]:
     """Get document processing status."""
     async with get_session_factory()() as session:
         from sqlalchemy import select
@@ -223,8 +224,8 @@ async def get_document_status(
 @router.delete("/{document_id}", status_code=204)
 async def delete_document(
     document_id: str,
-    current_user=Depends(require_admin_rest),
-):
+    current_user: CrewMember = Depends(require_admin_rest),
+) -> None:
     """Delete a document record and its managed file."""
     async with get_session_factory()() as session:
         from sqlalchemy import select
@@ -257,8 +258,8 @@ async def agent_upload_document(
     crew_id: str = Form(...),
     file: UploadFile = File(...),
     classification: Optional[str] = Form(None),
-    api_key=Depends(require_api_key),
-):
+    api_key: bool = Depends(require_api_key),
+) -> dict[str, Any]:
     """Upload a document for a crew member (agent access via API key)."""
     is_valid, error_msg = document_upload_service.validate_file(file)
     if not is_valid:
@@ -268,7 +269,7 @@ async def agent_upload_document(
         document_id, storage_path, file_size = await document_upload_service.save_file(
             file, crew_id, classification
         )
-        file_type = document_upload_service.get_file_type(file.filename)
+        file_type = document_upload_service.get_file_type(file.filename or "upload")
 
         storage_type = "dropbox" if storage_path.startswith("/hydenlyne/") else "local"
         dropbox_path = storage_path if storage_type == "dropbox" else None

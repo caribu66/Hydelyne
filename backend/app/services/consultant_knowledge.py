@@ -194,7 +194,8 @@ class ConsultantKnowledgeService:
                 return "No crew member found with that id."
             return await crew_query_service.generate_crew_summary(crew_member)
 
-        return await cache_service.get_or_set(cache_key, _generate, ttl=cache_service.SUMMARY_TTL)
+        result = await cache_service.get_or_set(cache_key, _generate, ttl=cache_service.SUMMARY_TTL)
+        return result if isinstance(result, str) else await _generate()
 
     async def similar_documents(
         self, document_id: str, *, db_session: AsyncSession, limit: int = 10
