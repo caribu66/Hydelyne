@@ -110,9 +110,24 @@ uvicorn runs without `--reload`, so a change needs a restart:
 podman restart hydenlyne-crew-dms_backend_1 hydenlyne-crew-dms_celery_worker_1
 ```
 
+That only covers source edits. A change to `requirements.txt` needs a rebuild,
+same as the frontend, because the dependency is installed into the image, not
+read from the bind mount:
+
+```bash
+podman-compose build backend
+podman-compose up -d --force-recreate backend celery_worker celery_gpu_worker celery_beat flower
+```
+
 The frontend is compiled into an nginx image at build time (the dev bind mount
-is commented out in `docker-compose.yml`), so a frontend change needs
-`podman-compose build && podman-compose up -d`.
+is commented out in `docker-compose.yml`), so a frontend change needs a rebuild.
+`up -d` alone can leave the old container running on the old image if nothing
+else in the compose file changed, so force the recreate:
+
+```bash
+podman-compose build frontend
+podman-compose up -d --force-recreate frontend
+```
 
 ### Nothing else may hold the ports
 
