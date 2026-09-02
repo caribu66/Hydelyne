@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useMutation, useQuery } from '@apollo/client'
+import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { LOGIN_MUTATION, LOGOUT_MUTATION, ME_QUERY } from '../lib/queries'
+import { setAuthToken } from '../lib/apollo'
 
 export interface AuthUser {
   id: string
@@ -10,6 +11,7 @@ export interface AuthUser {
 }
 
 export function useAuth() {
+  const apolloClient = useApolloClient()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [initialized, setInitialized] = useState(false)
 
@@ -62,13 +64,16 @@ export function useAuth() {
   )
 
   const logout = useCallback(async () => {
+    // Hide authenticated surfaces immediately, even if the network request is slow.
+    setUser(null)
     try {
       await logoutMutation()
     } catch {
       // Logout is best-effort; clear local state regardless of server response
     }
-    setUser(null)
-  }, [logoutMutation])
+    setAuthToken(null)
+    await apolloClient.clearStore()
+  }, [apolloClient, logoutMutation])
 
   const isAuthenticated = Boolean(user)
 

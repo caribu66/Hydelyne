@@ -10,6 +10,15 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-03 — Clean logout boundary (Codex)
+
+- Logout now immediately closes authenticated surfaces, clears search/filter,
+  selection, comparison, shortlist, and transient dossier state, and replaces
+  the browser location with the unfiltered `/` main page.
+- Legacy bearer credentials and Apollo's authenticated response cache are
+  cleared after the best-effort server logout. Added a Playwright regression
+  covering filtered search, URL state, shortlist storage, and private results.
+
 ## 2026-09-02 — Unified Hydenlyne UI theme (Codex)
 
 - Replaced screen-level zinc/blue styling with semantic dark and light theme

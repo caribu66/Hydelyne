@@ -283,4 +283,30 @@ test.describe('authenticated specialist workspace', () => {
     await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('hydenlyne_token'))).toBeNull();
   });
+
+  test('signs out to a clean, unfiltered main page without private workspace state', async ({ page }) => {
+    await authenticate(page);
+    await page.addInitScript(() => {
+      localStorage.setItem('hydenlyne_bookmarked_ids', JSON.stringify(['crew-1']));
+    });
+    await mockCrewApi(page);
+    await page.goto('/?q=hydrography&view=cards');
+
+    await expect(page.getByRole('button', { name: /Open Alex Morgan dossier/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Refine filters' }).click();
+    const filters = page.getByRole('dialog', { name: 'Filter contractors' });
+    await filters.getByRole('button', { name: 'Available immediately' }).click();
+    await filters.getByRole('button', { name: /Show 1 contractor/ }).click();
+    await expect(page.getByLabel('Active contractor filters')).toContainText('Available immediately');
+
+    await page.getByRole('button', { name: 'Open workspace menu' }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open Alex Morgan dossier/ })).toHaveCount(0);
+    await expect(page.getByLabel('Active contractor filters')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hydenlyne_bookmarked_ids'))).toBe('[]');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hydenlyne_token'))).toBeNull();
+  });
 });

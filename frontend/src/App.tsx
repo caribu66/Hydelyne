@@ -382,6 +382,30 @@ export default function App() {
   }
 
   const handleLogout = async () => {
+    // A signed-out browser must not retain a previous user's workspace state.
+    handleResetAll();
+    setViewMode('split');
+    setSelectedProfileId(null);
+    clearShortlist();
+    setModalProfile(null);
+    setToastMessage(null);
+    setCopiedId(null);
+    setIsLoginOpen(false);
+    setIsShortcutsOpen(false);
+    setIsExportShortlistOpen(false);
+    setIsFilterOpen(false);
+    setCompareIds([]);
+    setIsCompareModalOpen(false);
+    setInquiryProfile(null);
+    setIsInquiryModalOpen(false);
+    setPrintProfile(null);
+    setAiQueryData(null);
+    setAiQueryLoading(false);
+    setAiQueryActive(false);
+    setShowAISummary(false);
+    setIsAddCrewMemberOpen(false);
+    setIsFocusMode(false);
+    window.history.replaceState(null, '', '/');
     await logout();
   };
 
