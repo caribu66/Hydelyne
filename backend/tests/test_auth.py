@@ -136,6 +136,67 @@ async def test_non_admin_blocked_from_create_crew_member(client, monkeypatch):
     assert any(e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"])
 
 
+# Every remaining admin-gated mutation from docs/AUTHORIZATION.md, minus the
+# two already covered above by their own named tests. createCrewMember and
+# uploadDocument had negative-auth coverage; the other twelve did not, which
+# is exactly the "add negative authorization tests for every mutation" gap
+# docs/AUDIT_2026-09-02.md (P1 #4) called out.
+_OTHER_ADMIN_MUTATIONS = [
+    ("updateCrewMember", 'mutation { updateCrewMember(id: "x") { id } }'),
+    ("deleteCrewMember", 'mutation { deleteCrewMember(id: "x") }'),
+    ("confirmExtraction", 'mutation { confirmExtraction(documentId: "x", data: "{}") { id } }'),
+    ("reprocessDocument", 'mutation { reprocessDocument(documentId: "x") { id } }'),
+    (
+        "confirmDocumentMatch",
+        'mutation { confirmDocumentMatch(documentId: "x", crewId: "x") { id } }',
+    ),
+    ("addCertification", 'mutation { addCertification(crewId: "x", certType: BOSIET) { id } }'),
+    ("updateCertification", 'mutation { updateCertification(id: "x") { id } }'),
+    ("verifyCertification", 'mutation { verifyCertification(id: "x", status: VERIFIED) { id } }'),
+    (
+        "createProject",
+        'mutation { createProject(clientName: "x", projectName: "x", projectType: OTHER) { id } }',
+    ),
+    ("updateProject", 'mutation { updateProject(id: "x") { id } }'),
+    (
+        "assignCrewToProject",
+        'mutation { assignCrewToProject(projectId: "x", crewIds: ["x"]) { id } }',
+    ),
+    (
+        "uploadCvAndExtract",
+        'mutation { uploadCvAndExtract(crewId: "x", fileName: "x.pdf", '
+        'fileType: "application/pdf", fileSize: 1) { documentId } }',
+    ),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation_name,query", _OTHER_ADMIN_MUTATIONS)
+async def test_non_admin_blocked_from_admin_mutation(client, monkeypatch, mutation_name, query):
+    """Non-admin users must be FORBIDDEN from every admin-only mutation."""
+    import uuid as _uuid
+
+    from app.models import CrewMember
+
+    regular_user = CrewMember(
+        id=str(_uuid.uuid4()),
+        full_name="Regular User",
+        email="user@test.com",
+        role="user",
+    )
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=regular_user),
+    )
+
+    response = await client.post("/graphql", json={"query": query})
+    body = response.json()
+    assert "errors" in body, f"{mutation_name} did not error for a non-admin caller: {body}"
+    assert any(
+        e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"]
+    ), f"{mutation_name} did not return FORBIDDEN for a non-admin caller: {body}"
+
+
 @pytest.mark.asyncio
 async def test_non_admin_blocked_from_upload_document_mutation(client, monkeypatch):
     """Non-admin users must be FORBIDDEN from uploadDocument."""

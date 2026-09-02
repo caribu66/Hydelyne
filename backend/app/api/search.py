@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.auth.decorators import get_current_user_rest
+from app.auth.decorators import get_current_user_rest, require_admin_rest
 from app.models import CrewMember
 from app.services.meilisearch import meilisearch_client
 
@@ -67,9 +67,13 @@ async def search_documents(
 
 @router.post("/index/crew/{crew_id}")
 async def index_crew_member(
-    crew_id: str, request: Request, current_user: CrewMember = Depends(get_current_user_rest)
+    crew_id: str, request: Request, current_user: CrewMember = Depends(require_admin_rest)
 ) -> dict[str, Any]:
-    """Index a crew member in Meilisearch."""
+    """Index a crew member in Meilisearch.
+
+    State-changing (writes to the Meilisearch index), so it follows the same
+    admin-only policy as every other write path — see docs/AUTHORIZATION.md.
+    """
     from sqlalchemy import select
 
     from app.database import get_session_factory

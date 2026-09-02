@@ -10,6 +10,44 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-02 — Authorization matrix: close test and doc gaps (Claude Code)
+
+Addressed `docs/AUDIT_2026-09-02.md` P1 #4 ("no documented+tested
+authorization matrix"). The policy itself was already sound (every GraphQL
+mutation uniformly `@require_admin`, matching `docs/AUTHORIZATION.md`), so
+this was about closing the gaps between the policy and its documentation/test
+coverage, plus one real inconsistency found while auditing REST:
+
+- `docs/AUTHORIZATION.md` only listed 3 REST routes; the backend actually
+  exposes ~15. Rewrote the REST table to cover `/api/search/*`,
+  `/api/documents/*`, and `/api/dropbox/download`, and made explicit that
+  `/health/{db,redis,ollama,qdrant,all}` are open with no auth at all outside
+  `APP_ENV=production` (intentional per `_is_prod()` in `app/api/health.py`,
+  but previously undocumented — a future reader could easily have mistaken it
+  for a bug).
+- Found `POST /api/search/index/crew/{crew_id}` was gated by
+  `get_current_user_rest` (any authenticated user) despite writing to the
+  Meilisearch index — a real inconsistency with every other write path, which
+  are all admin-gated. Confirmed nothing calls it (frontend or backend) and
+  tightened it to `require_admin_rest`.
+- Only 2 of 14 admin-gated GraphQL mutations had a negative-authorization
+  test. Added a parametrized test in `backend/tests/test_auth.py` covering
+  the other 12, asserting a non-admin caller gets `FORBIDDEN` on each.
+- Verified independently (not just trusting the prior commit's message):
+  backend ruff format/check, mypy strict, and pytest (102 passed, up from 90)
+  all green; single Alembic head.
+
+**Follow-up for the next session:** `docs/AUTHORIZATION.md`'s own rationale
+notes reads are deliberately open to any authenticated user (product needs
+agents to browse all specialists), so resource-ownership scoping is out of
+scope here by design, not an oversight — don't "fix" that without a product
+decision. Separately, `backend/pyproject.toml` still fails `pip install -e .`
+on a clean checkout (flat-layout package discovery error: `app/`, `data/`,
+and `alembic/` are all top-level with no `[tool.setuptools]` package config)
+— that's the exact command CI's backend job runs, and it predates this
+session's changes. Not fixed here (out of scope for the auth-matrix slice);
+worth its own small PR.
+
 ## 2026-09-02 — Real strict typing + anti-technical-debt rules (Claude Code)
 
 User asked for strict rules to eradicate `any`/casts/technical debt going
