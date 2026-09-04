@@ -51,7 +51,7 @@ schema is out of date.
 
 | Service | Port | Description |
 |---------|------|-------------|
-| PostgreSQL | 5432 | Primary database |
+| PostgreSQL | 5433 (host) → 5432 (container) | Primary database; host port overridable via `POSTGRES_HOST_PORT` |
 | Redis | 6379 | Task queue broker + rate limiting |
 | Qdrant | 6333/6334 | Vector search (the app talks to the REST port, 6333) |
 | Meilisearch | 7700 | Keyword search index |
@@ -133,14 +133,19 @@ podman-compose up -d --force-recreate frontend
 
 ### Nothing else may hold the ports
 
-The stack binds 5432, 6379, 5173, and 8000. Anything already on those ports — a
-host Postgres, a `npm run dev` server, a stray uvicorn — makes the
-corresponding container fail to start. On a rootless-podman host, check for a
-systemd user unit holding the database port:
+The stack binds 5433 (Postgres), 6379, 5173, and 8000. Anything already on
+those ports — a host Postgres, a `npm run dev` server, a stray uvicorn — makes
+the corresponding container fail to start. Postgres defaults to 5433 rather
+than the standard 5432 specifically because a rootless-podman host commonly
+also runs its own general-purpose Postgres as a systemd/Quadlet unit on 5432;
+check for one before assuming the port is free:
 
 ```bash
 systemctl --user list-units --type=service | grep -i postgres
 ```
+
+If a compose `db` container ever does fail with "address already in use" on
+5433 too, set `POSTGRES_HOST_PORT` in `.env` to another free port.
 
 ### Checking the stack
 

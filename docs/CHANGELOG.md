@@ -10,6 +10,37 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-04 — Fix db port conflict with host Postgres; resolve stack outage (Claude Code)
+
+Found the whole containerized stack down ~44h (a host reboot). Restarting
+`db` failed with "address already in use" on 5432 — occupied by the
+developer's own general-purpose, always-on Postgres 18 (a systemd/Quadlet
+unit, `postgres.service`, keyed to their OS username, unrelated to this
+project). It happened to also contain a stale `hydenlyne` database from an
+unrelated past experiment (migration `009`, 9 seed crew members, last
+touched 2026-09-01), so the app was silently connecting to the wrong
+database instead of erroring outright. Confirmed no harm: alembic's
+auto-migration attempt against it failed safely on a permission error
+(`InsufficientPrivilegeError: must be owner of table crew_members`,
+transactional rollback) and no `crew_members` row had an `updated_at` from
+today before this was caught and the host processes were stopped.
+
+`db`'s host-published port is now `${POSTGRES_HOST_PORT:-5433}` instead of a
+hardcoded `5432` (`docker-compose.yml`; documented in `.env.example` and
+`README.md`). Container-to-container traffic (`db:5432` on the compose
+network) is unaffected — only the host-side mapping changed. Recreated `db`
+with `--force-recreate` (a stale container object from the old port mapping
+doesn't pick up a compose-file change on `up -d` alone) and confirmed the
+persistent volume survived intact: migration head `012`, 109 real crew
+members. Full stack verified live: `/health/all` all healthy, GraphQL login +
+query against real data, frontend HTTP 200. See also `backend/.env` (not
+committed — gitignored), which had the same class of stale credentials bug
+this fixed too while touching the file.
+
+**Follow-up:** the developer's `postgres.service` will keep existing on this
+machine — if it or something else ever also claims 5433, `POSTGRES_HOST_PORT`
+in `.env` is the escape hatch, no code change needed.
+
 ## 2026-09-03 — Clean logout boundary (Codex)
 
 - Logout now immediately closes authenticated surfaces, clears search/filter,

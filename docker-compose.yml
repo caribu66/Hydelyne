@@ -6,7 +6,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hydenlyne_pass}
       POSTGRES_DB: ${POSTGRES_DB:-hydenlyne}
     ports:
-      - "5432:5432"
+      # Host-side port only — container-to-container traffic always uses
+      # db:5432 regardless of this mapping. Overridable because a host
+      # already running its own Postgres on 5432 (e.g. a separate,
+      # always-on systemd/Quadlet service) will otherwise fail to bind.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
