@@ -41,6 +41,12 @@ history, shared with the backend.
 
 ## Product UI contract
 
+- Visual harmony is an acceptance criterion, not cosmetic polish. Before
+  shipping a UI change, compare the edited surface with its adjacent reading
+  surfaces and reuse the same hierarchy: semantic tokens, spacing rhythm,
+  corner treatment, control height, typography scale, disclosure behavior,
+  and empty/loading states. Do not introduce a one-off visual pattern when an
+  established one can express the interaction.
 - Reuse existing components and the documented design tokens before creating new patterns.
 - Keep terminology consistent: use “specialist”, “shortlist”, “compare”, and “mobilization request”.
 - Support dark and light themes for every new surface.

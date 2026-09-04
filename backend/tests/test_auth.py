@@ -234,3 +234,36 @@ async def test_non_admin_blocked_from_upload_document_mutation(client, monkeypat
     body = response.json()
     assert "errors" in body
     assert any(e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"])
+
+
+# docs/AUTHORIZATION.md claims "All queries remain @require_auth" but, unlike
+# the admin-mutation table above, had no test proving it — only the doc's
+# prose. Fields added here without the decorator are caught by default: they
+# must be deliberately (and visibly) added below with a reason, mirroring the
+# admin-mutation list's "add a case when you add a mutation" policy for
+# queries specifically.
+_PUBLIC_QUERIES: set[str] = set()
+
+
+def test_all_queries_require_auth_decorator():
+    """Every Query field must be wrapped by @require_auth or @require_admin.
+
+    Checks the resolver's underlying code object rather than calling each
+    field, so it's independent of DB/service mocking and decorator-agnostic
+    (catches require_auth and require_admin alike) — a missing decorator
+    fails this test immediately instead of shipping an unauthenticated read.
+    """
+    from app.graphql.schema import Query
+
+    fields = Query.__strawberry_definition__.fields
+    assert fields, "Query type has no fields — introspection broke, not that auth is fine"
+
+    for field in fields:
+        if field.name in _PUBLIC_QUERIES:
+            continue
+        assert field.base_resolver is not None, f"Query.{field.name} has no resolver"
+        code = field.base_resolver.wrapped_func.__code__
+        assert code.co_filename.endswith("app/auth/decorators.py") and code.co_name == "wrapper", (
+            f"Query.{field.name} is not wrapped by @require_auth/@require_admin — "
+            f"add the decorator, or add '{field.name}' to _PUBLIC_QUERIES above with a reason."
+        )

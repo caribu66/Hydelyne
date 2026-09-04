@@ -401,8 +401,8 @@ input[type=range]::-moz-range-thumb {
 /* Scan-first split workspace: keep the page frame stable while each work surface
    can be scanned independently on desktop screens. */
 .scan-workspace {
-  height: min(780px, calc(100dvh - 195px));
-  min-height: 520px;
+  height: min(1080px, calc(100dvh - 180px));
+  min-height: 620px;
 }
 
 .scan-scroll-panel {

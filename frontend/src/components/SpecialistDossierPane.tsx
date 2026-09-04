@@ -8,6 +8,7 @@ import { CertificationBadge } from './CertificationBadge';
 import { DocumentVault } from './DocumentVault';
 import { CandidateSkillRadarChart } from './CandidateSkillRadarChart';
 import { ConfirmDialog } from './ConfirmDialog';
+import { DossierCollection } from './DossierCollection';
 import {
   MapPin,
   Mail,
@@ -97,6 +98,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   const [isHeaderActionsOpen, setIsHeaderActionsOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [skillsQuery, setSkillsQuery] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionMenuRef = useRef<HTMLDivElement>(null);
   const sectionMenuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -112,6 +114,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   useEffect(() => {
     setIsMoreSectionsOpen(false);
     setIsHeaderActionsOpen(false);
+    setSkillsQuery('');
   }, [profile?.id]);
 
   useEffect(() => {
@@ -222,13 +225,25 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   };
 
   const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
-  const isSecondarySection = activeTab === 'systems' || activeTab === 'expertise';
-  const secondarySectionLabel = activeTab === 'systems' ? 'Systems' : activeTab === 'expertise' ? 'Expertise' : 'More';
+  const readableSummary = summary?.trim();
+  const hasReadableSummary = Boolean(readableSummary && !readableSummary.startsWith('{') && !readableSummary.startsWith('['));
+  const isSecondarySection = activeTab === 'systems';
+  const secondarySectionLabel = activeTab === 'systems' ? 'Systems' : 'More';
+  const profileSkills = Array.from(new Set([...(profile.skills ?? []), ...(profile.expertise ?? [])]));
+  const normalizedSkillsQuery = skillsQuery.trim().toLocaleLowerCase();
+  const matchingSkills = normalizedSkillsQuery
+    ? profileSkills.filter((skill) => skill.toLocaleLowerCase().includes(normalizedSkillsQuery))
+    : profileSkills;
+  const credentialCount = profile.certificationDetails?.length ?? profile.certifications?.length ?? 0;
+  const indexedDocumentCount = documents.filter((document) => document.extractionStatus === 'extracted').length;
+  const latestProject = [...(profile.workHistory ?? [])]
+    .sort((left, right) => (right.startDate ?? '').localeCompare(left.startDate ?? ''))[0];
+  const highlightedSkills = profileSkills.slice(0, 3);
   const sectionButtonClass = (isActive: boolean) => `min-h-11 px-3.5 py-1.5 rounded-[10px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
     isFocusMode ? 'text-xs sm:text-sm' : 'text-xs'
   } ${isActive ? 'bg-surface-raised text-primary shadow-xs' : 'text-secondary hover:bg-surface hover:text-primary'}`;
 
-  const selectSecondarySection = (section: 'systems' | 'expertise') => {
+  const selectSecondarySection = (section: 'systems') => {
     setActiveTab(section);
     setIsMoreSectionsOpen(false);
     requestAnimationFrame(() => sectionMenuTriggerRef.current?.focus());
@@ -512,6 +527,19 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
 
           <button
             type="button"
+            aria-pressed={activeTab === 'expertise'}
+            onClick={() => setActiveTab('expertise')}
+            className={sectionButtonClass(activeTab === 'expertise')}
+          >
+            <Activity className="w-3.5 h-3.5 text-secondary" />
+            <span>Skills</span>
+            <span className="px-2 py-0.5 rounded-full bg-surface-raised text-secondary font-mono text-xs">
+              {profileSkills.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
             aria-pressed={activeTab === 'vault'}
             onClick={() => setActiveTab('vault')}
             className={sectionButtonClass(activeTab === 'vault')}
@@ -540,9 +568,6 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               <div role="menu" aria-label="More dossier sections" className="absolute right-0 top-12 z-30 w-52 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
                 <button type="button" role="menuitem" onClick={() => selectSecondarySection('systems')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
                   <Layers className="h-4 w-4" /> Systems experience
-                </button>
-                <button type="button" role="menuitem" onClick={() => selectSecondarySection('expertise')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
-                  <Activity className="h-4 w-4" /> Technical expertise
                 </button>
                 <button type="button" role="menuitem" onClick={() => setIsRadarModalOpen(true)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
                   <Activity className="h-4 w-4" /> Competency radar
@@ -585,42 +610,84 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             <section className="space-y-2">
               <h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Track Record & Clients</h3>
               <p className="text-secondary leading-relaxed">{profile.yearsOfExperience} years of offshore experience.</p>
-              {profile.pastCompanies && profile.pastCompanies.length > 0 && <div className="flex flex-wrap gap-2">{profile.pastCompanies.map((company) => <span key={company} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary">{company}</span>)}</div>}
+              {profile.pastCompanies && profile.pastCompanies.length > 0 && <DossierCollection items={profile.pastCompanies} itemLabel="clients" initialItems={8} renderItems={(companies) => <div className="flex flex-wrap gap-2">{companies.map((company) => <span key={company} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary">{company}</span>)}</div>} />}
             </section>
             {profile.workHistory && profile.workHistory.length > 0 && (
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Recent Projects</h3>
-                <div className="overflow-x-auto rounded-[10px] border border-border-subtle">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-canvas/60 text-xs font-semibold text-secondary uppercase tracking-wider">
-                      <tr><th className="px-3 py-2 text-left">Year</th><th className="px-3 py-2 text-left">Client</th><th className="px-3 py-2 text-left">Country</th><th className="px-3 py-2 text-left">Survey Type</th><th className="px-3 py-2 text-left">Position</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800">
-                      {profile.workHistory.map((row, idx) => (
-                        <tr key={row.id ?? idx} className="text-primary">
-                          <td className="px-3 py-2 whitespace-nowrap">{row.startDate ? row.startDate.slice(0, 4) : ''}</td>
-                          <td className="px-3 py-2">{row.clientName}</td>
-                          <td className="px-3 py-2">{row.country}</td>
-                          <td className="px-3 py-2">{row.projectType}</td>
-                          <td className="px-3 py-2">{row.role}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DossierCollection
+                  items={profile.workHistory}
+                  itemLabel="projects"
+                  renderItems={(projects) => (
+                    <div className="overflow-x-auto rounded-[10px] border border-border-subtle">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-canvas/60 text-xs font-semibold text-secondary uppercase tracking-wider">
+                          <tr><th className="px-3 py-2 text-left">Year</th><th className="px-3 py-2 text-left">Client</th><th className="px-3 py-2 text-left">Country</th><th className="px-3 py-2 text-left">Survey Type</th><th className="px-3 py-2 text-left">Position</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-subtle">
+                          {projects.map((row, index) => (
+                            <tr key={row.id ?? `${row.clientName ?? 'project'}-${index}`} className="text-primary">
+                              <td className="px-3 py-2 whitespace-nowrap">{row.startDate ? row.startDate.slice(0, 4) : ''}</td>
+                              <td className="px-3 py-2">{row.clientName}</td>
+                              <td className="px-3 py-2">{row.country}</td>
+                              <td className="px-3 py-2">{row.projectType}</td>
+                              <td className="px-3 py-2">{row.role}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                />
               </section>
             )}
-            {profile.geographicalExperience && profile.geographicalExperience.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Geographical Experience</h3><div className="flex flex-wrap gap-2">{profile.geographicalExperience.map((place) => <span key={place} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary"><HighlightText text={place} query={searchQuery} /></span>)}</div></section>}
-            {profile.surveyTypes && profile.surveyTypes.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Survey Focus</h3><div className="flex flex-wrap gap-2">{profile.surveyTypes.map((type) => <span key={type} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary">{type}</span>)}</div></section>}
+            {profile.geographicalExperience && profile.geographicalExperience.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Geographical Experience</h3><DossierCollection items={profile.geographicalExperience} itemLabel="locations" initialItems={8} renderItems={(locations) => <div className="flex flex-wrap gap-2">{locations.map((place) => <span key={place} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary"><HighlightText text={place} query={searchQuery} /></span>)}</div>} /></section>}
+            {profile.surveyTypes && profile.surveyTypes.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Survey Focus</h3><DossierCollection items={profile.surveyTypes} itemLabel="survey disciplines" initialItems={8} renderItems={(surveyTypes) => <div className="flex flex-wrap gap-2">{surveyTypes.map((type) => <span key={type} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary">{type}</span>)}</div>} /></section>}
           </div>
         ) : activeTab === 'systems' ? (
           <div className="space-y-4">
-            {profile.systemsCategories ? (Object.entries(profile.systemsCategories) as [string, string[]][]).map(([category, items]) => items.length > 0 && <section key={category} className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">{category}</h3><div className="flex flex-wrap gap-2">{items.map((system) => <span key={system} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">{system}</span>)}</div></section>) : <p className="text-muted">No systems experience was found in the CV.</p>}
+            {profile.systemsCategories ? (Object.entries(profile.systemsCategories) as [string, string[]][]).map(([category, items]) => items.length > 0 && <section key={category} className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">{category}</h3><DossierCollection items={items} itemLabel="systems" initialItems={8} renderItems={(systems) => <div className="flex flex-wrap gap-2">{systems.map((system) => <span key={system} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">{system}</span>)}</div>} /></section>) : <p className="text-muted">No systems experience was found in the CV.</p>}
           </div>
         ) : activeTab === 'expertise' ? (
           <div className="space-y-4">
-            {profile.expertise && profile.expertise.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Expertise</h3><div className="flex flex-wrap gap-2">{profile.expertise.map((item) => <span key={item} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">{item}</span>)}</div></section>}
-            {(!profile.expertise || profile.expertise.length === 0) && <p className="text-muted">No explicit expertise section was found in the CV.</p>}
+            <section className="space-y-3" aria-labelledby="skills-heading">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 id="skills-heading" className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Skills & technical competencies</h3>
+                  <p className="mt-1 text-sm text-secondary">{matchingSkills.length} of {profileSkills.length} skills shown</p>
+                </div>
+                <label className="block sm:w-72">
+                  <span className="sr-only">Find a skill in {profile.name}'s profile</span>
+                  <input
+                    type="search"
+                    value={skillsQuery}
+                    onChange={(event) => setSkillsQuery(event.target.value)}
+                    placeholder="Find a skill, tool, or competency"
+                    className="min-h-11 w-full rounded-[10px] border border-border-strong bg-canvas px-3 text-sm text-primary placeholder:text-muted focus:outline-hidden focus:ring-2 focus:ring-focus"
+                  />
+                </label>
+              </div>
+
+              {matchingSkills.length > 0 ? (
+                <DossierCollection
+                  items={matchingSkills}
+                  itemLabel="skills"
+                  initialItems={normalizedSkillsQuery ? matchingSkills.length : 8}
+                  renderItems={(skills) => (
+                    <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                      {skills.map((skill) => (
+                        <li key={skill} className="flex min-h-11 items-start gap-2 rounded-[10px] border border-border-subtle bg-canvas/60 px-3 py-2 text-sm leading-5 text-secondary">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+                          <HighlightText text={skill} query={skillsQuery} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                />
+              ) : (
+                <div className="rounded-[10px] border border-border-subtle bg-canvas/60 px-3 py-4 text-sm text-secondary">No skills match “{skillsQuery}”.</div>
+              )}
+            </section>
           </div>
         ) : activeTab === 'credentials' ? (
           <div className="space-y-4">
@@ -637,9 +704,9 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 </dl>
               </section>
             )}
-            {profile.certifications && profile.certifications.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Certifications & Tickets</h3><div className="flex flex-wrap gap-2">{profile.certifications.map((cert) => <CertificationBadge key={cert} certification={cert} size="md" />)}</div></section>}
-            {profile.certificationDetails && profile.certificationDetails.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Completion & Expiry</h3><div className="space-y-2">{profile.certificationDetails.map((cert) => <div key={cert.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-border-subtle bg-canvas/40 px-3 py-2"><span className="text-primary">{cert.name}</span><span className="text-muted">{cert.issueDate ? `Completed ${cert.issueDate}` : 'Completion date not recorded'}{cert.expiryDate ? ` · Expires ${cert.expiryDate}` : ' · No expiry recorded'}</span></div>)}</div></section>}
-            {profile.trainingDetails && profile.trainingDetails.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Training / Qualifications</h3><div className="space-y-2">{profile.trainingDetails.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-border-subtle bg-canvas/40 px-3 py-2"><div className="flex flex-col"><span className="text-primary">{item.name}</span>{item.location && <span className="text-xs text-muted">{item.location}</span>}</div><span className="text-muted text-sm">{item.completedDate ? `Completed ${item.completedDate.slice(0, 4)}` : 'Completion date not recorded'}{item.expiryDate ? ` · Expires ${item.expiryDate.slice(0, 4)}` : ''}</span></div>)}</div></section>}
+            {profile.certifications && profile.certifications.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Certifications & Tickets</h3><DossierCollection items={profile.certifications} itemLabel="certifications" renderItems={(certifications) => <div className="flex flex-wrap gap-2">{certifications.map((cert) => <CertificationBadge key={cert} certification={cert} size="md" />)}</div>} /></section>}
+            {profile.certificationDetails && profile.certificationDetails.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Completion & Expiry</h3><DossierCollection items={profile.certificationDetails} itemLabel="credentials" renderItems={(certifications) => <div className="space-y-2">{certifications.map((cert) => <div key={cert.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-border-subtle bg-canvas/40 px-3 py-2"><span className="text-primary">{cert.name}</span><span className="text-muted">{cert.issueDate ? `Completed ${cert.issueDate}` : 'Completion date not recorded'}{cert.expiryDate ? ` · Expires ${cert.expiryDate}` : ' · No expiry recorded'}</span></div>)}</div>} /></section>}
+            {profile.trainingDetails && profile.trainingDetails.length > 0 && <section className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Training / Qualifications</h3><DossierCollection items={profile.trainingDetails} itemLabel="qualifications" renderItems={(training) => <div className="space-y-2">{training.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-border-subtle bg-canvas/40 px-3 py-2"><div className="flex flex-col"><span className="text-primary">{item.name}</span>{item.location && <span className="text-xs text-muted">{item.location}</span>}</div><span className="text-muted text-sm">{item.completedDate ? `Completed ${item.completedDate.slice(0, 4)}` : 'Completion date not recorded'}{item.expiryDate ? ` · Expires ${item.expiryDate.slice(0, 4)}` : ''}</span></div>)}</div>} /></section>}
             {profile.education && <section><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Education</h3><p className="mt-1 text-secondary">{profile.education}</p></section>}
           </div>
         ) : (
@@ -649,7 +716,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 from "Overview & Track Record" below: this is a synthesized,
                 recruiter-facing overview pulling together certs/availability/
                 experience, not the consultant's own CV wording. */}
-            {(summaryLoading || summary) && (
+            {(summaryLoading || hasReadableSummary) && (
               <div className={`space-y-1.5 bg-canvas/40 rounded-[10px] border border-border-subtle/60 ${isFocusMode ? 'p-2 lg:col-span-2' : 'p-3'}`}>
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-secondary" aria-hidden="true" />
@@ -661,7 +728,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                   </div>
                 ) : (
                   <p className="text-secondary leading-relaxed">
-                    <HighlightText text={summary || ''} query={searchQuery} />
+                    <HighlightText text={readableSummary || ''} query={searchQuery} />
                   </p>
                 )}
               </div>
@@ -676,6 +743,38 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 <HighlightText text={profile.bio} query={searchQuery} />
               </p>
             </div>
+
+            <section aria-label="At a glance" className={`grid grid-cols-1 gap-2 sm:grid-cols-3 ${isFocusMode ? 'lg:col-span-2' : ''}`}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('credentials')}
+                className="min-h-28 rounded-[10px] border border-border-subtle bg-surface-raised/70 p-3 text-left transition-colors hover:bg-surface-selected focus:outline-hidden focus:ring-2 focus:ring-focus"
+              >
+                <span className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Deployment readiness</span>
+                <span className={`mt-2 block text-sm font-semibold ${isAvailableNow ? 'text-positive' : 'text-primary'}`}>{profile.availability}</span>
+                <span className="mt-1 block text-xs text-secondary">{credentialCount} credentials · {documents.length} documents{indexedDocumentCount > 0 ? ` · ${indexedDocumentCount} indexed` : ''}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('expertise')}
+                className="min-h-28 rounded-[10px] border border-border-subtle bg-surface-raised/70 p-3 text-left transition-colors hover:bg-surface-selected focus:outline-hidden focus:ring-2 focus:ring-focus"
+              >
+                <span className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Best-fit strengths</span>
+                <span className="mt-2 block text-sm font-semibold text-primary">{profileSkills.length} recorded skills</span>
+                <span className="mt-1 line-clamp-2 block text-xs leading-5 text-secondary">{highlightedSkills.length > 0 ? highlightedSkills.join(' · ') : 'No skills extracted yet'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('experience')}
+                className="min-h-28 rounded-[10px] border border-border-subtle bg-surface-raised/70 p-3 text-left transition-colors hover:bg-surface-selected focus:outline-hidden focus:ring-2 focus:ring-focus"
+              >
+                <span className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Track record</span>
+                <span className="mt-2 block text-sm font-semibold text-primary">{profile.workHistory?.length ?? 0} projects · {profile.geographicalExperience?.length ?? 0} regions</span>
+                <span className="mt-1 block truncate text-xs text-secondary">{latestProject ? `${latestProject.clientName ?? 'Recent project'} · ${latestProject.role ?? latestProject.projectType ?? 'Role recorded'}` : 'No project history extracted yet'}</span>
+              </button>
+            </section>
 
             {/* Survey Disciplines */}
             {profile.surveyTypes && profile.surveyTypes.length > 0 && (
@@ -698,7 +797,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             )}
 
             {/* Offshore Safety Certifications with Tooltips */}
-            {profile.certifications && profile.certifications.length > 0 && (
+            {!isFocusMode && profile.certifications && profile.certifications.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
@@ -712,26 +811,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               </div>
             )}
 
-            {/* Technical Skills */}
-            {profile.skills && profile.skills.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">
-                  Skills
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {profile.skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="px-3 py-1.5 rounded-[10px] bg-surface-raised text-primary border border-border-strong/60 text-xs"
-                    >
-                      <HighlightText text={skill} query={searchQuery} />
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {profile.geographicalExperience && profile.geographicalExperience.length > 0 && (
+            {!isFocusMode && profile.geographicalExperience && profile.geographicalExperience.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <MapPin className="w-3.5 h-3.5 text-secondary" />
@@ -747,7 +827,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               </div>
             )}
 
-            {profile.systemsExperience && profile.systemsExperience.length > 0 && (
+            {!isFocusMode && profile.systemsExperience && profile.systemsExperience.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <Layers className="w-3.5 h-3.5 text-secondary" />
@@ -763,7 +843,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               </div>
             )}
 
-            {profile.trainingQualifications && profile.trainingQualifications.length > 0 && (
+            {!isFocusMode && profile.trainingQualifications && profile.trainingQualifications.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <GraduationCap className="w-3.5 h-3.5 text-secondary" />
@@ -780,7 +860,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             )}
 
             {/* Past Operators / Clients */}
-            {profile.pastCompanies && profile.pastCompanies.length > 0 && (
+            {!isFocusMode && profile.pastCompanies && profile.pastCompanies.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <Building className="w-3.5 h-3.5 text-secondary" />

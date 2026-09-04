@@ -59,8 +59,10 @@ services:
       - ${OLLAMA_MODELS_PATH:-${HOME}/.ollama/models}:/models:ro
       - ollama_data:/root/.ollama
     devices:
-      # CDI passthrough (see /etc/cdi/nvidia.yaml).  Falls back to CPU if the
-      # device is unavailable at run time.
+      # CDI passthrough (see /etc/cdi/nvidia.yaml). Requires a host with an
+      # NVIDIA GPU and CDI configured; without it, container creation fails
+      # rather than falling back to CPU, so machines without a GPU must
+      # comment this line out.
       - nvidia.com/gpu=all
     security_opt:
       # The NVIDIA device nodes and the large read-only model bind mount are not
@@ -75,6 +77,7 @@ services:
       start_period: 30s
 
   backend:
+    image: localhost/hydenlyne-backend:local
     build: ./backend
     ports:
       - "8000:8000"
@@ -120,8 +123,11 @@ services:
       - "host.docker.internal:host-gateway"
 
   celery_worker:
-    build: ./backend
-    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=default --concurrency=4
+    image: localhost/hydenlyne-backend:local
+    # CV processing is deterministic and must work on CPU-only developer
+    # machines. Keep its queue on the standard worker; deployments with a GPU
+    # can opt into the dedicated worker below for additional capacity.
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=default,gpu --concurrency=4
     env_file:
       - .env
     environment:
@@ -152,7 +158,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   celery_gpu_worker:
-    build: ./backend
+    image: localhost/hydenlyne-backend:local
     command: celery -A app.tasks.celery_app worker --loglevel=info --queues=gpu --concurrency=1
     env_file:
       - .env
@@ -187,9 +193,10 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    profiles: ["gpu"]
 
   celery_beat:
-    build: ./backend
+    image: localhost/hydenlyne-backend:local
     command: celery -A app.tasks.celery_app beat --loglevel=info
     env_file:
       - .env
@@ -209,7 +216,7 @@ services:
         condition: service_healthy
 
   flower:
-    build: ./backend
+    image: localhost/hydenlyne-backend:local
     command: celery -A app.tasks.celery_app flower --port=5555 --url_prefix=flower --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-flower_pass}
     ports:
       - "5555:5555"

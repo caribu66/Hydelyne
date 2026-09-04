@@ -30,6 +30,14 @@ access goes through `X-API-Key` for agent uploads (`/api/documents/*`) only.
 All queries remain `@require_auth` (any authenticated user). Read access is
 not segregated by role in this iteration; tightening it is future work.
 
+This is enforced automatically, not just documented here:
+`test_all_queries_require_auth_decorator` in `backend/tests/test_auth.py`
+introspects every `Query` field and fails if one isn't wrapped by
+`@require_auth`/`@require_admin`. A future intentionally-public query field
+must be added to that test's `_PUBLIC_QUERIES` allow-list with a stated
+reason — the test starts from an empty allow-list, so a new field is
+auth-required by default.
+
 ## REST
 
 | Endpoint | Dependency | Required | Notes |

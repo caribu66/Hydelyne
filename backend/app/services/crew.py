@@ -126,6 +126,10 @@ class CrewService:
                     selectinload(CrewMember.work_history),
                     selectinload(CrewMember.documents),
                 )
+                # New additions must be visible on the first paginated page.
+                # Without an explicit order, PostgreSQL may return an arbitrary
+                # legacy page and hide newly created specialists from the UI.
+                .order_by(CrewMember.created_at.desc())
                 .limit(limit)
                 .offset(offset)
             )

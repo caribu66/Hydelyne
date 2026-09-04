@@ -1,6 +1,11 @@
 """Test crew member GraphQL operations."""
 
+from datetime import datetime
+
 import pytest
+
+from app.models import CrewMember
+from app.services.crew import crew_service
 
 CREATE_CREW_MUTATION = """
 mutation CreateCrewMember($fullName: String!, $email: String, $phone: String, $nationality: String) {
@@ -132,6 +137,28 @@ async def test_list_crew_members(client):
     assert response.status_code == 200
     data = response.json()["data"]["crewMembers"]
     assert isinstance(data, list)
+
+
+@pytest.mark.asyncio
+async def test_list_crew_members_prioritizes_newest_records(db_session):
+    older = CrewMember(
+        id="crew-older",
+        full_name="Older Specialist",
+        email="older@example.com",
+        created_at=datetime(2026, 1, 1),
+    )
+    newest = CrewMember(
+        id="crew-newest",
+        full_name="Newest Specialist",
+        email="newest@example.com",
+        created_at=datetime(2026, 1, 2),
+    )
+    db_session.add_all([older, newest])
+    await db_session.commit()
+
+    records = await crew_service.list_crew_members(limit=1)
+
+    assert [record.id for record in records] == ["crew-newest"]
 
 
 @pytest.mark.asyncio

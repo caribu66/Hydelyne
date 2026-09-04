@@ -182,10 +182,24 @@ hydenlyne-crew-dms/
 
 ## Development
 
-The containerised stack above is the supported way to run this. Running a
-service directly on the host is only worth it for a fast edit loop on one
-component, and it needs the matching container stopped first so the port is
-free.
+The containerised stack is the supported way to run this. Always start it from
+the repository root with the checked launcher:
+
+```bash
+./scripts/local-stack.sh start
+```
+
+It stops only this checkout's containers, refuses to run when another process
+owns the frontend or backend port, waits for both health endpoints, and then
+prints the usable URL. This avoids a browser silently talking to a stale
+frontend or backend from another worktree. Use `./scripts/local-stack.sh stop`
+or `./scripts/local-stack.sh status` to manage it. The default stack is
+CPU-safe; start the optional GPU worker only when an NVIDIA runtime is
+available with `podman compose --profile gpu up -d celery_gpu_worker`.
+
+Running a service directly on the host is only worth it for a fast edit loop
+on one component, and it needs the matching container stopped first so the
+port is free.
 
 ### Backend on the host
 

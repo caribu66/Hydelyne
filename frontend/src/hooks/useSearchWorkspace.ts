@@ -9,6 +9,7 @@ interface UseSearchWorkspaceOptions {
   isBookmarked: (id: string) => boolean
   aiQueryData: CrewQueryResult | null
   aiQueryActive: boolean
+  isAuthenticated: boolean
 }
 
 export interface UseSearchWorkspaceReturn {
@@ -45,6 +46,7 @@ export function useSearchWorkspace({
   isBookmarked,
   aiQueryData,
   aiQueryActive,
+  isAuthenticated,
 }: UseSearchWorkspaceOptions): UseSearchWorkspaceReturn {
   const [query, setQuery] = useState('')
   const [committedQuery, setCommittedQuery] = useState('')
@@ -65,7 +67,12 @@ export function useSearchWorkspace({
   }, [query])
 
   const isResultsUpdating = query.trim() !== committedQuery.trim()
-  const isSearchActive = Boolean(committedQuery.trim() || showSavedOnly || activeFilterCount > 0)
+  // Gate at the single point every result-revealing block in App.tsx already
+  // keys off, so no future entry point (URL param, restored state, a
+  // websocket push) can render gated UI just by forgetting its own auth check.
+  const isSearchActive = Boolean(
+    isAuthenticated && (committedQuery.trim() || showSavedOnly || activeFilterCount > 0)
+  )
 
   const handleSelectPreset = useCallback((presetId: string) => {
     const preset = FILTER_PRESETS.find((item) => item.id === presetId)

@@ -163,7 +163,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
             </button>
           </div>
 
-          <div className="mt-3 flex min-h-6 items-center justify-center px-1 text-xs text-secondary sm:justify-between">
+          <div className="mt-3 flex min-h-6 items-center justify-center px-1 text-xs text-secondary">
             <span className={isAuthenticated ? 'hidden sm:inline' : 'inline'}>
               {isAuthenticated ? 'Search by role, qualification, or availability' : 'Private workforce system · Access is monitored'}
             </span>

@@ -136,6 +136,19 @@ path.
 - Logs and telemetry contain identifiers only when operationally necessary and
   must not contain document bodies, session tokens, passwords, secrets,
   passport data, or medical details.
+- The backend is the authorization boundary (see `docs/AUTHORIZATION.md`);
+  frontend gating is a UX convenience only. Within the frontend, state that
+  can reveal gated UI (search results, filters, saved-only view) must be
+  authentication-derived at one render-time checkpoint, not imperatively
+  guarded per entry point — a new entry point that forgets its own check must
+  fail closed, not silently render. `isSearchActive` in
+  `frontend/src/hooks/useSearchWorkspace.ts` is that checkpoint; every
+  result-bearing block in `frontend/src/App.tsx` keys off it, so folding
+  `isAuthenticated` into its computation closes all of them at once.
+  `frontend/tests/auth-gate.spec.ts` is the regression test for this class of
+  bug — extend it, don't just re-verify by hand, whenever a new mechanism
+  that can seed search/filter state is added (URL params today; a future
+  deep link or restored session state would be the same class of risk).
 
 ## Deployment invariants
 

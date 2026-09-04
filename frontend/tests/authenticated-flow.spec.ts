@@ -114,6 +114,34 @@ test.describe('authenticated specialist workspace', () => {
     }
   });
 
+  test('prioritizes dossier reading area in split view', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) < 768, 'Split view begins at tablet width.');
+    await authenticate(page);
+    await mockCrewApi(page);
+    await page.goto('/?q=hydrography');
+    await expect(page.locator('#specialist-focused-card')).toBeVisible();
+
+    const dimensions = await page.locator('.scan-workspace').evaluate((workspace) => {
+      const resultList = workspace.querySelector<HTMLElement>('section[aria-label="Contractor search results"]');
+      const dossier = workspace.querySelector<HTMLElement>('#specialist-focused-card');
+      if (!resultList || !dossier) throw new Error('Split workspace surfaces were not rendered.');
+
+      return {
+        dossierWidth: dossier.getBoundingClientRect().width,
+        resultListWidth: resultList.getBoundingClientRect().width,
+        workspaceHeight: workspace.getBoundingClientRect().height,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(dimensions.dossierWidth).toBeGreaterThan(dimensions.resultListWidth);
+    if (dimensions.viewportHeight > 800) {
+      expect(dimensions.workspaceHeight).toBeGreaterThanOrEqual(
+        Math.min(1080, dimensions.viewportHeight - 180),
+      );
+    }
+  });
+
   test('remains horizontally usable at simulated 200% zoom', async ({ page }) => {
     await authenticate(page);
     await mockCrewApi(page);

@@ -3,7 +3,7 @@ import { UserProfile, SpecialistDocument, DocumentCategory } from '../types';
 import { getDocumentComplianceStatus } from '../hooks/useSpecialistDocuments';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DocumentUploadModal } from './DocumentUploadModal';
-import { hasOriginalDocumentFile } from '../utils/documentUtils';
+import { documentMatchesQuery, hasOriginalDocumentFile } from '../utils/documentUtils';
 import {
   FileText,
   ShieldCheck,
@@ -18,6 +18,8 @@ import {
   ArrowUpDown,
   Clock,
   Sparkles,
+  Search,
+  X,
 } from 'lucide-react';
 
 export type DocumentSortOption = 'uploaded-desc' | 'uploaded-asc' | 'expiry-asc' | 'title-asc';
@@ -45,9 +47,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [sortOption, setSortOption] = useState<DocumentSortOption>('uploaded-desc');
-  // setSearchQuery is unused: searchQuery filtering exists but no input
-  // control calls it yet. Kept (not deleted) pending that UI being wired up.
-  const [searchQuery, _setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Compute metrics
   const totalCount = documents.length;
@@ -61,15 +61,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
         if (activeCategory !== 'all' && doc.category !== activeCategory) {
           return false;
         }
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return (
-            doc.title.toLowerCase().includes(q) ||
-            doc.fileName.toLowerCase().includes(q) ||
-            (doc.notes && doc.notes.toLowerCase().includes(q))
-          );
-        }
-        return true;
+        return documentMatchesQuery(doc, searchQuery);
       })
       .sort((a, b) => {
         if (sortOption === 'uploaded-desc') {
@@ -94,6 +86,12 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
         return 0;
       });
   }, [documents, activeCategory, searchQuery, sortOption]);
+
+  const hasActiveFilters = activeCategory !== 'all' || Boolean(searchQuery.trim());
+  const clearFilters = () => {
+    setActiveCategory('all');
+    setSearchQuery('');
+  };
 
   const formatUploadDate = (isoString?: string): string => {
     if (!isoString) return 'Archived';
@@ -235,7 +233,47 @@ All documents have been digitally archived for offshore mobilization verificatio
 
       {/* Auto-Sort and Filter Toolbar */}
       {!compact && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-surface/50 border border-border-subtle/80 rounded-[10px] p-2.5">
+        <div className="space-y-2.5 bg-surface/50 border border-border-subtle/80 rounded-[10px] p-2.5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <label className="relative block w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <span className="sr-only">Search {profile.name}'s documents</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search documents"
+                className="min-h-11 w-full rounded-[10px] border border-border-strong bg-canvas py-2 pl-9 pr-9 text-sm text-primary placeholder:text-muted focus:outline-hidden focus:ring-2 focus:ring-focus"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear document search"
+                  className="absolute right-1 top-1/2 inline-flex min-h-9 min-w-9 -translate-y-1/2 items-center justify-center rounded-md text-secondary hover:bg-surface-raised hover:text-primary"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+            </label>
+
+            <div className="flex items-center justify-between gap-2 text-xs text-secondary sm:justify-end">
+              <span aria-live="polite" className="font-mono">
+                Showing {sortedAndFilteredDocs.length} of {totalCount}
+              </span>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="min-h-9 rounded-lg px-2 text-xs font-medium text-accent hover:bg-accent-soft/60 focus:outline-hidden focus:ring-2 focus:ring-focus"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           {/* Category Pills Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 text-xs">
             {[
@@ -291,6 +329,7 @@ All documents have been digitally archived for offshore mobilization verificatio
                 <span>Auto-Sorted</span>
               </span>
             )}
+          </div>
           </div>
         </div>
       )}
@@ -375,7 +414,18 @@ All documents have been digitally archived for offshore mobilization verificatio
       ) : (
         <div className="text-center py-6 border border-dashed border-border-subtle rounded-[10px] bg-canvas/40 space-y-2">
           <FileText className="w-6 h-6 text-muted mx-auto" />
-          <p className="text-xs text-secondary">No documents found in this category.</p>
+          <p className="text-sm font-medium text-secondary">
+            {hasActiveFilters ? 'No documents match those filters.' : 'No documents recorded yet.'}
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="min-h-11 rounded-lg px-3 text-xs font-semibold text-accent hover:bg-accent-soft/60 focus:outline-hidden focus:ring-2 focus:ring-focus"
+            >
+              Show all documents
+            </button>
+          )}
           {canManageDocuments && <button
             type="button"
             onClick={() => setIsUploadOpen(true)}

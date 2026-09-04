@@ -10,6 +10,140 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-04 — Standardize authorization gating against the whole bug class (Claude Code)
+
+Follow-up to "Gate shared search links behind sign-in" below: that patch
+fixed one instance, this makes the class of bug structurally hard to
+reintroduce and closes a symmetric backend test gap.
+
+- `frontend/src/hooks/useSearchWorkspace.ts`: folded `isAuthenticated` into
+  the `isSearchActive` computation itself
+  (`Boolean(isAuthenticated && (committedQuery.trim() || showSavedOnly || activeFilterCount > 0))`).
+  Every result-revealing block in `frontend/src/App.tsx` (results header,
+  `ActiveFilterChips`, the results/dossier area) already keyed off
+  `isSearchActive`, so this closes all of them at once, structurally — no
+  future entry point (new URL param, restored session state, a websocket
+  push) can leak result chrome just by forgetting its own auth check. The
+  imperative `useRequireAuth()` calls elsewhere in `App.tsx` are unchanged
+  and still give immediate feedback on user action; this is the backstop
+  underneath them.
+- Found and fixed a real regression while wiring this up: the earlier
+  patch's `onSyncQuery` called `requestLogin()` unconditionally on every
+  `?q=` deep link, which raced the async session check on page load —
+  an already-authenticated visitor loading `/?q=...` could have the sign-in
+  modal pop open before their session resolved, and it never closed once
+  auth confirmed, permanently blocking the UI (caught by two previously
+  passing `authenticated-flow.spec.ts` cases going red). Removed that call;
+  the render-time guard above is sufficient for correctness, and the
+  sign-in dialog now only opens on user interaction, matching the existing
+  disabled-search-box behavior for a plain unauthenticated visit.
+- `frontend/tests/auth-gate.spec.ts` (new): regression coverage for the bug
+  class — asserts `/?q=hele`, `/?view=table`, and `/?q=hele&view=table`
+  never render results chrome or fire the `CrewMembers`/`QueryCrew`/
+  `SearchCrew` GraphQL operations while logged out. Verified red against a
+  local revert of the `isSearchActive` change, green after.
+- `backend/tests/test_auth.py`: added
+  `test_all_queries_require_auth_decorator`, which introspects every
+  `Query` field in `backend/app/graphql/schema.py` and fails if one isn't
+  wrapped by `@require_auth`/`@require_admin` (checked via the resolver's
+  code object, so it's decorator-agnostic and needs no DB/service mocking).
+  Mutations already had a "add a negative-auth test per mutation" policy
+  (`docs/AUTHORIZATION.md`); queries only had the doc's prose claim — this
+  closes that asymmetry with an introspection-driven test that can't
+  silently drift, backed by an empty `_PUBLIC_QUERIES` allow-list for any
+  future intentionally-public field. Verified it fails when `@require_auth`
+  is stripped from a field.
+- Documented the rule in `docs/ARCHITECTURE.md`'s Security boundaries
+  (frontend auth-derived render gating, pointing at `isSearchActive` and
+  `auth-gate.spec.ts`) and `docs/AUTHORIZATION.md` (the new query test).
+- No schema/contract changes. No new dependencies. Backend verification ran
+  under this environment's Python (mypy not installed here — not run, not
+  claimed as passing); `pytest tests/test_auth.py` (19/19) and the targeted
+  decorator-strip sanity check both pass. Frontend: lint/test/build/
+  ui:audit:strict clean; full `test:e2e:ci` shows the same 11 pre-existing
+  failures (visual-snapshot baselines + one dossier-menu timeout, all
+  already present in this session's other uncommitted frontend work before
+  this change) and zero new ones.
+- Follow-up: none identified. The pre-existing e2e failures above belong to
+  unrelated in-progress UI work already in the working tree, not this
+  change.
+
+## 2026-09-04 — Gate shared search links behind sign-in (Claude Code)
+
+- Fixed: visiting a shared/bookmarked search URL (e.g. `/?q=hele`) while
+  logged out silently rendered "Found 0 contractors" instead of prompting
+  sign-in. `useURLSync` seeds `query`/`committedQuery` from the URL's `q`
+  param on mount, which flips `isSearchActive` true and renders the results
+  panel — but `useCrewProfiles` skips fetching while unauthenticated
+  (`skip: !isAuthenticated`), so the list being searched was always empty.
+  The manual search box already opened the sign-in dialog in this case
+  (`onSearch` in `frontend/src/App.tsx`); the URL-sync path
+  (`onSyncQuery`) did not.
+- Fix: `onSyncQuery` in `frontend/src/App.tsx` now calls `requestLogin()`
+  when `!isAuthenticated`, matching the manual-search gate. Verified by
+  running a real Vite dev server (the `localhost:5173` container serves a
+  prod build, not source) against the existing backend: an unauthenticated
+  `?q=hele` visit now opens the sign-in dialog, and after signing in
+  (`ops@hydenlyne.com`), the search correctly resolves to seeded consultant
+  Helena Lindqvist.
+- No schema, contract, or dependency changes. No new tests added — this is a
+  one-line behavioral gate matching an existing, already-tested pattern in
+  the same file; covering it would require mocking the URL-sync mount effect
+  end-to-end, which the existing test suite doesn't do for this component.
+- Follow-up: none identified.
+
+## 2026-09-04 — Full-profile reading layout (Codex)
+
+- Rebuilt the full contractor-profile modal around separately selectable
+  Snapshot, Credentials, Expertise, and History sections. The modal now opens
+  on a concise decision summary rather than rendering every record in one
+  scrolling column.
+- Increased the desktop reading surface and made the overview text readable at
+  body size. Long credentials, skills, systems, clients, training, and
+  campaign collections retain all records behind explicit show-more controls.
+- The focused dossier now suppresses malformed JSON-shaped AI summaries and
+  no longer repeats credentials, skills, systems, training, or clients on the
+  overview when each has a dedicated profile section.
+- Promoted Skills to a primary dossier destination and replaced its long chip
+  cloud with a searchable, two-column reading list that reveals further
+  matches only on request.
+- Harmonized disclosure controls and search-field corner treatment across
+  dossier, modal, and document surfaces. Added a frontend agent rule requiring
+  visual harmony with adjacent reading surfaces before UI changes ship.
+- Filled the overview's expanded-space deliberately with a bounded,
+  navigable decision snapshot for readiness, strongest skills, and track
+  record. It uses existing extracted profile and document metadata and links
+  directly to the relevant detailed section.
+- Rebalanced the desktop split workspace from a 5:7 to a 4:8 result-list to
+  dossier ratio and removed its restrictive tall-screen cap. The selected
+  specialist now has the primary reading area both horizontally and vertically,
+  while preserving an always-visible, usable result switcher.
+
+## 2026-09-04 — Document-vault scanning improvements (Codex)
+
+- Added accessible document search across title, filename, and safe record
+  notes, with live result counts and one-action clearing for searches and
+  category filters. Empty states now distinguish no records from no matches.
+- Long project, certification, credential, and training collections now show
+  a concise first six records with accessible controls to reveal or collapse
+  the rest, keeping dossier review readable without hiding information.
+- Kept document preview, download availability, compliance states, and backend
+  authorization unchanged. Added unit coverage for document-query matching.
+
+## 2026-09-04 — Reliable local-stack launcher (Codex)
+
+- Added `scripts/local-stack.sh` as the supported start/stop/status path. It
+  refuses port collisions instead of silently serving a different checkout,
+  and waits for both frontend and backend health before declaring the app ready.
+- Made the default compose stack CPU-safe: the standard worker now consumes the
+  deterministic CV queue; the NVIDIA-specific worker is opt-in via the `gpu`
+  profile; and Ollama no longer requires a GPU device to start.
+- Consolidated the API, workers, scheduler, and dashboard onto one locally
+  built backend image, avoiding four redundant parallel backend builds during
+  startup.
+- Ordered the paginated specialist list newest-first. This prevents recently
+  added consultants from falling beyond the frontend's first 100 records.
+
 ## 2026-09-04 — Fix db port conflict with host Postgres; resolve stack outage (Claude Code)
 
 Found the whole containerized stack down ~44h (a host reboot). Restarting

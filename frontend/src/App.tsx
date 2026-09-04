@@ -226,6 +226,7 @@ export default function App() {
     isBookmarked,
     aiQueryData,
     aiQueryActive,
+    isAuthenticated,
   });
 
   // Focused Workspace mode for working comfortably on a contractor
@@ -332,6 +333,12 @@ export default function App() {
     onSyncQuery: useCallback((q: string) => {
       setQuery(q);
       setCommittedQuery(q.trim());
+      // No auth check needed here: isSearchActive (useSearchWorkspace.ts) is
+      // itself authentication-gated, so committing a query while logged out
+      // never renders result chrome — see docs/ARCHITECTURE.md's Security
+      // boundaries. Calling requestLogin() here as well used to race the
+      // async session check on mount, popping the sign-in dialog open for
+      // already-authenticated deep-linked visits and leaving it stuck open.
     }, [setCommittedQuery, setQuery]),
     onSyncViewMode: useCallback((mode: 'split' | 'cards' | 'table') => {
       setViewMode(mode === 'cards' ? 'grid' : mode);
@@ -733,7 +740,7 @@ export default function App() {
                   /* Standard Split-Pane Operations Command */
                   <div className="scan-workspace grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch min-h-0 md:min-h-[520px] py-2 sm:py-3">
                     {/* Left Column: Animated List */}
-                    <section aria-label="Contractor search results" className="md:col-span-5 min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2">
+                    <section aria-label="Contractor search results" className="md:col-span-4 min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2">
                       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
                         <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Results</span>
                         <span className="font-mono text-xs text-muted">Select to view dossier</span>
@@ -860,7 +867,7 @@ export default function App() {
                     </section>
 
                     {/* Right Column: Live Contractor dossier */}
-                    <div className="hidden md:col-span-7 md:block min-h-0 h-full overflow-hidden md:sticky md:top-20">
+                    <div className="hidden md:col-span-8 md:block min-h-0 h-full overflow-hidden md:sticky md:top-20">
                       <div className="mb-2 flex items-center justify-between px-1 md:hidden">
                         <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Selected dossier</span>
                         <span className="text-xs text-muted">Scroll for details</span>
