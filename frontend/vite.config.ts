@@ -62,7 +62,7 @@ export default defineConfig(() => {
             if (/node_modules\/(@apollo\/client|graphql)\//.test(id)) return 'apollo';
             if (/node_modules\/(motion|framer-motion)\//.test(id)) return 'motion';
             if (/node_modules\/d3(-[a-z]+)?\//.test(id)) return 'd3';
-            if (/node_modules\/(lucide-react|@google\/genai)\//.test(id)) return 'vendor';
+            if (/node_modules\/lucide-react\//.test(id)) return 'vendor';
             return undefined;
           },
         },
