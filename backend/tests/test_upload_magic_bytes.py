@@ -110,3 +110,28 @@ async def test_upload_exe_rejected_by_extension(client):
         files={"file": ("evil.exe", test_file, "application/x-executable")},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_upload_eml_with_rfc5322_headers_accepted(client):
+    """Standard RFC 5322 .eml files starting with From: or Date: must be accepted."""
+    eml_content = b"From: operations@hydenlyne.com\nTo: crew@example.com\nSubject: Mobilization\n\nDetails"
+    response = await client.post(
+        "/api/documents/upload",
+        data={"crew_id": "test-crew-id"},
+        files={"file": ("confirmation.eml", io.BytesIO(eml_content), "message/rfc822")},
+    )
+    assert response.status_code == 200
+    assert response.json()["file_name"] == "confirmation.eml"
+
+
+@pytest.mark.asyncio
+async def test_upload_eml_with_invalid_content_rejected(client):
+    """An .eml file with binary/invalid headers must be rejected."""
+    bad_eml = io.BytesIO(b"MZ\x90\x00not an email")
+    response = await client.post(
+        "/api/documents/upload",
+        data={"crew_id": "test-crew-id"},
+        files={"file": ("fake.eml", bad_eml, "message/rfc822")},
+    )
+    assert response.status_code == 400

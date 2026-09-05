@@ -10,7 +10,11 @@ from app.auth.decorators import get_current_user_rest, require_admin_rest
 from app.domain.fields import AVAILABILITY_STATUS_VALUES, DOCUMENT_CLASSIFICATIONS
 from app.models import CrewMember
 from app.services.audit import audit_service
-from app.services.meilisearch import APPROVED_CREW_FILTER, meilisearch_client
+from app.services.meilisearch import (
+    APPROVED_CREW_FILTER,
+    SEARCHABLE_DOCUMENTS_FILTER,
+    meilisearch_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +96,7 @@ async def search_documents(
     """Search documents using Meilisearch."""
     # Never expose processing, rejected, or failed extraction records through
     # the document search surface. Reviewers use the CV review queue instead.
-    filters_parts = ['extraction_status = "approved"']
+    filters_parts = [SEARCHABLE_DOCUMENTS_FILTER]
     if classification:
         filters_parts.append(
             _quote_filter_value("classification", classification, DOCUMENT_CLASSIFICATIONS)

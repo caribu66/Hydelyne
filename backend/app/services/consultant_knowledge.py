@@ -239,5 +239,66 @@ class ConsultantKnowledgeService:
     async def remove_from_index(self, crew_id: str) -> bool:
         return await meilisearch_client.delete_crew_member(crew_id)
 
+    async def reindex_all_crew(
+        self, session_factory: Any, *, batch_size: int = 200
+    ) -> tuple[int, int, int]:
+        """Rebuild the contractor search projection from PostgreSQL using keyset cursor pagination.
+
+        Avoids loading all rows into RAM simultaneously and performs batch writes to Meilisearch.
+
+        Returns:
+            tuple[int, int, int]: (total_approved_found, total_indexed, total_removed)
+        """
+        last_id: Optional[str] = None
+        total_approved = 0
+        total_indexed = 0
+        total_removed = 0
+
+        while True:
+            async with session_factory() as session:
+                query = select(CrewMember).order_by(CrewMember.id.asc()).limit(batch_size)
+                if last_id is not None:
+                    query = query.where(CrewMember.id > last_id)
+
+                rows = list((await session.execute(query)).scalars().all())
+                if not rows:
+                    break
+
+                last_id = rows[-1].id
+
+                approved_docs = []
+                unapproved_ids = []
+
+                for crew in rows:
+                    if crew.publication_status == "approved":
+                        total_approved += 1
+                        approved_docs.append(_crew_meilisearch_doc(crew))
+                    else:
+                        unapproved_ids.append(crew.id)
+
+                if approved_docs:
+                    res = await meilisearch_client.index_crew_members(approved_docs)
+                    if res is not None:
+                        total_indexed += len(approved_docs)
+                    else:
+                        logger.error(
+                            "Failed to batch-index %d approved crew members", len(approved_docs)
+                        )
+
+                if unapproved_ids:
+                    ok = await meilisearch_client.delete_crew_members(unapproved_ids)
+                    if ok:
+                        total_removed += len(unapproved_ids)
+                    else:
+                        logger.error(
+                            "Failed to batch-remove %d unapproved crew members",
+                            len(unapproved_ids),
+                        )
+
+                if len(rows) < batch_size:
+                    break
+
+        return total_approved, total_indexed, total_removed
+
 
 consultant_knowledge_service = ConsultantKnowledgeService()

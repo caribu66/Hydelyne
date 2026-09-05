@@ -5,13 +5,17 @@ import os
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
+# A process-local test database avoids inheriting an interrupted run's SQLite
+# write lock from the repository checkout.
+DEFAULT_TEST_DATABASE_URL = f"sqlite+aiosqlite:////tmp/hydenlyne-test-{os.getpid()}.db"
+
 # Set env vars before any app.* import so settings pick them up. ``get_settings``
 # is called at import time in ``app.config``, ``app.database``, ``app.main`` and
 # ``app.auth.session``; without these overrides the test would inherit whatever
 # the host environment happens to have.
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault(
-    "DATABASE_URL", os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///./test.db")
+    "DATABASE_URL", os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("SESSION_SECRET_KEY", "test_secret_key_at_least_32_chars_long_xx")
@@ -40,14 +44,14 @@ from app.tasks.document_tasks import (  # noqa: E402
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:///./test.db",
+    DEFAULT_TEST_DATABASE_URL,
 )
 
 try:
     test_engine = create_async_engine(TEST_DATABASE_URL, future=True)
 except Exception:
     # Fallback to sqlite if asyncpg/postgres not available
-    TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+    TEST_DATABASE_URL = DEFAULT_TEST_DATABASE_URL
     test_engine = create_async_engine(TEST_DATABASE_URL, future=True)
 
 test_session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -101,12 +105,10 @@ import asyncio
 
 
 async def _init_test_db():
-    # Wipe any rows left over from prior runs: TEST_DATABASE_URL points at a
-    # file on disk, and `create_all` alone is a no-op on tables that already
-    # exist, so leftover data silently accumulates across runs and can push
-    # a test's own rows out of ranked/limited search results.
+    # Create the isolated SQLite test schema. Row isolation is handled by the
+    # autouse fixture below; dropping the entire schema here can block before
+    # pytest even collects tests when another SQLite connection is unwinding.
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
 
@@ -125,6 +127,7 @@ async def _ensure_tables():
     # just-inserted row behind leftover rows an earlier test committed.
     # A row-level delete is far cheaper than drop_all/create_all per test.
     async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(table.delete())
     yield

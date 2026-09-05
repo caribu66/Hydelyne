@@ -12,6 +12,11 @@ celery_app = Celery(
     include=["app.tasks.document_tasks"],
 )
 
+QUEUE_DEFAULT = "default"
+QUEUE_HIGH_PRIORITY = "high_priority"
+QUEUE_HEAVY_COMPUTE = "heavy_compute"
+QUEUE_INDEXING = "indexing"
+
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -27,12 +32,12 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     task_routes={
-        "app.tasks.document_tasks.process_document_extraction": {"queue": "gpu"},
-        "app.tasks.document_tasks.process_dropbox_document": {"queue": "gpu"},
-        "app.tasks.document_tasks.check_expiring_certifications": {"queue": "default"},
-        "app.tasks.document_tasks.index_document_embeddings": {"queue": "default"},
+        "app.tasks.document_tasks.process_document_extraction": {"queue": QUEUE_HEAVY_COMPUTE},
+        "app.tasks.document_tasks.process_dropbox_document": {"queue": QUEUE_HEAVY_COMPUTE},
+        "app.tasks.document_tasks.check_expiring_certifications": {"queue": QUEUE_HIGH_PRIORITY},
+        "app.tasks.document_tasks.index_document_embeddings": {"queue": QUEUE_INDEXING},
     },
-    task_default_queue="default",
+    task_default_queue=QUEUE_DEFAULT,
     task_queue_max_priority=10,
     task_default_priority=5,
     beat_schedule={

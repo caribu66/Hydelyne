@@ -3,6 +3,53 @@ import { GRAPHQL_URL } from '../config'
 
 const apiBase = GRAPHQL_URL.replace(/\/graphql\/?$/, '')
 
+export async function publicDocumentRequest(token: string): Promise<void> {
+  const response = await fetch(`${apiBase}/api/documents/request/${encodeURIComponent(token)}`)
+  if (!response.ok) throw new Error('This upload link is invalid or has expired.')
+}
+
+export async function uploadRequestedDocument(token: string, file: File, idempotencyKey: string): Promise<void> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('idempotency_key', idempotencyKey)
+  const response = await fetch(`${apiBase}/api/documents/request/${encodeURIComponent(token)}/upload`, { method: 'POST', body: form })
+  if (!response.ok) {
+    const detail: unknown = await response.json().catch(() => ({}))
+    const message = typeof detail === 'object' && detail !== null && 'detail' in detail && typeof detail.detail === 'string' ? detail.detail : `Upload failed (${response.status})`
+    throw new Error(message)
+  }
+}
+
+export async function createDocumentRequest(crewId: string): Promise<{ token: string }> {
+  const token = getAuthToken()
+  const form = new FormData()
+  form.append('crew_id', crewId)
+  form.append('expires_in_days', '14')
+  const response = await fetch(`${apiBase}/api/documents/requests`, {
+    method: 'POST', credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : undefined, body: form,
+  })
+  if (!response.ok) throw new Error('Could not create a secure upload link.')
+  return response.json() as Promise<{ token: string }>
+}
+
+export interface IncomingDocumentReview {
+  id: string
+  document_id: string
+  file_name: string
+  crew_member_id: string
+  contractor_name: string
+  created_at: string
+}
+
+export async function incomingDocumentReviews(): Promise<IncomingDocumentReview[]> {
+  const token = getAuthToken()
+  const response = await fetch(`${apiBase}/api/documents/review-queue`, {
+    credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+  if (!response.ok) throw new Error('Could not load received documents.')
+  return response.json() as Promise<IncomingDocumentReview[]>
+}
+
 export function documentDownloadUrl(documentId: string): string {
   return `${apiBase}/api/documents/${encodeURIComponent(documentId)}/download`
 }

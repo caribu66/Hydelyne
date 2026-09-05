@@ -267,3 +267,47 @@ def test_all_queries_require_auth_decorator():
             f"Query.{field.name} is not wrapped by @require_auth/@require_admin — "
             f"add the decorator, or add '{field.name}' to _PUBLIC_QUERIES above with a reason."
         )
+
+
+@pytest.mark.asyncio
+async def test_is_token_revoked_fails_closed_when_redis_unavailable(monkeypatch):
+    """ADR 0002: Token revocation must fail closed when Redis is unavailable."""
+    from app.auth.session import is_token_revoked
+    from app.services.cache import cache_service
+
+    monkeypatch.setattr(cache_service, "is_redis_available", AsyncMock(return_value=False))
+    assert await is_token_revoked("test-jti-123") is True
+
+
+@pytest.mark.asyncio
+async def test_is_token_revoked_fails_closed_when_redis_raises_error(monkeypatch):
+    """ADR 0002: Token revocation must fail closed when Redis get raises an exception."""
+    from unittest.mock import MagicMock
+
+    from app.auth.session import is_token_revoked
+    from app.services.cache import cache_service
+
+    monkeypatch.setattr(cache_service, "is_redis_available", AsyncMock(return_value=True))
+    mock_redis = MagicMock()
+    mock_redis.get = AsyncMock(side_effect=ConnectionError("Redis connection dropped"))
+    monkeypatch.setattr(cache_service, "_get_redis", AsyncMock(return_value=mock_redis))
+
+    assert await is_token_revoked("test-jti-456") is True
+
+
+@pytest.mark.asyncio
+async def test_is_token_revoked_reflects_blocklist(monkeypatch):
+    """Token revocation returns True when revoked, False when unrevoked."""
+    from unittest.mock import MagicMock
+
+    from app.auth.session import is_token_revoked
+    from app.services.cache import cache_service
+
+    monkeypatch.setattr(cache_service, "is_redis_available", AsyncMock(return_value=True))
+    mock_redis = MagicMock()
+    # First call: revoked; second call: unrevoked
+    mock_redis.get = AsyncMock(side_effect=[b"revoked", None])
+    monkeypatch.setattr(cache_service, "_get_redis", AsyncMock(return_value=mock_redis))
+
+    assert await is_token_revoked("revoked-jti") is True
+    assert await is_token_revoked("active-jti") is False

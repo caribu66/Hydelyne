@@ -183,6 +183,46 @@ class Document(Base):
     crew_member = relationship("CrewMember", back_populates="documents")
 
 
+class DocumentRequest(Base):
+    """A time-limited, bearer-token upload request sent to a contractor."""
+
+    __tablename__ = "document_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    crew_member_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("crew_members.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", server_default="active", index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(index=True)
+    created_by: Mapped[str] = mapped_column(String(36), index=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
+    revoked_at: Mapped[Optional[datetime]] = mapped_column()
+
+
+class IncomingDocumentReview(Base):
+    """Durable staff queue item for a contractor-uploaded document."""
+
+    __tablename__ = "incoming_document_reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    request_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("document_requests.id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="unread", server_default="unread", index=True
+    )
+    claimed_by: Mapped[Optional[str]] = mapped_column(String(36), index=True)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column()
+    resolved_at: Mapped[Optional[datetime]] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now(), index=True)
+
+
 class CVReview(Base):
     """Durable review state for one deterministic CV extraction."""
 

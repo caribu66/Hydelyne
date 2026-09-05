@@ -150,6 +150,219 @@ async def test_upload_document(client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_contractor_upload_link_creates_a_review_queue_item(client, db_session):
+    """A bearer link may upload only into its intended contractor review queue."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="Requested Upload Contractor"))
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/documents/requests", data={"crew_id": crew_id, "expires_in_days": "14"}
+    )
+    assert created.status_code == 200
+    token = created.json()["token"]
+    assert (await client.get(f"/api/documents/request/{token}")).status_code == 200
+
+    document_id = str(uuid.uuid4())
+    with (
+        patch("app.api.documents.process_document_extraction.delay", new=MagicMock()),
+        patch(
+            "app.api.documents.document_upload_service.save_file",
+            new=AsyncMock(return_value=(document_id, "/tmp/contractor-document.pdf", 42)),
+        ),
+    ):
+        uploaded = await client.post(
+            f"/api/documents/request/{token}/upload",
+            data={"idempotency_key": "contractor-retry-1", "classification": "cert"},
+            files={
+                "file": (
+                    "certificate.pdf",
+                    io.BytesIO(b"%PDF-1.4\ncontractor\n%%EOF"),
+                    "application/pdf",
+                )
+            },
+        )
+    assert uploaded.status_code == 200
+    assert uploaded.json()["status"] == "pending"
+    queue = await client.get("/api/documents/review-queue")
+    assert queue.status_code == 200
+    assert queue.json()[0]["contractor_name"] == "Requested Upload Contractor"
+    assert queue.json()[0]["document_id"] == document_id
+
+
+@pytest.mark.asyncio
+async def test_staff_cannot_create_request_for_another_staff_members_draft(client, db_session, monkeypatch):
+    """Staff must not be able to generate upload requests for another staff member's draft."""
+    from app.services.crew import auth_service
+
+    owner_id = str(uuid.uuid4())
+    other_staff_id = str(uuid.uuid4())
+    crew_id = str(uuid.uuid4())
+
+    db_session.add(
+        CrewMember(
+            id=crew_id,
+            full_name="Other Staff Draft",
+            publication_status="draft",
+            submitted_by=owner_id,
+        )
+    )
+    await db_session.commit()
+
+    # Log in as other staff
+    acting_staff = CrewMember(id=other_staff_id, full_name="Acting Staff", role="staff")
+    monkeypatch.setattr(auth_service, "get_user_from_token", AsyncMock(return_value=acting_staff))
+
+    response = await client.post(
+        "/api/documents/requests", data={"crew_id": crew_id, "expires_in_days": "14"}
+    )
+    assert response.status_code == 403
+    assert "belongs to another user" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_contractor_upload_link_rejects_cv_classification(client, db_session):
+    """Contractor upload links are for compliance certificates/evidence and must reject CVs."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="CV Reject Contractor"))
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/documents/requests", data={"crew_id": crew_id, "expires_in_days": "14"}
+    )
+    assert created.status_code == 200
+    token = created.json()["token"]
+
+    uploaded = await client.post(
+        f"/api/documents/request/{token}/upload",
+        data={"idempotency_key": "contractor-cv-attempt", "classification": "cv"},
+        files={
+            "file": (
+                "resume.pdf",
+                io.BytesIO(b"%PDF-1.4\nresume\n%%EOF"),
+                "application/pdf",
+            )
+        },
+    )
+    assert uploaded.status_code == 403
+    assert "CVs must use the staff upload" in uploaded.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_contractor_upload_link_idempotency_returns_existing(client, db_session):
+    """Duplicate upload with same idempotency key returns the existing document without error."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="Idempotency Contractor"))
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/documents/requests", data={"crew_id": crew_id, "expires_in_days": "14"}
+    )
+    token = created.json()["token"]
+
+    doc_id = str(uuid.uuid4())
+    with (
+        patch("app.api.documents.process_document_extraction.delay", new=MagicMock()),
+        patch(
+            "app.api.documents.document_upload_service.save_file",
+            new=AsyncMock(return_value=(doc_id, "/tmp/idempotent.pdf", 50)),
+        ),
+    ):
+        res1 = await client.post(
+            f"/api/documents/request/{token}/upload",
+            data={"idempotency_key": "retry-key-abc", "classification": "cert"},
+            files={"file": ("cert.pdf", io.BytesIO(b"%PDF-1.4\n%%EOF"), "application/pdf")},
+        )
+        assert res1.status_code == 200
+        assert res1.json()["id"] == doc_id
+
+        # Second upload with same key
+        res2 = await client.post(
+            f"/api/documents/request/{token}/upload",
+            data={"idempotency_key": "retry-key-abc", "classification": "cert"},
+            files={"file": ("cert.pdf", io.BytesIO(b"%PDF-1.4\n%%EOF"), "application/pdf")},
+        )
+        assert res2.status_code == 200
+        assert res2.json()["id"] == doc_id
+
+
+@pytest.mark.asyncio
+async def test_staff_review_queue_excludes_other_staff_drafts(client, db_session, monkeypatch):
+    """Staff review queue must not reveal incoming documents for other staff members' drafts."""
+    from app.services.crew import auth_service
+    from app.services.document_requests import document_request_service
+
+    owner_id = str(uuid.uuid4())
+    snooping_staff_id = str(uuid.uuid4())
+    draft_crew_id = str(uuid.uuid4())
+    approved_crew_id = str(uuid.uuid4())
+
+    db_session.add(
+        CrewMember(
+            id=draft_crew_id,
+            full_name="Private Draft Contractor",
+            publication_status="draft",
+            submitted_by=owner_id,
+        )
+    )
+    db_session.add(
+        CrewMember(
+            id=approved_crew_id,
+            full_name="Approved Public Contractor",
+            publication_status="approved",
+        )
+    )
+    await db_session.commit()
+
+    # Owner creates request and document review for their draft
+    req1 = await document_request_service.create(
+        crew_id=draft_crew_id, actor_id=owner_id, actor_role="staff", expires_in_days=14
+    )
+    doc1 = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=draft_crew_id,
+        file_name="private_cert.pdf",
+        file_type="pdf",
+        file_size=100,
+        storage_type="local",
+        storage_path="/tmp/doc1.pdf",
+    )
+    db_session.add(doc1)
+    await db_session.commit()
+    await document_request_service.create_review(request_id=req1.request_id, document_id=doc1.id)
+
+    # Someone creates request and review for the approved contractor
+    req2 = await document_request_service.create(
+        crew_id=approved_crew_id, actor_id=owner_id, actor_role="staff", expires_in_days=14
+    )
+    doc2 = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=approved_crew_id,
+        file_name="public_cert.pdf",
+        file_type="pdf",
+        file_size=100,
+        storage_type="local",
+        storage_path="/tmp/doc2.pdf",
+    )
+    db_session.add(doc2)
+    await db_session.commit()
+    await document_request_service.create_review(request_id=req2.request_id, document_id=doc2.id)
+
+    # Now snooping staff views review queue
+    snooper = CrewMember(id=snooping_staff_id, full_name="Snooper", role="staff")
+    monkeypatch.setattr(auth_service, "get_user_from_token", AsyncMock(return_value=snooper))
+
+    queue_resp = await client.get("/api/documents/review-queue")
+    assert queue_resp.status_code == 200
+    queue_items = queue_resp.json()
+    contractor_names = [item["contractor_name"] for item in queue_items]
+
+    # Must see approved contractor, but MUST NOT see private draft contractor
+    assert "Approved Public Contractor" in contractor_names
+    assert "Private Draft Contractor" not in contractor_names
+
+
+@pytest.mark.asyncio
 async def test_cv_upload_persists_binary_and_queues_extraction(client, db_session):
     """The CV flow must send bytes before it can be queued for extraction."""
     crew_id = str(uuid.uuid4())

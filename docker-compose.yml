@@ -124,10 +124,42 @@ services:
 
   celery_worker:
     image: localhost/hydenlyne-backend:local
-    # CV processing is deterministic and must work on CPU-only developer
-    # machines. Keep its queue on the standard worker; deployments with a GPU
-    # can opt into the dedicated worker below for additional capacity.
-    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=default,gpu --concurrency=4
+    # Latency-sensitive tasks: compliance checks, notifications, fast webhook triggers.
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=high_priority,default --concurrency=4
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hydenlyne}:${POSTGRES_PASSWORD:-hydenlyne_pass}@db:5432/${POSTGRES_DB:-hydenlyne}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      SESSION_SECRET_KEY: ${SESSION_SECRET_KEY}
+      MEILI_HOST: meilisearch
+      MEILI_PORT: 7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev_redis_pass}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_ENV: ${APP_ENV:-development}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - ./backend:/app:z
+      - document_storage:/app/data/documents
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  celery_compute_worker:
+    image: localhost/hydenlyne-backend:local
+    # CPU-bound tasks: PDF parsing, OCR, Ollama inference, and vector embeddings.
+    # Concurrency throttled to 2 to prevent compute starvation.
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=heavy_compute,indexing --concurrency=2
     env_file:
       - .env
     environment:
@@ -159,7 +191,7 @@ services:
 
   celery_gpu_worker:
     image: localhost/hydenlyne-backend:local
-    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=gpu --concurrency=1
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=heavy_compute,indexing,gpu --concurrency=1
     env_file:
       - .env
     environment:

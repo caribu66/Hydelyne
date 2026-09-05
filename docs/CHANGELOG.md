@@ -10,6 +10,31 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Celery queue segregation, Thin Transport docs, and keyset reindexing backpressure (Antigravity)
+
+Tackled three key scalability and maintainability improvements:
+- **Celery Worker Queue Segregation** (`app/tasks/celery_app.py`, `docker-compose.yml`): Defined explicit queues `high_priority`, `heavy_compute`, and `indexing`. Segregated worker topology into `celery_worker` (concurrency 4, processing `high_priority,default` for compliance checks, alerts, and quick tasks) and `celery_compute_worker` (concurrency 2, processing `heavy_compute,indexing` for OCR, Ollama extraction, and embedding sync) to prevent heavy tasks from starving latency-sensitive jobs. Added regression test `tests/test_celery_routes.py`.
+- **Re-indexing Backpressure & Keyset Pagination** (`app/services/consultant_knowledge.py`, `app/services/meilisearch.py`, `reindex_crew_search.py`): Replaced unbounded in-memory table loading (`.scalars().all()`) and 1-by-1 HTTP calls with keyset-paginated cursor streaming (`WHERE id > :last_id ORDER BY id ASC LIMIT :batch_size`) and bulk Meilisearch batching (`index_crew_members` and `delete_crew_members`). Added `--batch-size` CLI flag to `reindex_crew_search.py`. Added unit test `tests/test_reindex_batching.py`.
+- **Dual-Transport Maintenance & Thin Transport Rule** (`docs/ARCHITECTURE.md`): Codified the Thin Transport architectural contract for FastAPI REST routes and Strawberry GraphQL resolvers, establishing zero direct ORM mutations in transport, strict domain service encapsulation, and canonical exception mapping.
+
+## 2026-09-05 — Edge-case audit, ADR 0002 fail-closed fix, and upload link security (Antigravity)
+
+Conducted end-to-end edge-case testing across auth, document search, and contractor uploads:
+- Fixed critical ADR-0002 token revocation fail-open bug (`app/auth/session.py`): `is_token_revoked` now explicitly verifies Redis availability and fails closed when Redis is offline or errors. Added 3 regression tests in `tests/test_auth.py`.
+- Repaired Meilisearch document search projection (`app/api/search.py`, `app/services/meilisearch.py`): Replaced restrictive `extraction_status = "approved"` filter with `SEARCHABLE_DOCUMENTS_FILTER = 'extraction_status IN ["approved", "extracted"]'`, making certificates, passports, and non-CV compliance documents searchable.
+- Hardened contractor upload links (`app/api/documents.py`, `app/services/document_requests.py`): Non-admin staff cannot create links for drafts submitted by other staff; review queue queries are scoped to owned drafts/approved contractors; contractor link upload rejects CV classifications (which require staff review workflow).
+- Resolved contractor upload race condition (`app/api/documents.py`): Added `IntegrityError` rollback and storage cleanup for concurrent identical idempotency keys; aligned extraction failure dispatch status.
+- Fixed email file magic bytes (`app/services/upload.py`): Added standard RFC 5322 MIME headers (`From:`, `Received:`, `Date:`, `Subject:`, etc.) to prevent rejection of valid `.eml` files.
+- Fixed test suite DB isolation bootstrap (`backend/tests/conftest.py`): Added `Base.metadata.create_all` to `_ensure_tables` to guarantee per-PID SQLite schema creation.
+- Enhanced public upload URL routing (`frontend/src/main.tsx`): Supported optional trailing slashes and decoded tokens.
+
+## 2026-09-05 — Staff document-request permission (Codex)
+
+Made the new secure document-request link available to both staff agents and
+administrators, while keeping manual document upload and deletion restricted
+to document managers. This gives agents the intended contractor-facing action
+without widening access to existing sensitive document controls.
+
 ## 2026-09-05 — Contractor document upload links and review queue (Codex)
 
 Added provider-free, 14-day contractor document-upload links so operations can

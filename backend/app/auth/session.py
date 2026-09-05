@@ -74,8 +74,15 @@ async def is_token_revoked(jti: Optional[str]) -> bool:
     try:
         from app.services.cache import cache_service
 
+        if not await cache_service.is_redis_available():
+            logger.warning(
+                "security_degradation: revocation lookup failed, failing closed: redis unavailable"
+            )
+            return True
+
         key = f"session_revoked:{jti}"
-        return await cache_service.get(key) is not None
+        redis = await cache_service._get_redis()
+        return await redis.get(key) is not None
     except Exception as e:
         logger.warning("security_degradation: revocation lookup failed, failing closed: %s", e)
         return True

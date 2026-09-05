@@ -4,6 +4,7 @@ import { getDocumentComplianceStatus } from '../hooks/useSpecialistDocuments';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DocumentUploadModal } from './DocumentUploadModal';
 import { documentMatchesQuery, hasOriginalDocumentFile } from '../utils/documentUtils';
+import { createDocumentRequest } from '../lib/documentsApi';
 import {
   FileText,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
   Clock,
   Sparkles,
   Search,
+  Send,
   X,
 } from 'lucide-react';
 
@@ -31,6 +33,7 @@ interface DocumentVaultProps {
   onRemoveDocument: (docId: string) => void | Promise<void>;
   onShowToast: (msg: string) => void;
   canManageDocuments?: boolean;
+  canRequestDocuments?: boolean;
   compact?: boolean;
 }
 
@@ -41,6 +44,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   onRemoveDocument,
   onShowToast,
   canManageDocuments = false,
+  canRequestDocuments = false,
   compact = false,
 }) => {
   const [selectedDoc, setSelectedDoc] = useState<SpecialistDocument | null>(null);
@@ -48,6 +52,17 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [sortOption, setSortOption] = useState<DocumentSortOption>('uploaded-desc');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleRequestDocument = async () => {
+    try {
+      const request = await createDocumentRequest(profile.id);
+      const link = `${window.location.origin}/upload/${encodeURIComponent(request.token)}`;
+      await navigator.clipboard.writeText(link);
+      onShowToast('Secure upload link copied — it expires in 14 days');
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : 'Could not create a secure upload link');
+    }
+  };
 
   // Compute metrics
   const totalCount = documents.length;
@@ -207,6 +222,14 @@ All documents have been digitally archived for offshore mobilization verificatio
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-center">
+          {canRequestDocuments && <button
+            type="button"
+            onClick={() => void handleRequestDocument()}
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-border-subtle bg-surface px-3 text-xs font-semibold text-secondary hover:bg-surface-raised hover:text-primary focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Send className="h-3.5 w-3.5" />
+            <span>Request documents</span>
+          </button>}
           {totalCount > 0 && (
             <button
               type="button"

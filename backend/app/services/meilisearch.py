@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 CREW_MEMBERS_INDEX = "crew_members"
 DOCUMENTS_INDEX = "documents"
 APPROVED_CREW_FILTER = 'publication_status = "approved"'
+SEARCHABLE_DOCUMENTS_FILTER = 'extraction_status IN ["approved", "extracted"]'
 
 
 class MeilisearchClient:
@@ -201,6 +202,23 @@ class MeilisearchClient:
             return await asyncio.to_thread(_sync)
         except Exception as e:
             logger.error(f"Failed to delete crew member from index: {e}")
+            return False
+
+    async def delete_crew_members(self, crew_ids: list[str]) -> bool:
+        """Delete multiple crew members from the index in batch."""
+        if not crew_ids:
+            return True
+        import asyncio
+
+        def _sync() -> bool:
+            index = self.client.index(CREW_MEMBERS_INDEX)
+            index.delete_documents(crew_ids)
+            return True
+
+        try:
+            return await asyncio.to_thread(_sync)
+        except Exception as e:
+            logger.error(f"Failed to delete crew members from index: {e}")
             return False
 
     async def index_document(self, document: dict[str, Any]) -> Optional[dict[str, int]]:

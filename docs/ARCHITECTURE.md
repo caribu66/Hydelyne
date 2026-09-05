@@ -66,6 +66,25 @@ types, but domain types do not know about GraphQL, FastAPI, Celery, SQLAlchemy,
 or React. Infrastructure details remain behind a service or port owned by the
 use case.
 
+### Dual-transport maintenance (GraphQL + REST)
+
+The system exposes two external transport boundaries:
+- **Strawberry GraphQL** (`/graphql`): for hierarchical entity querying, mutations, reviews, and interactive UI views.
+- **FastAPI REST** (`/api/documents/*`, `/api/search/*`, `/dropbox/*`): for multipart file uploads, chunked binary streaming, webhooks, and health probes.
+
+To prevent divergent business logic, both transports strictly follow the **Thin Transport Rule**:
+- **Zero Invariant Logic in Transport**: Handlers and resolvers authenticate and validate DTOs/parameters, then call the owning application service (`crew_service`, `document_service`, `consultant_knowledge_service`, etc.).
+- **Zero Direct ORM Mutation in Transport**: Neither REST routes nor GraphQL resolvers may construct raw database mutation statements or commit transactions directly.
+- **Canonical Exceptions**: Application services raise domain exceptions (`PermissionError`, `ValueError`, `KeyError`, etc.) which transports map to their respective HTTP status codes or GraphQL error extensions.
+
+### Asynchronous worker queue topology
+
+Background processing is segregated across dedicated queues to protect interactive responsiveness:
+- `high_priority` / `default`: Latency-sensitive periodic and interactive tasks (compliance checks, alerts, webhooks). Handled by `celery_worker`.
+- `heavy_compute`: CPU/GPU bound operations (OCR, PDF extraction, Ollama vision inference). Handled by `celery_compute_worker` (or `celery_gpu_worker`).
+- `indexing`: Search projection sync and embedding generation (`index_document_embeddings`). Prevented from starving interactive operations.
+
+
 ## Data ownership and consistency
 
 - PostgreSQL owns specialists, certifications, projects, document metadata,

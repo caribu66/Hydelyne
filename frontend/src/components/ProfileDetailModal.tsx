@@ -49,6 +49,7 @@ interface ProfileDetailModalProps {
   onAddDocument?: () => void;
   onRemoveDocument?: (docId: string) => void | Promise<void>;
   canManageDocuments?: boolean;
+  canRequestDocuments?: boolean;
   canDeleteCrew?: boolean;
   onDeleteCrew?: (profile: UserProfile) => Promise<void>;
 }
@@ -67,6 +68,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
   onAddDocument,
   onRemoveDocument,
   canManageDocuments = false,
+  canRequestDocuments = false,
   canDeleteCrew = false,
   onDeleteCrew,
 }) => {
@@ -373,6 +375,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               onAddDocument={() => onAddDocument?.()}
               onRemoveDocument={(docId) => onRemoveDocument?.(docId)}
               canManageDocuments={canManageDocuments}
+              canRequestDocuments={canRequestDocuments}
               onShowToast={onShowToast || (() => {})}
             />
           ) : activeTab === 'radar' ? (

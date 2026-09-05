@@ -30,6 +30,7 @@ import { ComparisonBar } from './components/ComparisonBar';
 import { HighlightText } from './components/HighlightText';
 import { CertificationBadge } from './components/CertificationBadge';
 import { Toast } from './components/Toast';
+import { IncomingDocumentAlert } from './components/IncomingDocumentAlert';
 import { ServiceStatus } from './components/ServiceStatus';
 import { DensityIndicator } from './components/DensityIndicator';
 import { SkeletonResults } from './components/SkeletonResults';
@@ -101,6 +102,7 @@ export default function App() {
   const { isDark, toggleTheme } = useTheme();
   const { initialized: authInitialized, isAuthenticated, user, logout, refreshSession } = useAuth();
   const canManageDocuments = user?.role === 'admin';
+  const canRequestDocuments = user?.role === 'admin' || user?.role === 'staff';
   const canSubmitCv = user?.role === 'admin' || user?.role === 'staff';
   const [deleteCrewMember] = useMutation(DELETE_CREW_MEMBER);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -231,6 +233,11 @@ export default function App() {
     aiQueryActive,
     isAuthenticated,
   });
+
+  const openIncomingDocumentContractor = useCallback((crewId: string) => {
+    setSelectedProfileId(crewId);
+    setShowSavedOnly(false);
+  }, [setSelectedProfileId, setShowSavedOnly]);
 
   // Focused Workspace mode for working comfortably on a contractor
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -490,6 +497,7 @@ export default function App() {
                 <span className="hidden sm:inline">Add contractor</span>
               </button>
             )}
+            {isAuthenticated && canSubmitCv && <IncomingDocumentAlert onOpenContractor={openIncomingDocumentContractor} />}
             {user?.role === 'admin' && <ServiceStatus />}
             {isAuthenticated && (
               <button type="button" onClick={() => setShowSavedOnly(!showSavedOnly)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${showSavedOnly ? 'border-border-strong bg-action text-on-action' : 'border-border-subtle bg-surface text-secondary hover:border-border-strong hover:bg-surface-raised hover:text-primary'}`} aria-pressed={showSavedOnly} title={showSavedOnly ? 'Show all contractors' : 'View shortlist'}>
@@ -760,6 +768,7 @@ export default function App() {
                               if (activeSelectedProfile) await removeDocument(activeSelectedProfile.id, docId);
                             }}
                             canManageDocuments={canManageDocuments}
+                            canRequestDocuments={canRequestDocuments}
                             canDeleteCrew={canManageDocuments && user?.id !== activeSelectedProfile?.id}
                             onDeleteCrew={handleDeleteCrewMember}
                             isFocusMode={true}
@@ -1056,6 +1065,7 @@ export default function App() {
                                 }
                               }}
                               canManageDocuments={canManageDocuments}
+                              canRequestDocuments={canRequestDocuments}
                               canDeleteCrew={canManageDocuments && user?.id !== activeSelectedProfile?.id}
                               onDeleteCrew={handleDeleteCrewMember}
                               isFocusMode={false}
@@ -1445,6 +1455,7 @@ export default function App() {
               }
             }}
             canManageDocuments={canManageDocuments}
+            canRequestDocuments={canRequestDocuments}
             canDeleteCrew={canManageDocuments && user?.id !== modalProfile.id}
             onDeleteCrew={handleDeleteCrewMember}
           />

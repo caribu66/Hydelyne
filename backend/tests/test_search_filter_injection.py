@@ -73,7 +73,7 @@ async def test_search_documents_accepts_valid_filters(client):
         assert response.status_code == 200
         _, kwargs = mocked.call_args
         assert kwargs["filters"] == (
-            f'extraction_status = "approved" AND classification = "identity" '
+            f'extraction_status IN ["approved", "extracted"] AND classification = "identity" '
             f'AND crew_member_id = "{crew_id}"'
         )
 
@@ -89,4 +89,4 @@ async def test_search_documents_excludes_unapproved_extractions(client):
 
     assert response.status_code == 200
     _, kwargs = mocked.call_args
-    assert kwargs["filters"] == 'extraction_status = "approved"'
+    assert kwargs["filters"] == 'extraction_status IN ["approved", "extracted"]'

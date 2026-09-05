@@ -32,7 +32,18 @@ MAGIC_SIGNATURES = {
     ".jpg": [b"\xff\xd8\xff"],
     ".jpeg": [b"\xff\xd8\xff"],
     ".png": [b"\x89PNG\r\n\x1a\n"],
-    ".eml": [b"From "],
+    ".eml": [
+        b"From ",
+        b"From:",
+        b"Received:",
+        b"Date:",
+        b"Subject:",
+        b"Return-Path:",
+        b"Delivered-To:",
+        b"MIME-Version:",
+        b"Message-ID:",
+        b"To:",
+    ],
     ".msg": [b"\xd0\xcf\x11\xe0"],
 }
 
@@ -78,6 +89,9 @@ def _validate_magic_bytes(ext: str, magic: bytes) -> bool:
     expected = MAGIC_SIGNATURES.get(ext)
     if not expected:
         return True
+    if ext == ".eml":
+        magic_lower = magic.lower()
+        return any(magic_lower.startswith(sig.lower()) for sig in expected)
     return any(magic.startswith(sig) for sig in expected)
 
 

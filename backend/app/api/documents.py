@@ -4,11 +4,13 @@ import asyncio
 import logging
 import re
 import tempfile
+from datetime import timezone
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import (
@@ -19,15 +21,200 @@ from app.auth.decorators import (
 )
 from app.database import get_session_factory
 from app.domain.fields import normalize_classification
-from app.models import CrewMember, CVReview
+from app.models import CrewMember, CVReview, IncomingDocumentReview
 from app.models import Document as DocumentModel
 from app.services.audit import audit_service
+from app.services.document_requests import document_request_service
 from app.services.upload import DropboxStorageError, document_upload_service, safe_path_component
 from app.tasks.document_tasks import process_document_extraction
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+
+@router.get("/request/{token}")
+async def get_document_request(token: str) -> dict[str, str]:
+    """Return a deliberately minimal public upload-request description."""
+    request = await document_request_service.get_active_request(token)
+    if request is None:
+        raise HTTPException(status_code=404, detail="This upload link is invalid or has expired")
+    expires_at = request.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return {"status": "active", "expires_at": expires_at.isoformat()}
+
+
+@router.post("/request/{token}/upload")
+async def upload_requested_document(
+    token: str,
+    file: UploadFile = File(...),
+    classification: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
+) -> dict[str, Any]:
+    """Accept a contractor upload only through a valid, expiring bearer link."""
+    request = await document_request_service.get_active_request(token)
+    if request is None:
+        raise HTTPException(status_code=404, detail="This upload link is invalid or has expired")
+    is_valid, error_msg = document_upload_service.validate_file(file)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    if idempotency_key is None or not re.fullmatch(r"[A-Za-z0-9._:-]{1,80}", idempotency_key):
+        raise HTTPException(status_code=400, detail="A valid upload idempotency key is required")
+    if classification is not None:
+        try:
+            classification = normalize_classification(classification)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid document category") from exc
+        if classification == "cv":
+            raise HTTPException(
+                status_code=403,
+                detail="CVs must use the staff upload and administrator review workflow",
+            )
+    upload_key = f"request:{request.id}:{idempotency_key}"
+    from sqlalchemy import select as _select
+
+    async with get_session_factory()() as session:
+        existing = (
+            await session.execute(
+                _select(DocumentModel).where(DocumentModel.upload_key == upload_key)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return {
+                "id": existing.id,
+                "file_name": existing.file_name,
+                "status": existing.extraction_status,
+            }
+
+    try:
+        document_id, storage_path, file_size = await document_upload_service.save_file(
+            file, request.crew_member_id, classification
+        )
+        file_type = document_upload_service.get_file_type(file.filename or "upload")
+        storage_type = "dropbox" if storage_path.startswith("/hydenlyne/") else "local"
+        async with get_session_factory()() as session:
+            doc = DocumentModel(
+                id=document_id,
+                crew_member_id=request.crew_member_id,
+                file_name=file.filename or "upload",
+                file_type=file_type,
+                file_size=file_size,
+                storage_type=storage_type,
+                storage_path=storage_path,
+                dropbox_path=storage_path if storage_type == "dropbox" else None,
+                classification=classification,
+                extraction_status="pending",
+                upload_key=upload_key,
+                uploaded_by="contractor-upload-link",
+            )
+            session.add(doc)
+            session.add(IncomingDocumentReview(request_id=request.id, document_id=document_id))
+            try:
+                await session.commit()
+            except IntegrityError:
+                # Concurrent uploads with the same idempotency key: roll back and return existing
+                await session.rollback()
+                existing = (
+                    await session.execute(
+                        _select(DocumentModel).where(DocumentModel.upload_key == upload_key)
+                    )
+                ).scalar_one_or_none()
+                if existing is None:
+                    raise
+                if storage_type == "dropbox" and storage_path.startswith("/hydenlyne/"):
+                    await document_upload_service.delete_from_dropbox(storage_path)
+                else:
+                    document_upload_service.delete_file(storage_path)
+                return {
+                    "id": existing.id,
+                    "file_name": existing.file_name,
+                    "status": existing.extraction_status,
+                }
+
+        dispatch_status = "pending"
+        try:
+            process_document_extraction.delay(document_id)
+        except Exception:
+            logger.warning("Could not queue contractor document extraction")
+            dispatch_status = "failed"
+            async with get_session_factory()() as session:
+                doc = (
+                    await session.execute(
+                        _select(DocumentModel).where(DocumentModel.id == document_id)
+                    )
+                ).scalar_one()
+                doc.extraction_status = "failed"
+                await session.commit()
+        return {"id": document_id, "file_name": file.filename or "upload", "status": dispatch_status}
+    except DropboxStorageError as exc:
+        raise HTTPException(
+            status_code=503, detail="Document storage is temporarily unavailable"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/requests")
+async def create_document_request(
+    crew_id: str = Form(...),
+    expires_in_days: int = Form(14),
+    current_user: CrewMember = Depends(require_staff_rest),
+) -> dict[str, str]:
+    """Create a contractor upload link. The bearer token is returned once only."""
+    if not 1 <= expires_in_days <= 30:
+        raise HTTPException(status_code=400, detail="Expiry must be between 1 and 30 days")
+    try:
+        created = await document_request_service.create(
+            crew_id=crew_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            expires_in_days=expires_in_days,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"token": created.token, "expires_at": created.expires_at.isoformat()}
+
+
+@router.get("/review-queue")
+async def list_incoming_document_reviews(
+    current_user: CrewMember = Depends(require_staff_rest),
+) -> list[dict[str, Any]]:
+    """Return durable contractor-upload queue items to authorized staff."""
+    async with get_session_factory()() as session:
+        query = (
+            select(IncomingDocumentReview, DocumentModel, CrewMember)
+            .join(DocumentModel, IncomingDocumentReview.document_id == DocumentModel.id)
+            .join(CrewMember, DocumentModel.crew_member_id == CrewMember.id)
+            .where(IncomingDocumentReview.status.in_(["unread", "claimed"]))
+        )
+        if current_user.role != "admin":
+            from sqlalchemy import or_
+
+            query = query.where(
+                or_(
+                    CrewMember.publication_status == "approved",
+                    CrewMember.submitted_by == current_user.id,
+                )
+            )
+        rows = await session.execute(
+            query.order_by(IncomingDocumentReview.created_at.desc()).limit(100)
+        )
+        return [
+            {
+                "id": review.id,
+                "status": review.status,
+                "document_id": document.id,
+                "file_name": document.file_name,
+                "crew_member_id": crew.id,
+                "contractor_name": crew.full_name,
+                "created_at": review.created_at.isoformat(),
+                "claimed_by": review.claimed_by,
+            }
+            for review, document, crew in rows.all()
+        ]
 
 
 @router.post("/preview-cv")

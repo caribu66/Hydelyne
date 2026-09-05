@@ -64,6 +64,7 @@ interface SpecialistDossierPaneProps {
   onAddDocument?: () => void;
   onRemoveDocument?: (docId: string) => void | Promise<void>;
   canManageDocuments?: boolean;
+  canRequestDocuments?: boolean;
   canDeleteCrew?: boolean;
   onDeleteCrew?: (profile: UserProfile) => Promise<void>;
   isFocusMode?: boolean;
@@ -90,6 +91,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   onAddDocument,
   onRemoveDocument,
   canManageDocuments = false,
+  canRequestDocuments = false,
   canDeleteCrew = false,
   onDeleteCrew,
   isFocusMode = false,
@@ -556,6 +558,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             onAddDocument={() => onAddDocument?.()}
             onRemoveDocument={(docId) => onRemoveDocument?.(docId)}
             canManageDocuments={canManageDocuments}
+            canRequestDocuments={canRequestDocuments}
             onShowToast={onShowToast}
           />
         ) : activeTab === 'radar' ? (
