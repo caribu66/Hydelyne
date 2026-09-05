@@ -10,6 +10,38 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Correction: the "3 pre-existing mypy errors" no longer reproduce (Claude Code)
+
+Was asked to fix the 3 mypy errors flagged in the "Fix Meilisearch
+filter-injection" entry below (`app/services/cache.py:28` unused-ignore;
+`app/services/meilisearch.py:175`/`:236` no-any-return in
+`search_crew_members`/`search_documents`). Investigated before patching:
+
+- Removing the `# type: ignore[no-untyped-call]` in `cache.py` reintroduces a
+  real error — `redis.asyncio.utils.from_url` is still genuinely untyped
+  (`def from_url(url, **kwargs):`, no annotations) under the pinned
+  `redis==6.2.0`. The ignore is correct and still required.
+- Adding an `isinstance(result, dict)` guard around `index.search(...)` in
+  `meilisearch.py` would be dead validation: `meilisearch==0.28.0` ships real
+  inline types and `Index.search()` is already typed
+  `-> Dict[str, Any]`, so returning it from a `-> dict[str, Any]` function is
+  not an Any-return under mypy's actual analysis.
+- Verified with `mypy app` against both the existing `.venv` (already at
+  pinned versions) and a from-scratch venv built only from
+  `requirements.txt` + `requirements-dev.txt`: **0 errors, 47 files clean**
+  in both.
+
+Root cause of the original report: that session's own note says its venv was
+"missing `mypy` and `qdrant-client` despite both being pinned" and had them
+patched in ad hoc rather than installed via a clean `pip install -r
+requirements-dev.txt` — the same reproducibility gap `docs/AUDIT_2026-09-02.md`
+P2 #12 already flagged. Whatever was installed at the time (most likely an
+older `meilisearch` or `redis`) genuinely produced those 3 errors then; they
+don't exist against the current pins. No code changes made — `cache.py` and
+`meilisearch.py` are correct as committed. Follow-up: rebuild the backend venv
+from `requirements*.txt` at the start of a session rather than patching
+individual packages into whatever venv is already present.
+
 ## 2026-09-05 — Fix `pip install -e .` on backend flat layout (Claude Code)
 
 Closed a real, previously-flagged CI-breaking bug (noted as out-of-scope in
