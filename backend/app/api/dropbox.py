@@ -106,7 +106,7 @@ async def start_dropbox_listing(account_id: str) -> None:
     if not token_provider.configured:
         logger.warning("Dropbox is not configured, skipping listing")
         return
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await dropbox_request(
             client,
             "POST",
@@ -153,7 +153,7 @@ async def continue_dropbox_listing(account_id: str, cursor: str) -> None:
     """Continue listing files from a cursor."""
     if not token_provider.configured:
         return
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await dropbox_request(
             client,
             "POST",
@@ -283,7 +283,7 @@ async def download_dropbox_file(
         except Exception as e:
             logger.warning(f"Audit log failed for dropbox download: {e}")
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             try:
                 response = await dropbox_request(
                     client,

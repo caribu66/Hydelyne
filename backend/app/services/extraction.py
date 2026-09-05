@@ -283,8 +283,8 @@ class ExtractionService:
         # Format prompt to keep placeholder for consistency, but image data carries content
         try:
             prompt = prompt.format(document_text="[IMAGE]")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Vision prompt formatting failed, using raw template: {e}")
         result = ollama_client.extract_sync(
             prompt, model=ollama_client.vision_model, images=[image_data]
         )

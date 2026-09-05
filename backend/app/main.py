@@ -117,8 +117,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from app.services.meilisearch import meilisearch_client
 
         await meilisearch_client.setup_indexes()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Meilisearch index setup skipped: {e}")
     yield
 
 

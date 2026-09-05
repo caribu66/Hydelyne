@@ -11,7 +11,8 @@ from app.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-TOKEN_URL = "https://api.dropbox.com/oauth2/token"
+# Dropbox OAuth token endpoint URL, not a credential.
+TOKEN_URL = "https://api.dropbox.com/oauth2/token"  # nosec B105
 
 # Dropbox access tokens live ~4 hours.  Renew a little early so a token can
 # never lapse midway through an in-flight request.
@@ -105,7 +106,7 @@ class DropboxTokenProvider:
     async def _refresh(self) -> str:
         """Exchange the refresh token for a new access token."""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     TOKEN_URL,
                     data={

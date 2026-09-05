@@ -10,6 +10,78 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Fix currently-failing CI security/vuln gates and pin floating image tags (Claude Code)
+
+A repo-wide strict audit (comparing actual gate output against
+`docs/AUDIT_2026-09-02.md` and `docs/ENGINEERING_STANDARDS.md`, not just the
+changelog's self-reported numbers) found that two gates CI already runs as
+blocking (no `|| true`) were failing on `main` right now, undetected because
+no prior session had run the full `-r app` bandit scan or `npm audit` and
+reported the complete output:
+
+- **Backend SAST (`bandit -r app/ -q`) was failing**: 7 findings across
+  `app/services/upload.py`, `app/api/dropbox.py`, `app/services/dropbox_auth.py`,
+  `app/main.py`, and `app/services/extraction.py`.
+  - 7 × B113 (`httpx.AsyncClient()` constructed with no `timeout=`): all were
+    Dropbox network calls. Most already passed `timeout=` to the individual
+    `.request()`/`.post()` call and so were not actually unbounded at runtime,
+    but bandit only inspects the client constructor — moved the timeout onto
+    `AsyncClient(timeout=...)` itself at all 7 call sites (30s for metadata/
+    listing calls, 60s for content upload/download, matching the existing
+    per-call values where one was set).
+  - 2 × B110 (`except Exception: pass`) — silent failure with zero
+    diagnostics, violating this repo's own "degraded operation must be
+    intentional and visible" rule: Meilisearch index setup at startup
+    (`app/main.py`) and vision-prompt formatting (`app/services/extraction.py`)
+    now log a warning instead of swallowing the exception. No behavior change
+    otherwise — both remain non-fatal by design.
+  - 1 × B105 (hardcoded-password heuristic false-positive on
+    `TOKEN_URL = "https://api.dropbox.com/oauth2/token"`, flagged only because
+    the constant name contains "token"): suppressed with `# nosec B105`,
+    matching the exact convention already used in `app/main.py` for the same
+    check, with a one-line comment stating why it's safe.
+- **Frontend vulnerability scan (`npm audit --audit-level=moderate`) was
+  failing**: 3 moderate transitive vulnerabilities (`qs`/`body-parser`) via a
+  direct devDependency, `express@^4.21.2`. Grepped the full frontend source,
+  tests, scripts, and config for any import/usage — none exists; it has been
+  dead weight since the frontend's first commit. Removed it from
+  `package.json` and regenerated `package-lock.json` rather than bumping a
+  version, since the real fix was deleting an unused dependency, not
+  patching one.
+- **Unpinned infra images** (`docs/AUDIT_2026-09-02.md` P2 #13): pinned
+  `docker.io/qdrant/qdrant:latest` → `v1.19.0` and
+  `docker.io/ollama/ollama:latest` → `0.33.2` in `docker-compose.yml`,
+  matching the versions actually pulled/running locally (verified via
+  `podman inspect` image labels and `ollama --version`) so this is a lock,
+  not a version bump. `docker-compose.prod.yml` doesn't redefine either
+  image and inherits the pin.
+- **CI gate coverage gap**: `.github/workflows/ci.yml`'s backend job never
+  ran `alembic heads`, despite it being in both `AGENTS.md` files' required
+  gate list. Added it as a final step; confirmed it needs no database
+  connection or `.env` (`env -i` smoke test), so it's safe in CI as-is.
+
+Not fixed in this pass, and deliberately not attempted here because they are
+broad refactors rather than mechanical fixes (mixing them into this diff would
+violate the "don't combine fixes with broad refactoring" rule): the frontend
+main bundle chunk (381.57 kB minified, no code-splitting) and the large-file
+list from `docs/AUDIT_2026-09-02.md` P2 #9, both of which have grown since
+that audit rather than shrunk. Recommend a dedicated session for each.
+
+Verified: `ruff format --check`, `ruff check`, `mypy app` (0 issues/47 files),
+`bandit -r app -q` (exit 0, was exit 1), `pytest tests -q` (109 passed, 2
+deselected), `alembic heads` (single head, works with no env vars set),
+`npm run lint` (0 errors), `npm run test` (54 passed), `npm run build`,
+`npm run ui:audit:strict` (66 files, 0 findings), `npm audit
+--audit-level=moderate` (0 vulnerabilities, was 3), `pip-audit --strict` (0
+vulnerabilities), `git diff --check` (clean). No migration, no API/contract
+change, no auth change.
+
+**Note for the next session**: `frontend/AGENTS.md` and several
+`frontend/src` files were being edited by a concurrent session
+(Antigravity, see the entry below) while this one ran — left entirely
+untouched here; only `frontend/package.json`/`package-lock.json` were
+touched on the frontend side.
+
 ## 2026-09-05 — Fix `pip install -e .` on backend flat layout (Claude Code)
 
 Closed a real, previously-flagged CI-breaking bug (noted as out-of-scope in

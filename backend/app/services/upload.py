@@ -228,7 +228,7 @@ class DocumentUploadService:
         dropbox_path = f"/hydenlyne/{safe_crew_id}/documents/{folder}/{document_id}_{safe_filename}"
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await dropbox_request(
                     client,
                     "POST",
@@ -322,7 +322,7 @@ class DocumentUploadService:
             return False
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await dropbox_request(
                     client,
                     "POST",
@@ -400,7 +400,7 @@ class DocumentUploadService:
             return None
 
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await dropbox_request(
                     client,
                     "POST",
