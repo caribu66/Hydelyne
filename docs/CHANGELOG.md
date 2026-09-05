@@ -10,6 +10,30 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Expiry & renewal alerts engine and compliance automation (Slice 3) (Antigravity)
+
+Implemented the offshore crewing compliance alert engine, automated status transitions,
+and audit tracking across 30/60/90-day renewal and expiration windows.
+
+- Added `ComplianceAlertService` and `classify_certification_expiry` (`app/services/compliance.py`):
+  - Classifies certifications into distinct offshore mobilization windows: `expired` (<0 days, critical),
+    `urgent_30d` (0-30 days, urgent renewal required), `warning_60d` (31-60 days, mobilization warning),
+    `notice_90d` (61-90 days, advance booking window), and `compliant` (>90 days).
+  - Automatically transitions certification statuses: `< 0 days` -> `expired`, `<= 30 days` -> `expiring_soon`.
+  - Fixes the bug where `expiring_soon` tickets never transitioned to `expired` once the expiry date passed.
+  - Aligns consultant root medical status (`medical_status` = `expired` / `expiring_soon`) whenever medical tickets expire.
+  - Records automated compliance transition entries into backing documents' `access_log` for auditability.
+  - Invalidates Redis compliance and crew caches for all affected consultants.
+  - Stores compliance alert snapshots in Redis (`hydenlyne:compliance:latest_alerts`, 24h TTL) and
+    publishes events on the `compliance.alerts` pub/sub channel.
+- Refactored Celery task `check_expiring_certifications` (`app/tasks/document_tasks.py`) to delegate
+  to `ComplianceAlertService.evaluate_and_update_compliance_sync(session)`.
+- Updated `CertificationService.check_and_update_expiration_status` (`app/services/crew.py`) to handle
+  all non-expired tickets and maintain medical state.
+- Added test suite in `tests/test_compliance_alerts.py` (4 tests) covering window classification,
+  lifecycle transitions, audit logging, Redis cache invalidations, and Celery task execution.
+- All 140 backend tests and full frontend verification pass cleanly.
+
 ## 2026-09-05 — Certification verification controls & backing document preview (Slice 2) (Antigravity)
 
 Exposed verification status, verification actions, and backing document preview

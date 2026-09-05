@@ -441,13 +441,11 @@ class CertificationService:
         factory = get_session_factory()
         async with factory() as session:
             today = date.today()
-            threshold = today + timedelta(days=30)
 
-            stmt = select(Certification).where(
-                and_(
-                    Certification.expiry_date < threshold,
-                    Certification.status == "valid",
-                )
+            stmt = (
+                select(Certification)
+                .where(Certification.expiry_date.isnot(None))
+                .options(selectinload(Certification.crew_member))
             )
             result = await session.execute(stmt)
             certs = result.scalars().all()
@@ -456,11 +454,20 @@ class CertificationService:
             for cert in certs:
                 if cert.expiry_date is None:
                     continue
+                old_status = cert.status
+                new_status: Optional[str] = None
                 if cert.expiry_date < today:
-                    cert.status = "expired"
-                else:
-                    cert.status = "expiring_soon"
-                updated += 1
+                    if cert.status != "expired":
+                        new_status = "expired"
+                elif cert.expiry_date <= today + timedelta(days=30):
+                    if cert.status == "valid":
+                        new_status = "expiring_soon"
+
+                if new_status and new_status != old_status:
+                    cert.status = new_status
+                    if "medical" in cert.cert_type.lower() and cert.crew_member:
+                        cert.crew_member.medical_status = new_status
+                    updated += 1
 
             await session.commit()
 
