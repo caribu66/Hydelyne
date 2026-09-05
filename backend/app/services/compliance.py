@@ -5,6 +5,7 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
+import redis
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.orm.attributes import flag_modified
@@ -86,6 +87,20 @@ def classify_certification_expiry(
         "should_transition_status": False,
         "target_status": "valid",
     }
+
+
+def _get_sync_redis_client() -> redis.Redis:
+    """Build a short-lived sync Redis client for this module's Celery-task callers."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    return redis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+        socket_connect_timeout=2,
+        socket_timeout=2,
+    )
 
 
 class ComplianceAlertService:
@@ -259,18 +274,7 @@ class ComplianceAlertService:
         if not crew_ids:
             return
         try:
-            import redis
-
-            from app.config import get_settings
-
-            settings = get_settings()
-            client = redis.from_url(
-                settings.REDIS_URL,
-                encoding="utf-8",
-                decode_responses=True,
-                socket_connect_timeout=2,
-                socket_timeout=2,
-            )
+            client = _get_sync_redis_client()
             for crew_id in crew_ids:
                 for key in client.scan_iter(match=f"hydenlyne:compliance:*{crew_id}*"):
                     client.delete(key)
@@ -283,18 +287,7 @@ class ComplianceAlertService:
     def _publish_alerts_sync(self, payload: dict[str, Any]) -> None:
         """Publish compliance alert snapshot and event to Redis."""
         try:
-            import redis
-
-            from app.config import get_settings
-
-            settings = get_settings()
-            client = redis.from_url(
-                settings.REDIS_URL,
-                encoding="utf-8",
-                decode_responses=True,
-                socket_connect_timeout=2,
-                socket_timeout=2,
-            )
+            client = _get_sync_redis_client()
             client.set(
                 "hydenlyne:compliance:latest_alerts",
                 json.dumps(payload, default=str),
