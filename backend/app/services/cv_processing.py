@@ -418,9 +418,18 @@ class CVProcessingService:
             }
 
         extraction_result = CVProcessingService.merge_table_extraction({}, table_payload)
-        extracted_training = CVProcessingService.training_from_text(text)
-        if extracted_training:
-            extraction_result["training_qualifications"] = extracted_training
+        # Only fall back to the regex text scan when the table extractor
+        # found nothing — it did here and its output was already correct.
+        # training_from_text scans raw flattened page text line-by-line, so
+        # a training table whose cells wrap across multiple visual lines
+        # (common — see cv_table_extractor.py's module docstring) gets torn
+        # into misordered fragments; unconditionally overwriting a working
+        # table-derived result with that was a real data-corruption bug
+        # found via a real CV (backend/tests/fixtures_helena_cv.pdf).
+        if not extraction_result.get("training_qualifications"):
+            extracted_training = CVProcessingService.training_from_text(text)
+            if extracted_training:
+                extraction_result["training_qualifications"] = extracted_training
         extracted_systems = CVProcessingService.systems_from_text(text)
         if extracted_systems:
             extraction_result["systems"] = list(

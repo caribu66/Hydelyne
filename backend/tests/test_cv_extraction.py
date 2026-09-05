@@ -355,6 +355,50 @@ async def test_helena_lindqvist_cv_extracts_name_summary_and_skills_deterministi
     assert all("" not in s for s in skills)
 
 
+@pytest.mark.asyncio
+async def test_extract_cv_deterministically_does_not_clobber_table_training_with_regex_fallback():
+    """Regression test for a real data-corruption bug: extract_cv_deterministically
+    called training_from_text() (a naive line-by-line regex scan over raw
+    flattened PDF text, meant only as a last-resort recovery when the table
+    extractor finds nothing) *unconditionally*, and let it silently overwrite
+    an already-correct, table-derived training_qualifications list whenever
+    it returned anything non-empty — which it always does for a real CV.
+
+    training_from_text tears a table apart when a cell's TYPE column wraps
+    across multiple visual PDF text lines (as Helena Lindqvist's real CV
+    does), producing interleaved fragments like "Compressed Air Emergency
+    Breathing" / "UK 2014 N/A" / "System (CA-EBS)" as three separate list
+    entries instead of one correct row — and this was landing in the actual
+    crew_members.training_qualifications DB column, corrupting real
+    compliance-relevant training/certification dates.
+
+    Only test_extract_cv_deterministically_never_calls_the_llm_for_a_recognized_pdf
+    exercised extract_cv_deterministically before this, and it passes text=""
+    (masking the bug, since training_from_text("") is a no-op). This test
+    goes through the real pipeline — TextExtractionService.extract_text()
+    on the actual PDF, same as production — so the regex fallback actually
+    has real text to (mis)parse, and would fail without the fix."""
+    from app.services.cv_processing import CVProcessingService
+    from app.services.text_extraction import TextExtractionService
+
+    pdf_path = _helena_pdf_path()
+    text = await TextExtractionService().extract_text(pdf_path, "pdf")
+    result = CVProcessingService.extract_cv_deterministically(pdf_path, "pdf", text)
+
+    training = result["training_qualifications"]
+    assert len(training) >= 10, f"Expected the full clean TRAINING table, got {len(training)} rows"
+
+    # A correct row keeps the training name, place, and dates together, not
+    # torn into separate list entries.
+    assert any("Compressed Air Emergency Breathing" in row and "CA-EBS" in row for row in training)
+    # These fragments are exactly what the regex fallback produced when it
+    # clobbered the table result — their presence means the bug is back.
+    assert "UK 2014 N/A" not in training
+    assert "Szczecin" not in training  # split off "Szczecin, Poland" as a lone fragment
+    assert "Poland" not in training
+    assert not any(row.strip() == "Szczecin" for row in training)
+
+
 def _helena_pdf_path() -> str:
     import os
 

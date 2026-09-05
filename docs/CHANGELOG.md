@@ -1184,6 +1184,47 @@ reintroduce and closes a symmetric backend test gap.
 - Ordered the paginated specialist list newest-first. This prevents recently
   added consultants from falling beyond the frontend's first 100 records.
 
+## 2026-09-04 — Fix training/qualifications data corrupted by an unconditional fallback (Claude Code)
+
+Salvaged from claude/strange-shannon-e680d4 — a real, confirmed-still-live
+data-integrity bug on main before this port, unrelated to anything else in
+this session.
+
+Follow-up to a minor issue flagged in the prior review entry: one
+credentials-row display artifact ("Maritime — Maritime Academy Szczecin,
+Poland Compressed Air Emergency Breathing UK") turned out to be one visible
+fragment of a much larger data-corruption bug. Helena Lindqvist's real
+`training_qualifications` DB column held 27 garbled, misordered fragments
+instead of 14 clean rows.
+
+Root cause in `cv_processing.py`'s `extract_cv_deterministically`: the
+table-based extractor (`cv_table_extractor.py`) already produces correct,
+clean rows — confirmed by testing it directly — but the function then
+called `training_from_text()` (a naive line-by-line regex scan meant only
+as a last-resort recovery when the table extractor finds nothing)
+*unconditionally*, letting it silently overwrite the already-correct
+table-derived result whenever it returned anything non-empty, which it
+always does for a real CV with a training table whose cells wrap across
+multiple visual PDF lines. This landed real, compliance-relevant training
+and certification dates in the wrong order in the database. Fixed by
+gating the fallback on the table path having produced nothing
+(`if not extraction_result.get("training_qualifications")`).
+
+No test had exercised the real pipeline
+(`TextExtractionService.extract_text()` → `extract_cv_deterministically()`)
+with real extracted text for this field — the existing test passed
+`text=""`, which made `training_from_text` a no-op and masked the bug.
+Added a regression test that goes through the real pipeline and fails
+without the fix (verified). Also repaired Helena Lindqvist's existing
+corrupted DB record directly (the code fix only prevents future
+corruption, not already-stored bad data) and invalidated her cached AI
+summary, since it had been generated using the corrupted training list as
+context. Verified live: her Credentials tab now shows 14 clean, correctly
+structured training rows.
+
+141 backend tests pass (up from 134); ruff format/check, mypy strict,
+single Alembic head all clean.
+
 ## 2026-09-04 — Fix infinite re-render loop in natural-language search (Claude Code)
 
 Salvaged from `claude/strange-shannon-e680d4` — a real, confirmed-still-live
