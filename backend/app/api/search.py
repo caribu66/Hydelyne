@@ -1,17 +1,49 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.auth.decorators import get_current_user_rest, require_admin_rest
+from app.domain.fields import AVAILABILITY_STATUS_VALUES, DOCUMENT_CLASSIFICATIONS
 from app.models import CrewMember
 from app.services.meilisearch import meilisearch_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/search", tags=["search"])
+
+
+def _quote_filter_value(field: str, value: str, allowed: tuple[str, ...]) -> str:
+    """Build a Meilisearch filter clause, rejecting values outside the enum.
+
+    Meilisearch filter strings are interpreted, not parameterized — a value
+    containing `"` (or filter keywords like `OR`) can break out of the
+    intended clause and inject arbitrary filter syntax. Since every caller
+    here filters on a closed, small enum, allowlisting is both sufficient and
+    simpler than escaping.
+    """
+    if value not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {field}: must be one of {', '.join(allowed)}",
+        )
+    return f'{field} = "{value}"'
+
+
+def _validated_crew_id(crew_id: str) -> str:
+    """Validate crew_id is a well-formed UUID before it reaches a filter string.
+
+    CrewMember.id is generated via uuid.uuid4() (see app/models/__init__.py),
+    so a syntactically valid UUID cannot contain the quote/keyword characters
+    a Meilisearch filter clause would misinterpret.
+    """
+    try:
+        return str(uuid.UUID(crew_id))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid crew_id: must be a UUID") from None
 
 
 @router.get("/crew")
@@ -26,7 +58,9 @@ async def search_crew(
     """Search crew members using Meilisearch."""
     filters = None
     if availability:
-        filters = f'availability_status = "{availability}"'
+        filters = _quote_filter_value(
+            "availability_status", availability, AVAILABILITY_STATUS_VALUES
+        )
 
     results = await meilisearch_client.search_crew_members(
         query=q,
@@ -50,9 +84,11 @@ async def search_documents(
     """Search documents using Meilisearch."""
     filters_parts = []
     if classification:
-        filters_parts.append(f'classification = "{classification}"')
+        filters_parts.append(
+            _quote_filter_value("classification", classification, DOCUMENT_CLASSIFICATIONS)
+        )
     if crew_id:
-        filters_parts.append(f'crew_member_id = "{crew_id}"')
+        filters_parts.append(f'crew_member_id = "{_validated_crew_id(crew_id)}"')
 
     filters = " AND ".join(filters_parts) if filters_parts else None
 

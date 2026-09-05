@@ -10,6 +10,39 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Fix Meilisearch filter-injection in /api/search/* (Claude Code)
+
+Closed a real, previously-flagged-but-unfixed security bug (noted in the
+2026-09-02 "Real strict typing" session as found-but-out-of-scope): `backend/
+app/api/search.py` spliced the `availability`, `classification`, and
+`crew_id` query params unescaped into Meilisearch filter strings via
+f-string (`f'availability_status = "{availability}"'`). Meilisearch filters
+are interpreted, not parameterized, so a value containing `"` could break out
+of the intended clause and inject arbitrary filter syntax.
+
+- `availability` and `classification` are now allowlisted against the
+  canonical enums already owned by `app/domain/fields.py`
+  (`AVAILABILITY_STATUS_VALUES`, `DOCUMENT_CLASSIFICATIONS`) instead of a new
+  parallel list — a mismatch returns `422` with a machine-readable message.
+- `crew_id` is validated as a well-formed UUID (`CrewMember.id` is generated
+  via `uuid.uuid4()`) before it reaches the filter string.
+- Added `backend/tests/test_search_filter_injection.py`: regression tests
+  proving injection payloads are rejected with `422` and that valid inputs
+  still produce the expected filter clause.
+- Verified: `ruff format --check` / `ruff check` clean on the changed files,
+  `pytest tests -q` 109/109 passing, `bandit -r app/api/search.py` clean,
+  single Alembic head. `mypy app` shows 3 pre-existing errors in
+  `app/services/cache.py` and `app/services/meilisearch.py` (unrelated to
+  this change, not introduced by it — flagged, not fixed, to keep this slice
+  small).
+
+**Environment note:** this session's backend virtualenv was missing `mypy`
+and `qdrant-client` despite both being pinned in `requirements-dev.txt`/
+`requirements.txt` — installed them to actually run the gates rather than
+skip them. This is the same environment-reproducibility gap
+`docs/AUDIT_2026-09-02.md` P2 #12 already flagged; worth a `pip install -r
+requirements-dev.txt` at session start going forward.
+
 ## 2026-09-05 — Application-wide smooth transitions & exit animations overhaul (Antigravity)
 
 Comprehensive refactor eliminating abrupt component pops and unmount jumps across all workspace interactions and modals:
