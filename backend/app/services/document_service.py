@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from app.database import get_session_factory
+from app.domain.fields import normalize_classification
 from app.models import Document as DocumentModel
 from app.services.audit import audit_service
 from app.services.extraction import extraction_service
@@ -175,6 +176,17 @@ class DocumentService:
                     db_doc.extraction_confidence = extraction_result.get("confidence", {})
                     db_doc.extraction_status = "needs_review" if needs_review else "extracted"
                     await session.commit()
+
+            classification = normalize_classification(doc.classification)
+            if classification == "certificate" and doc.crew_member_id:
+                from app.services.crew import certification_service
+
+                await certification_service.link_extracted_certificate(
+                    crew_id=doc.crew_member_id,
+                    document_id=document_id,
+                    extracted_data=extraction_result,
+                    confidence=extraction_result.get("confidence", {}),
+                )
 
             await audit_service.log_extraction(
                 document_id=document_id,

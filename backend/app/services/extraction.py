@@ -5,6 +5,7 @@ import logging
 import re
 from typing import Any
 
+from app.domain.fields import normalize_classification
 from app.services.ollama import ollama_client
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,8 @@ class ExtractionService:
         is_image: bool = False,
     ) -> dict[str, Any]:
         """Extract structured data from a document."""
-        prompt_template = EXTRACTION_PROMPTS.get(document_type)
+        normalized_type = normalize_classification(document_type)
+        prompt_template = EXTRACTION_PROMPTS.get(normalized_type)
         if not prompt_template:
             raise ValueError(f"Unknown document type: {document_type}")
 
@@ -240,7 +242,8 @@ class ExtractionService:
         is_image: bool = False,
     ) -> dict[str, Any]:
         """Extract structured data from a document (sync version for Celery)."""
-        prompt_template = EXTRACTION_PROMPTS.get(document_type)
+        normalized_type = normalize_classification(document_type)
+        prompt_template = EXTRACTION_PROMPTS.get(normalized_type)
         if not prompt_template:
             raise ValueError(f"Unknown document type: {document_type}")
 
@@ -260,7 +263,8 @@ class ExtractionService:
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode()
 
-        prompt_template = EXTRACTION_PROMPTS.get(document_type, EXTRACTION_PROMPTS["certificate"])
+        normalized_type = normalize_classification(document_type)
+        prompt_template = EXTRACTION_PROMPTS.get(normalized_type, EXTRACTION_PROMPTS["certificate"])
         # Document text placeholder not needed for image; prompt already contains instructions
         prompt = prompt_template.format(document_text="[IMAGE]")
         result = await ollama_client.extract(
@@ -279,7 +283,8 @@ class ExtractionService:
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode()
 
-        prompt = EXTRACTION_PROMPTS.get(document_type, EXTRACTION_PROMPTS["certificate"])
+        normalized_type = normalize_classification(document_type)
+        prompt = EXTRACTION_PROMPTS.get(normalized_type, EXTRACTION_PROMPTS["certificate"])
         # Format prompt to keep placeholder for consistency, but image data carries content
         try:
             prompt = prompt.format(document_text="[IMAGE]")

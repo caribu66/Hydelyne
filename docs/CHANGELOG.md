@@ -10,6 +10,33 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Standalone certificate document ingestion & Certification auto-linking (Slice 1) (Antigravity)
+
+Closed the architectural gap where standalone certificate files uploaded to the
+Document Vault were stored as dead files (`Document` records) without populating
+the consultant's `certifications` table.
+
+- Added `CertificationService.link_extracted_certificate` (`app/services/crew.py`):
+  normalizes extracted certificate types via `app/domain/certifications.py`,
+  safely parses dates, computes expiry/status, upserts or links existing
+  `Certification` rows in-place via `document_ref`, and keeps `CrewMember`
+  root medical fields (`medical_status`, `medical_expiry`, `medical_provider`)
+  in sync for medical tickets.
+- Added `normalize_classification` and `CLASSIFICATION_ALIASES` to
+  `app/domain/fields.py`: normalizes `"cert"` (used by GraphQL and the frontend
+  API) to canonical `"certificate"` and prevents `ValueError: Unknown document type`
+  in `ExtractionService.extract_document`.
+- Added missing medical aliases (`"offshore medical"`, `"offshore_medical"`,
+  `"oeuk"`, `"eng1"`) to `CERT_ALIASES` in `app/domain/certifications.py`.
+- Wired certificate linking into both processing pipelines:
+  `app/services/sync_processor.py` (Celery sync worker) and
+  `app/services/document_service.py` (async pipeline).
+- Added 9 new tests in `tests/test_certificate_document_linking.py` covering
+  new cert creation, updating existing unlinked certs, in-place re-extraction,
+  medical field synchronization, expired status computation, classification
+  normalization, and end-to-end `process_document` linking.
+- All 136 backend tests pass cleanly.
+
 ## 2026-09-05 — Extract split-pane resize from App.tsx; fixes a real keyboard-focus-theft bug it exposed (Claude Code)
 
 `App.tsx` (1597 lines, the largest file in the whole decomposition backlog)
