@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.session import (
@@ -15,8 +16,10 @@ from app.auth.session import (
     verify_session_token,
 )
 from app.database import get_session_factory
-from app.models import Certification, CrewMember
+from app.models import Certification, CrewMember, Document
 from app.services.cache import cache_service
+from app.services.consultant_knowledge import consultant_knowledge_service
+from app.services.upload import document_upload_service
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +93,128 @@ class AuthService:
             return result.scalar_one_or_none()
 
 
+async def _reload_crew_with_relations(session: AsyncSession, crew_id: str) -> CrewMember:
+    """Re-fetch a crew member with work_history/certifications eager-loaded.
+
+    The GraphQL mapper accesses these relationships synchronously; without
+    selectinload here that lazy-loads outside the async greenlet context and
+    raises `MissingGreenlet`.
+    """
+    stmt = (
+        select(CrewMember)
+        .options(
+            selectinload(CrewMember.work_history),
+            selectinload(CrewMember.certifications),
+        )
+        .where(CrewMember.id == crew_id)
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one()
+
+
 class CrewService:
     """Service for crew member operations."""
+
+    async def create_crew_member(self, crew: CrewMember) -> CrewMember:
+        """Persist a new crew member and index them for retrieval.
+
+        ``crew`` is an unpersisted model instance built by the caller (the
+        GraphQL layer owns mapping the create DTO to a model).
+        """
+        factory = get_session_factory()
+        async with factory() as session:
+            session.add(crew)
+            await session.commit()
+            crew = await _reload_crew_with_relations(session, crew.id)
+
+        await consultant_knowledge_service.index_crew_member(crew)
+        return crew
+
+    async def update_crew_member(self, crew_id: str, updates: dict[str, Any]) -> CrewMember:
+        """Apply the given field updates to a crew member.
+
+        ``updates`` should contain only fields the caller actually wants
+        changed (already filtered of unset/None values) — every key is
+        applied unconditionally via setattr.
+        """
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(CrewMember).where(CrewMember.id == crew_id)
+            result = await session.execute(stmt)
+            crew = result.scalar_one_or_none()
+            if not crew:
+                raise ValueError(f"Crew member {crew_id} not found")
+            for field, value in updates.items():
+                setattr(crew, field, value)
+            await session.commit()
+            crew = await _reload_crew_with_relations(session, crew.id)
+
+        await consultant_knowledge_service.index_crew_member(crew)
+        # The AI summary is generated from these same fields — a stale
+        # cached summary after an edit would show outdated facts.
+        await cache_service.delete(cache_service._make_key("summary", crew.id))
+        return crew
+
+    async def delete_crew_member(self, crew_id: str, requesting_user_id: Optional[str]) -> bool:
+        """Permanently delete a crew member and their managed documents.
+
+        Admin-only by decorator at the resolver. Dropbox files are removed
+        before database metadata so a failed remote deletion leaves the
+        member and their documents recoverable — this raises rather than
+        silently skipping the file so the caller (and the record) stays
+        intact.
+        """
+        if requesting_user_id == crew_id:
+            raise ValueError("You cannot delete your own administrator account")
+
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(CrewMember).where(CrewMember.id == crew_id)
+            result = await session.execute(stmt)
+            crew = result.scalar_one_or_none()
+            if not crew:
+                return False
+
+            documents_result = await session.execute(
+                select(Document).where(Document.crew_member_id == crew_id)
+            )
+            documents = list(documents_result.scalars().all())
+
+            # Keep all metadata when Dropbox cannot confirm deletion.
+            for document in documents:
+                if document.storage_type == "dropbox":
+                    if (
+                        not document.dropbox_path
+                        or not await document_upload_service.delete_from_dropbox(
+                            document.dropbox_path
+                        )
+                    ):
+                        raise ValueError(
+                            f"Could not delete Dropbox file for {document.file_name}; "
+                            "crew member was retained"
+                        )
+
+            for document in documents:
+                await session.delete(document)
+            await session.delete(crew)
+            await session.commit()
+
+        # Cache removal is best-effort and happens only after the database
+        # transaction has succeeded. The "summary" and "compliance" keys are
+        # addressable directly by crew_id via crewSummary/complianceStatus,
+        # independent of whether the crew record still exists — a stale hit
+        # there would keep serving a deleted person's data until its TTL
+        # expires, so they must be cleared explicitly rather than assumed
+        # unreachable.
+        for document in documents:
+            document_upload_service.delete_file(document.storage_path)
+
+        await cache_service.delete(cache_service._make_key("crew", crew_id))
+        await cache_service.delete(cache_service._make_key("summary", crew_id))
+        await cache_service.delete(cache_service._make_key("compliance", crew_id))
+        await cache_service.invalidate_pattern("hydenlyne:crew_list:*")
+        await consultant_knowledge_service.remove_from_index(crew_id)
+        return True
 
     async def get_crew_member(self, crew_id: str) -> Optional[CrewMember]:
         """Get a crew member by ID with all relationships loaded."""

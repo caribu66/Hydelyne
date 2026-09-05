@@ -1,11 +1,19 @@
 """Test crew member GraphQL operations."""
 
+import uuid
 from datetime import datetime
+from unittest.mock import AsyncMock
 
 import pytest
 
-from app.models import CrewMember
+from app.models import CrewMember, Document
 from app.services.crew import crew_service
+
+DELETE_CREW_MUTATION = """
+mutation DeleteCrewMember($id: String!) {
+    deleteCrewMember(id: $id)
+}
+"""
 
 CREATE_CREW_MUTATION = """
 mutation CreateCrewMember($fullName: String!, $email: String, $phone: String, $nationality: String) {
@@ -180,3 +188,62 @@ async def test_retired_cv_metadata_mutation_does_not_claim_success(client):
     payload = response.json()
     assert payload["data"] is None
     assert payload["errors"][0]["extensions"]["code"] == "BAD_USER_INPUT"
+
+
+@pytest.mark.asyncio
+async def test_delete_crew_member_retains_everything_when_dropbox_delete_fails(
+    client, db_session, monkeypatch
+):
+    """Characterization test for an invariant that was previously undocumented
+    by any test: deleteCrewMember's docstring promises "Dropbox files are
+    removed before database metadata so a failed remote deletion leaves the
+    member and their documents recoverable." Nothing verified that a failed
+    Dropbox delete actually stops the database delete before this test."""
+    crew = CrewMember(id=str(uuid.uuid4()), full_name="Has Dropbox Doc", role="user")
+    db_session.add(crew)
+    await db_session.flush()
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        file_name="contract.pdf",
+        file_type="application/pdf",
+        file_size=10,
+        storage_path="/hydenlyne/crew/documents/contract.pdf",
+        storage_type="dropbox",
+        dropbox_path="/hydenlyne/crew/documents/contract.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.upload.document_upload_service.delete_from_dropbox",
+        AsyncMock(return_value=False),
+    )
+
+    response = await client.post(
+        "/graphql",
+        json={"query": DELETE_CREW_MUTATION, "variables": {"id": crew.id}},
+    )
+    body = response.json()
+    assert body["data"] is None
+    assert "errors" in body
+
+    still_there = await crew_service.get_crew_member(crew.id)
+    assert still_there is not None
+    assert len(still_there.documents) == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_delete_own_account(client):
+    """Characterization test: the resolver has an explicit self-delete guard
+    with zero prior test coverage. conftest.py's default test identity has a
+    fixed id, so this deletes that exact id to hit the guard."""
+    from tests.conftest import _dummy_user
+
+    response = await client.post(
+        "/graphql",
+        json={"query": DELETE_CREW_MUTATION, "variables": {"id": _dummy_user.id}},
+    )
+    body = response.json()
+    assert body["data"] is None
+    assert "cannot delete your own administrator account" in body["errors"][0]["message"]

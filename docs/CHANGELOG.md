@@ -10,6 +10,81 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Extract crew-member mutations out of graphql/schema.py (slice 2) (Claude Code)
+
+Second slice of the large-file decomposition, picking up exactly where
+slice 1's changelog entry recommended: `createCrewMember`/
+`updateCrewMember`/`deleteCrewMember`, the highest-stakes resolvers left in
+the file (real transaction/cache-invalidation/Dropbox-cascade ordering,
+where earlier slices were pure reads).
+
+Before touching anything, checked what was actually tested. Existing
+coverage was decent but had one real, load-bearing gap:
+`deleteCrewMember`'s own docstring promises "Dropbox files are removed
+before database metadata so a failed remote deletion leaves the member and
+their documents recoverable" — and nothing verified that invariant held. A
+careless extraction (e.g. moving the DB delete before the Dropbox delete,
+or losing the `raise` on Dropbox failure) would have shipped silently.
+Wrote two new characterization tests first
+(`backend/tests/test_crew.py`), ran them against the *unrefactored*
+resolver to confirm they pass now, then extracted, then confirmed they
+still pass:
+
+- `test_delete_crew_member_retains_everything_when_dropbox_delete_fails`:
+  creates a crew member with a Dropbox-backed document, forces
+  `delete_from_dropbox` to fail, asserts the mutation errors *and* the crew
+  member and their document are still in the database afterward.
+- `test_admin_cannot_delete_own_account`: the self-delete guard had zero
+  prior coverage.
+
+Extracted into `CrewService` (`app/services/crew.py`), matching its
+existing method style:
+- `create_crew_member(crew: CrewMember)`: takes an already-built,
+  unpersisted model instance — DTO construction and DTO→model mapping stay
+  in `app/graphql/` (mapping is that layer's job per
+  `docs/ARCHITECTURE.md`'s ownership table), the service just persists and
+  indexes.
+- `update_crew_member(crew_id, updates: dict)`: takes a plain dict of
+  fields to set instead of the `CrewMemberUpdateDTO` object. Deliberate:
+  importing a GraphQL-layer DTO into `app/services/` would invert the
+  documented dependency direction (services must not depend on the
+  transport layer). The resolver now does
+  `dto.model_dump(exclude_none=True)`, which also replaced the original
+  10-line if-each-field-is-not-None chain with one line — a genuine
+  simplification, not just a move.
+- `delete_crew_member(crew_id, requesting_user_id)`: the full cascade
+  (self-delete guard, Dropbox-then-DB deletion ordering, post-commit cache
+  and search-index cleanup) moved as one unit. The resolver now only reads
+  `current_user` off the GraphQL context (a transport-layer concern) and
+  passes the plain id through.
+- Moved `_reload_crew_with_relations` from `schema.py` into `crew.py`
+  alongside the methods that actually use it.
+- Removed `AsyncSession`, `selectinload`, and `document_upload_service`
+  imports from `schema.py` — all three became fully unused once their only
+  call sites moved.
+
+Result: `app/graphql/schema.py` **963 → 843 lines** this slice (**1040 →
+843, ~19%, across both slices so far**). Verified: `ruff format --check`/
+`ruff check` (clean), `mypy app` (0 issues, 48 files — caught one real typing
+gap: `_reload_crew_with_relations`'s `session` parameter needs to stay typed
+as `AsyncSession`, not loosened to `Any`, or the return type erases to `Any`
+too), `bandit -r app -q` (exit 0), `pytest tests -q` (**120 passed**, up
+from 118 — 2 new, 0 removed, every pre-existing test unchanged), `alembic
+heads` (single head). No API/contract change — every GraphQL field,
+argument, and response shape is identical.
+
+**Follow-up for the next session**: `app/services/reports.py` and
+`app/services/document_service.py`'s remaining mutation-side resolvers
+(`uploadDocument`, `confirmExtraction`, `reprocessDocument`,
+`confirmDocumentMatch`, project create/update/assign, certification
+add/update/verify) are the next candidates — lower individual stakes than
+crew-member delete since most already delegate to a service, but several
+still do inline `select()`/session work in the resolver. `App.tsx`
+(currently 1597 lines) and `SpecialistDossierPane.tsx` (1078) remain
+untouched; they're a differently-shaped problem (UI state coupling, not
+transaction ordering) and still actively growing from concurrent UI work,
+so they're better scoped as their own session once that work settles.
+
 ## 2026-09-05 — Extract direct DB orchestration out of graphql/schema.py (slice 1) (Claude Code)
 
 First slice of the large-file decomposition flagged since

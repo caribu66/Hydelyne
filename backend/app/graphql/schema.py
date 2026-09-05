@@ -9,8 +9,6 @@ from typing import Optional
 
 import strawberry
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from strawberry import Info
 
 from app.auth.decorators import require_admin, require_auth
@@ -58,7 +56,6 @@ from app.services.crew import auth_service, certification_service, crew_service
 from app.services.document_service import document_service
 from app.services.project import project_service
 from app.services.reports import report_service
-from app.services.upload import document_upload_service
 
 
 def _dto_to_graphql_crew_member(dto: CrewMemberCreateDTO) -> CrewMember:
@@ -128,25 +125,6 @@ def _model_to_graphql_crew_member(model: CrewMemberModel) -> CrewMember:
         created_at=str(model.created_at),
         updated_at=str(model.updated_at),
     )
-
-
-async def _reload_crew_with_relations(session: AsyncSession, crew_id: str) -> CrewMemberModel:
-    """Re-fetch a crew member with work_history/certifications eager-loaded.
-
-    `_model_to_graphql_crew_member` accesses these relationships synchronously;
-    without selectinload here that lazy-loads outside the async greenlet
-    context and raises `MissingGreenlet`.
-    """
-    stmt = (
-        select(CrewMemberModel)
-        .options(
-            selectinload(CrewMemberModel.work_history),
-            selectinload(CrewMemberModel.certifications),
-        )
-        .where(CrewMemberModel.id == crew_id)
-    )
-    result = await session.execute(stmt)
-    return result.scalar_one()
 
 
 def _model_to_graphql_certification(model: CertificationModel) -> Certification:
@@ -490,18 +468,8 @@ class Mutation:
             languages=languages,
             flying_point=flying_point,
         )
-        factory = get_session_factory()
-        async with factory() as session:
-            crew = dto_to_crew_member_model(dto)
-            session.add(crew)
-            await session.commit()
-            crew = await _reload_crew_with_relations(session, crew.id)
-            graphql_crew = _model_to_graphql_crew_member(crew)
-
-        from app.services.consultant_knowledge import consultant_knowledge_service
-
-        await consultant_knowledge_service.index_crew_member(crew)
-        return graphql_crew
+        crew = await crew_service.create_crew_member(dto_to_crew_member_model(dto))
+        return _model_to_graphql_crew_member(crew)
 
     @strawberry.mutation
     @require_admin
@@ -532,45 +500,8 @@ class Mutation:
             flying_point=flying_point,
             availability_status=availability_status.value if availability_status else None,
         )
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(CrewMemberModel).where(CrewMemberModel.id == id)
-            result = await session.execute(stmt)
-            crew = result.scalar_one_or_none()
-            if not crew:
-                raise ValueError(f"Crew member {id} not found")
-            if dto.full_name is not None:
-                crew.full_name = dto.full_name
-            if dto.email is not None:
-                crew.email = dto.email
-            if dto.phone is not None:
-                crew.phone = dto.phone
-            if dto.nationality is not None:
-                crew.nationality = dto.nationality
-            if dto.country_of_residence is not None:
-                crew.country_of_residence = dto.country_of_residence
-            if dto.date_of_birth is not None:
-                crew.date_of_birth = dto.date_of_birth
-            if dto.gender is not None:
-                crew.gender = dto.gender
-            if dto.languages is not None:
-                crew.languages = dto.languages
-            if dto.flying_point is not None:
-                crew.flying_point = dto.flying_point
-            if dto.availability_status is not None:
-                crew.availability_status = dto.availability_status
-            await session.commit()
-            crew = await _reload_crew_with_relations(session, crew.id)
-            graphql_crew = _model_to_graphql_crew_member(crew)
-
-        from app.services.cache import cache_service
-        from app.services.consultant_knowledge import consultant_knowledge_service
-
-        await consultant_knowledge_service.index_crew_member(crew)
-        # The AI summary is generated from these same fields — a stale
-        # cached summary after an edit would show outdated facts.
-        await cache_service.delete(cache_service._make_key("summary", crew.id))
-        return graphql_crew
+        crew = await crew_service.update_crew_member(id, dto.model_dump(exclude_none=True))
+        return _model_to_graphql_crew_member(crew)
 
     @strawberry.mutation
     @require_admin
@@ -582,59 +513,8 @@ class Mutation:
         their documents recoverable.
         """
         current_user = info.context.get("current_user")
-        if current_user and current_user.id == id:
-            raise ValueError("You cannot delete your own administrator account")
-
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(CrewMemberModel).where(CrewMemberModel.id == id)
-            result = await session.execute(stmt)
-            crew = result.scalar_one_or_none()
-            if not crew:
-                return False
-
-            documents_result = await session.execute(
-                select(DocumentModel).where(DocumentModel.crew_member_id == id)
-            )
-            documents = list(documents_result.scalars().all())
-
-            # Keep all metadata when Dropbox cannot confirm deletion.
-            for document in documents:
-                if document.storage_type == "dropbox":
-                    if (
-                        not document.dropbox_path
-                        or not await document_upload_service.delete_from_dropbox(
-                            document.dropbox_path
-                        )
-                    ):
-                        raise ValueError(
-                            f"Could not delete Dropbox file for {document.file_name}; crew member was retained"
-                        )
-
-            for document in documents:
-                await session.delete(document)
-            await session.delete(crew)
-            await session.commit()
-
-        # Cache removal is best-effort and happens only after the database
-        # transaction has succeeded. The "summary" and "compliance" keys are
-        # addressable directly by crew_id via crewSummary/complianceStatus,
-        # independent of whether the crew record still exists — a stale hit
-        # there would keep serving a deleted person's data until its TTL
-        # expires, so they must be cleared explicitly rather than assumed
-        # unreachable.
-        for document in documents:
-            document_upload_service.delete_file(document.storage_path)
-
-        from app.services.cache import cache_service
-        from app.services.consultant_knowledge import consultant_knowledge_service
-
-        await cache_service.delete(cache_service._make_key("crew", id))
-        await cache_service.delete(cache_service._make_key("summary", id))
-        await cache_service.delete(cache_service._make_key("compliance", id))
-        await cache_service.invalidate_pattern("hydenlyne:crew_list:*")
-        await consultant_knowledge_service.remove_from_index(id)
-        return True
+        requesting_user_id = current_user.id if current_user else None
+        return await crew_service.delete_crew_member(id, requesting_user_id)
 
     @strawberry.mutation
     @require_admin
