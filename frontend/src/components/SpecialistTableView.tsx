@@ -310,7 +310,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                               src={profile.avatar}
                               alt={profile.name}
                               referrerPolicy="no-referrer"
-                              className="w-8 h-8 rounded-[10px] object-cover border border-border-subtle"
+                              className="w-9 h-9 rounded-lg object-cover ring-1 ring-border-subtle/80 shadow-xs"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                                 const fallback = e.currentTarget.nextElementSibling;
@@ -319,7 +319,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                             />
                           ) : null}
                           <div
-                            className={`w-8 h-8 rounded-[10px] bg-surface-raised border border-border-subtle items-center justify-center font-bold text-xs text-primary shrink-0 ${
+                            className={`w-9 h-9 rounded-lg bg-surface-raised ring-1 ring-border-subtle items-center justify-center font-bold text-xs text-primary shrink-0 ${
                               profile.avatar ? 'hidden' : 'flex'
                             }`}
                           >
@@ -331,7 +331,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                           </div>
                           {isAvailableNow && (
                             <span
-                              className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-positive border border-surface"
+                              className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-positive ring-2 ring-surface shadow-xs"
                               title="Available immediately"
                             />
                           )}
@@ -429,10 +429,10 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                             type="button"
                             onClick={() => onRequestMobilization(profile)}
                             aria-label={`Request mobilization for ${profile.name}`}
-                            className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer"
                             title="Request mobilization"
                           >
-                            <Send className="w-3.5 h-3.5" />
+                            <Send className="w-4 h-4" />
                           </button>
                         )}
 
@@ -440,13 +440,13 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                           type="button"
                           onClick={(e) => handleCopyEmail(profile, e)}
                           aria-label={`Copy ${profile.name} email address`}
-                          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer"
                           title="Copy Email"
                         >
                           {copiedId === profile.id ? (
-                            <Check className="w-3.5 h-3.5 text-positive" />
+                            <Check className="w-4 h-4 text-positive" />
                           ) : (
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-4 h-4" />
                           )}
                         </button>
 
@@ -454,15 +454,15 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                           type="button"
                           onClick={(e) => onToggleBookmark(profile.id, e)}
                           aria-label={isProfileBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
-                          className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-                            isProfileBookmarked ? 'text-accent bg-accent-soft/40' : 'text-secondary hover:text-primary hover:bg-surface-raised'
+                          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+                            isProfileBookmarked ? 'text-action bg-surface-raised border border-border-strong/60 shadow-xs' : 'text-muted hover:text-primary hover:bg-surface-raised/70'
                           }`}
                           title={isProfileBookmarked ? 'Shortlisted' : 'Shortlist'}
                         >
                           {isProfileBookmarked ? (
-                            <BookmarkCheck className="w-3.5 h-3.5 fill-current" />
+                            <BookmarkCheck className="w-4 h-4 fill-current" />
                           ) : (
-                            <Bookmark className="w-3.5 h-3.5" />
+                            <Bookmark className="w-4 h-4" />
                           )}
                         </button>
                       </div>

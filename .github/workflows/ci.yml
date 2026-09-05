@@ -84,5 +84,11 @@ jobs:
       - name: UI audit (strict)
         run: npm run ui:audit:strict
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests (Playwright)
+        run: npm run test:e2e:ci
+
       - name: Audit (npm audit)
         run: npm audit --audit-level=moderate

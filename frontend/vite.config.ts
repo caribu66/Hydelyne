@@ -49,12 +49,21 @@ export default defineConfig(() => {
       chunkSizeWarningLimit: 250,
       rollupOptions: {
         output: {
-          manualChunks: {
-            react: ['react', 'react-dom'],
-            apollo: ['@apollo/client', 'graphql'],
-            motion: ['motion'],
-            d3: ['d3'],
-            vendor: ['lucide-react', '@google/genai'],
+          // A function keyed on the resolved module path, not an object keyed
+          // by bare specifier: object-form manualChunks only routes the exact
+          // listed specifier (e.g. 'react-dom'), so a deep import like
+          // 'react-dom/client' — what main.tsx actually uses for createRoot —
+          // resolves to a different module and falls through into the entry
+          // chunk instead. Matching on the package's node_modules path catches
+          // every subpath and transitive internal file.
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+            if (/node_modules\/(@apollo\/client|graphql)\//.test(id)) return 'apollo';
+            if (/node_modules\/(motion|framer-motion)\//.test(id)) return 'motion';
+            if (/node_modules\/d3(-[a-z]+)?\//.test(id)) return 'd3';
+            if (/node_modules\/(lucide-react|@google\/genai)\//.test(id)) return 'vendor';
+            return undefined;
           },
         },
       },

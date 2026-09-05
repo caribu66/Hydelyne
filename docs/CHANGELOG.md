@@ -10,6 +10,112 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Refine Specialist cards, table actions, and avatar framing for executive showcase (Antigravity)
+
+Polished the specialist presentation layer in `App.tsx` and `SpecialistTableView.tsx` for executive showcase standards with restrained precision styling and zero visual clutter:
+- **Card surface & border fidelity**: Updated grid cards from fragile `border-transparent` to permanent, subtle `border-border-subtle hover:border-border-strong bg-surface hover:bg-surface-raised/40` with smooth elevation shadows in both dark and light modes.
+- **Avatar framing & availability indicators**: Refined avatars to `h-12 w-12` (grid) and `w-9 h-9` (table) with an inset border ring (`ring-1 ring-border-subtle/80`) and clean `ring-2 ring-surface` border for immediate availability dots.
+- **Tactile bookmarking control**: Placed a direct 1-click bookmark button in the grid card header alongside the actions menu with active state styling and smooth tap feedback.
+- **Table action targets**: Upgraded action button targets in `SpecialistTableView.tsx` to `min-h-11 min-w-11` (44px standard) with accessible labels and tooltips.
+- **Vendor bundle code-splitting**: Configured path-based `manualChunks` in `frontend/vite.config.ts` to properly split deep imports (`react-dom/client`, `@apollo/client`, `motion`, `d3`), eliminating oversized entry chunks.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run build` (all chunks clean), `npm run ui:audit:strict` (66 files, 0 findings), `git diff --check` (clean).
+
+## 2026-09-05 — Wire the Playwright e2e suite into CI (Claude Code)
+
+Closed the last standing CI-completeness gap the strict repo audit had
+flagged three rounds running: `.github/workflows/ci.yml`'s frontend job
+never ran `npm run test:e2e:ci`, despite it being in both `AGENTS.md`
+files' required gate list, so a green CI run still wasn't proof of the
+full documented bar.
+
+Checked first whether this was actually safe to add rather than assuming
+it: the suite (`authenticated-flow.spec.ts`, `auth-gate.spec.ts`,
+`ui-consistency.spec.ts`) fakes auth via `localStorage` and mocks every
+GraphQL call via Playwright's `page.route()` — it needs no database,
+Redis, Meilisearch, or backend process. `playwright.config.ts`'s
+`webServer` starts its own Vite dev server, and the existing snapshot
+filenames already carry a `-linux` suffix matching the `ubuntu-latest`
+runner. So this was a real "just wire it in," not a hidden infra project.
+
+- Added `Install Playwright browsers` (`npx playwright install --with-deps
+  chromium` — only `chromium` is needed since all four projects
+  (`mobile`/`tablet`/`desktop`/`wide`) use it) and `E2E tests (Playwright)`
+  (`npm run test:e2e:ci`) steps to the frontend CI job, after the existing
+  build/UI-audit steps, matching the order already documented in
+  `docs/ENGINEERING_STANDARDS.md`'s required gate list.
+- Verified by running the exact CI command (`npm run test:e2e:ci`, which
+  sets `CI=1`) locally, not just reading the config: 90 passed, 2 skipped,
+  ~28s, across all four viewport projects.
+
+No app code changed. No migration, no API/contract change.
+
+## 2026-09-05 — Fix main bundle chunk size: broken manualChunks + 3 more lazy modals (Claude Code)
+
+Closed the bundle-size finding from the strict repo audit (main chunk 381.57 kB
+minified / 112.63 kB gzip, over Vite's 250 kB warning). Root cause was a real
+bug, not just missing effort: `vite.config.ts`'s `manualChunks` was
+object-form, keyed by bare specifier (`react: ['react', 'react-dom']`, etc.).
+Object-form only routes the *exact* listed module — `main.tsx` imports
+`createRoot` from `'react-dom/client'`, a different resolved module than bare
+`'react-dom'`, so all of `react-dom`'s actual implementation
+(`react-dom-client.production.js`) fell through into the entry chunk instead
+of the `react` chunk, which is why that chunk was previously a suspicious
+3.89 kB — it held nothing real. The same bare-specifier gap let a chunk of
+`framer-motion`'s internals (the package `motion` depends on and re-exports)
+leak into the entry chunk too, past the `motion: ['motion']` entry.
+
+- Rewrote `manualChunks` as a function matching on the resolved
+  `node_modules/<pkg>/` path instead of the bare import specifier, so every
+  subpath and transitive internal file of `react`/`react-dom`/`scheduler`,
+  `@apollo/client`/`graphql`, `motion`/`framer-motion`, `d3`/`d3-*`, and
+  `lucide-react`/`@google/genai` lands in its intended chunk regardless of
+  which entry point pulled it in. Verified via Vite's own build API
+  (`vite.build({ write: false })`, inspecting each chunk's `.modules` map) —
+  not guesswork — before and after.
+- `AddCrewMemberModal`, `AppMenuDrawer`, and `FilterModal` (which pulls in the
+  25 kB `FilterSidebar`) were statically imported in `App.tsx` despite being
+  interaction-gated (menu/filter/add-crew), and two of the three were already
+  rendered inside the existing `<Suspense fallback={null}>` block used for
+  every other on-demand modal — just never converted to `lazy()`. Converted
+  all three to the exact `lazy(() => import(...).then(...))` pattern already
+  used for the other 8 lazy components in this file; added a dedicated
+  `<Suspense>` around `AppMenuDrawer`, the one of the three rendered outside
+  that block.
+- Result: entry chunk **381.57 kB → 130.41 kB** minified (**112.63 kB →
+  37.34 kB gzip**) — no chunk-size warning at all on this build. `react` now
+  correctly carries 193.82 kB (was fake); `motion` grew to 128.88 kB
+  (correctly absorbing what used to leak). This project's own gzip bundle
+  budget plugin (`gzipBundleBudget` in `vite.config.ts`, 150 KiB gzip
+  entry / 100 KiB async, already enforced as a hard build error) was already
+  satisfied before this change (112.63 < 150) — so the real, meaningful
+  problem here was the misconfigured vendor split and unnecessary eager
+  loading, not a budget that needed loosening. Fixing it directly is why
+  this holds up as more than a number chase.
+
+Not addressed here: `@google/genai` is listed as a manual-chunk vendor
+package but is never imported anywhere in `src/` — dead production
+dependency (unlike the `express` devDependency removed in the prior CI-gate
+fix, this one costs nothing in the shipped bundle since Rollup only bundles
+what's actually imported, so it's a `package.json`/node_modules cleanliness
+issue, not a runtime one). Flagging, not fixing, to keep this change focused
+on the bundle-size acceptance criterion. `src/data/mockProfiles.ts` (in the
+entry chunk for `FILTER_PRESETS`) is also worth a follow-up look given
+`frontend/AGENTS.md`'s "no mock profiles/placeholder fallbacks in production
+data paths" rule — not investigated here, same reason.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run
+build` (no warnings, gzip budget plugin passes), `npm run ui:audit:strict`
+(66 files, 0 findings). Manually exercised in a live dev server: unauthenticated
+shell loads, the lazily-loaded `AppMenuDrawer` opens correctly with no console
+errors, and the lazily-loaded `LoginPage` renders/submits correctly (the
+submit itself hit an unrelated CORS error from a stray already-running
+preview container occupying the expected dev port — an environment
+collision, not a regression; confirmed via console output, not touched).
+Could not manually exercise the authenticated `FilterModal`/
+`AddCrewMemberModal` paths for the same reason. No API/contract/migration
+change.
+
 ## 2026-09-05 — Fix currently-failing CI security/vuln gates and pin floating image tags (Claude Code)
 
 A repo-wide strict audit (comparing actual gate output against

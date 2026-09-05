@@ -23,10 +23,7 @@ import { CrewQueryResult } from './hooks/useCrewQuery';
 import { ModernHeroSearch } from './components/ModernHeroSearch';
 import { CrewQuerySummary } from './components/CrewQuerySummary';
 import { MatchEvidence } from './components/MatchEvidence';
-import { AddCrewMemberModal } from './components/AddCrewMemberModal';
-import { AppMenuDrawer } from './components/AppMenuDrawer';
 import { ActiveFilterChips } from './components/ActiveFilterChips';
-import { FilterModal } from './components/FilterModal';
 import { SpecialistActionsMenu } from './components/SpecialistActionsMenu';
 import { ComparisonBar } from './components/ComparisonBar';
 import { HighlightText } from './components/HighlightText';
@@ -57,6 +54,9 @@ import hydenlyneLogoWhite from './assets/hydenlyne-logo-white.png';
 import hydenlyneLogoColour from './assets/hydenlyne-logo-colour.png';
 
 const LoginPage = lazy(() => import('./components/LoginPage').then((module) => ({ default: module.LoginPage })));
+const AddCrewMemberModal = lazy(() => import('./components/AddCrewMemberModal').then((module) => ({ default: module.AddCrewMemberModal })));
+const AppMenuDrawer = lazy(() => import('./components/AppMenuDrawer').then((module) => ({ default: module.AppMenuDrawer })));
+const FilterModal = lazy(() => import('./components/FilterModal').then((module) => ({ default: module.FilterModal })));
 const ProfileDetailModal = lazy(() => import('./components/ProfileDetailModal').then((module) => ({ default: module.ProfileDetailModal })));
 const CandidateCompareModal = lazy(() => import('./components/CandidateCompareModal').then((module) => ({ default: module.CandidateCompareModal })));
 const MobilizationInquiryModal = lazy(() => import('./components/MobilizationInquiryModal').then((module) => ({ default: module.MobilizationInquiryModal })));
@@ -592,6 +592,7 @@ export default function App() {
         </div>
       </header>
 
+      <Suspense fallback={null}>
       <AppMenuDrawer
         isOpen={isMenuOpen}
         onClose={() => setIsMenuOpen(false)}
@@ -611,6 +612,7 @@ export default function App() {
         onLogout={handleLogout}
         onRequestLogin={requestLogin}
       />
+      </Suspense>
 
       {/* Main Container */}
       <main id="main-content" className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-start px-4 sm:px-6" aria-label="Contractor network workspace">
@@ -1173,21 +1175,21 @@ export default function App() {
                             ease: [0.16, 1, 0.3, 1],
                           }}
                           key={profile.id}
-                          className="group bg-surface/35 hover:bg-surface/70 border border-transparent hover:border-border-subtle rounded-[14px] p-5 transition-[background-color,border-color,box-shadow] duration-200 flex flex-col justify-between space-y-4 hover:shadow-xl hover:shadow-black/10"
+                          className="group bg-surface hover:bg-surface-raised/40 border border-border-subtle hover:border-border-strong rounded-[14px] p-5 transition-all duration-200 flex flex-col justify-between space-y-4 shadow-xs hover:shadow-md"
                         >
                           {/* Header Row */}
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-3.5 min-w-0">
                               <div className="relative shrink-0">
                                 <img
                                   src={profile.avatar}
                                   alt={profile.name}
                                   referrerPolicy="no-referrer"
-                                  className="w-11 h-11 rounded-[10px] object-cover border border-border-subtle"
+                                  className="h-12 w-12 rounded-xl object-cover ring-1 ring-border-subtle/80 shadow-xs group-hover:ring-border-strong transition-all"
                                 />
                                 {isAvailableNow && (
                                   <span
-                                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-positive border border-border-subtle"
+                                    className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-positive ring-2 ring-surface shadow-xs"
                                     title="Available immediately"
                                   />
                                 )}
@@ -1195,14 +1197,14 @@ export default function App() {
 
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <h3 className="font-medium text-sm text-primary group-hover:text-accent transition-colors truncate">
+                                  <h3 className="font-semibold text-sm text-primary group-hover:text-primary transition-colors truncate">
                                     <HighlightText text={profile.name} query={committedQuery} />
                                   </h3>
                                   {profile.isHighlyRecommended && (
                                     <span title="Verified Contractor"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                                   )}
                                 </div>
-                                <p className="text-xs text-secondary truncate font-light">
+                                <p className="text-xs text-secondary truncate font-normal">
                                   <HighlightText text={profile.title} query={committedQuery} />
                                 </p>
                                 {profile.isHighlyRecommended && (
@@ -1214,7 +1216,25 @@ export default function App() {
                               </div>
                             </div>
 
-                            <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
+                            <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => toggleBookmark(profile.id)}
+                                aria-label={isProfileBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
+                                title={isProfileBookmarked ? 'Shortlisted' : 'Save to shortlist'}
+                                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] transition-colors cursor-pointer ${
+                                  isProfileBookmarked
+                                    ? 'text-action bg-surface-raised border border-border-strong/60 shadow-xs'
+                                    : 'text-muted hover:text-primary hover:bg-surface-raised/70'
+                                }`}
+                              >
+                                <Bookmark
+                                  className={`h-4 w-4 transition-transform active:scale-90 ${
+                                    isProfileBookmarked ? 'fill-current' : ''
+                                  }`}
+                                  aria-hidden="true"
+                                />
+                              </button>
                               <SpecialistActionsMenu
                                 profile={profile}
                                 isBookmarked={isProfileBookmarked}
@@ -1229,28 +1249,36 @@ export default function App() {
                           </div>
 
                           {/* Compact Specs Line */}
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary border-t border-b border-border-subtle/50 py-1.5">
-                            <span className="flex items-center gap-1 truncate">
-                              <MapPin className="w-3 h-3 text-muted shrink-0" />
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary border-t border-b border-border-subtle/60 py-2">
+                            <span className="flex items-center gap-1.5 truncate">
+                              <MapPin className="w-3.5 h-3.5 text-muted shrink-0" />
                               <HighlightText text={profile.location.split(',')[0] ?? profile.location} query={committedQuery} />
                             </span>
-                            <span>•</span>
+                            <span className="text-muted/60">•</span>
                             <span>{profile.yearsOfExperience} yrs exp</span>
                             {profile.dayRate && (
                               <>
-                                <span>•</span>
-                                <span className="text-positive font-medium">£{profile.dayRate}/day</span>
+                                <span className="text-muted/60">•</span>
+                                <span className="font-mono font-medium text-positive">£{profile.dayRate}/day</span>
                               </>
                             )}
+                            <span className="text-muted/60">•</span>
                             <span className={isAvailableNow ? 'text-positive font-medium' : 'text-secondary'}>
                               {profile.availability.replace('Available ', '')}
                             </span>
-                            {profile.rating && <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>}
+                            {profile.rating && (
+                              <>
+                                <span className="text-muted/60">•</span>
+                                <span className="font-mono text-warning font-medium inline-flex items-center gap-0.5">
+                                  <Star className="w-3 h-3 fill-current" /> {profile.rating.toFixed(1)}
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           {/* Certifications with Tooltips */}
                           {profile.certifications && profile.certifications.length > 0 && (
-                            <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
                               {profile.certifications.slice(0, 3).map((cert) => (
                                 <CertificationBadge key={cert} certification={cert} size="sm" />
                               ))}
@@ -1271,33 +1299,32 @@ export default function App() {
                           </p>
 
                           {/* Footer / Skills */}
-                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle/60">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {profile.skills.slice(0, 3).map((skill) => (
                                 <span
                                   key={skill}
-                                  className="px-2 py-0.5 rounded-md bg-surface-raised/80 text-secondary text-xs"
+                                  className="px-2.5 py-1 rounded-md bg-surface-raised border border-border-subtle/70 text-secondary text-xs font-medium"
                                 >
                                   <HighlightText text={skill} query={committedQuery} />
                                 </span>
                               ))}
                               {profile.skills.length > 3 && (
-                                <span className="text-xs text-muted font-mono">
+                                <span className="text-xs text-muted font-mono font-medium">
                                   +{profile.skills.length - 3}
                                 </span>
                               )}
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setModalProfile(profile)}
-                                aria-label={`Open ${profile.name} dossier`}
-                                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-border-strong/60 bg-accent-soft/40 px-2.5 py-1.5 text-xs font-semibold text-accent transition-colors hover:border-border-strong/70 hover:bg-accent-soft/50 hover:text-accent shrink-0"
-                              >
-                                Open dossier <ArrowUpRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setModalProfile(profile)}
+                              aria-label={`Open ${profile.name} dossier`}
+                              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-strong/70 bg-surface hover:bg-surface-raised px-3 py-1.5 text-xs font-semibold text-primary transition-colors shrink-0 shadow-xs cursor-pointer group/btn"
+                            >
+                              <span>Open dossier</span>
+                              <ArrowUpRight className="w-3.5 h-3.5 text-secondary group-hover/btn:text-primary transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+                            </button>
                           </div>
                         </motion.div>
                       );
