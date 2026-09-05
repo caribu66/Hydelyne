@@ -42,7 +42,7 @@ class TextExtractionService:
                         text_parts.append(page_text)
             return "\n\n".join(text_parts)
         except Exception as e:
-            logger.error(f"PDF extraction failed for {file_path}: {e}")
+            logger.error("PDF extraction failed (%s)", type(e).__name__)
             raise
 
     async def _extract_docx(self, file_path: str) -> str:
@@ -62,7 +62,7 @@ class TextExtractionService:
                         text_parts.append(" | ".join(row_text))
             return "\n".join(text_parts)
         except Exception as e:
-            logger.error(f"DOCX extraction failed for {file_path}: {e}")
+            logger.error("DOCX extraction failed (%s)", type(e).__name__)
             raise
 
     async def _extract_image(self, file_path: str) -> str:
@@ -75,7 +75,7 @@ class TextExtractionService:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
         except Exception as e:
-            logger.error(f"Email extraction failed for {file_path}: {e}")
+            logger.error("Email extraction failed (%s)", type(e).__name__)
             raise
 
     def is_image(self, file_type: str) -> bool:
@@ -108,7 +108,7 @@ class TextExtractionService:
                         text_parts.append(page_text)
             return "\n\n".join(text_parts)
         except Exception as e:
-            logger.error(f"PDF extraction failed for {file_path}: {e}")
+            logger.error("PDF extraction failed (%s)", type(e).__name__)
             raise
 
     def _extract_docx_sync(self, file_path: str) -> str:
@@ -128,7 +128,7 @@ class TextExtractionService:
                         text_parts.append(" | ".join(row_text))
             return "\n".join(text_parts)
         except Exception as e:
-            logger.error(f"DOCX extraction failed for {file_path}: {e}")
+            logger.error("DOCX extraction failed (%s)", type(e).__name__)
             raise
 
     def _extract_email_sync(self, file_path: str) -> str:
@@ -137,7 +137,7 @@ class TextExtractionService:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
         except Exception as e:
-            logger.error(f"Email extraction failed for {file_path}: {e}")
+            logger.error("Email extraction failed (%s)", type(e).__name__)
             raise
 
 

@@ -174,7 +174,23 @@ class DocumentService:
                     db_doc.extracted_data = extraction_result
                     db_doc.extracted_text = text if not is_image else None
                     db_doc.extraction_confidence = extraction_result.get("confidence", {})
-                    db_doc.extraction_status = "needs_review" if needs_review else "extracted"
+                    if normalize_classification(db_doc.classification) == "cv":
+                        from app.models import CVReview
+
+                        review = (
+                            await session.execute(
+                                select(CVReview).where(CVReview.document_id == document_id)
+                            )
+                        ).scalar_one_or_none()
+                        if review and review.status not in {"approved", "rejected"}:
+                            review.proposed_data = {
+                                **(review.proposed_data or {}),
+                                **extraction_result,
+                            }
+                            review.status = "awaiting_review"
+                        db_doc.extraction_status = "awaiting_review"
+                    else:
+                        db_doc.extraction_status = "needs_review" if needs_review else "extracted"
                     await session.commit()
 
             classification = normalize_classification(doc.classification)
@@ -190,20 +206,36 @@ class DocumentService:
 
             await audit_service.log_extraction(
                 document_id=document_id,
-                model_used="llama3.1:8b",
+                model_used=(
+                    "deterministic-cv-template"
+                    if normalize_classification(doc.classification) == "cv"
+                    else "llama3.1:8b"
+                ),
                 confidence=extraction_result.get("confidence", {}),
-                status="needs_review" if needs_review else "extracted",
+                status=(
+                    "awaiting_review"
+                    if normalize_classification(doc.classification) == "cv"
+                    else "needs_review"
+                    if needs_review
+                    else "extracted"
+                ),
             )
 
             return {
                 "document_id": document_id,
-                "status": "needs_review" if needs_review else "extracted",
+                "status": (
+                    "awaiting_review"
+                    if normalize_classification(doc.classification) == "cv"
+                    else "needs_review"
+                    if needs_review
+                    else "extracted"
+                ),
                 "classification": doc.classification,
                 "confidence": extraction_result.get("confidence", {}),
             }
 
         except Exception as e:
-            logger.error(f"Extraction failed for document {document_id}: {e}")
+            logger.error("Document extraction failed (%s)", type(e).__name__)
             async with factory() as session:
                 stmt = select(DocumentModel).where(DocumentModel.id == document_id)
                 result = await session.execute(stmt)
@@ -214,7 +246,11 @@ class DocumentService:
 
             await audit_service.log_extraction(
                 document_id=document_id,
-                model_used="llama3.1:8b",
+                model_used=(
+                    "deterministic-cv-template"
+                    if normalize_classification(doc.classification) == "cv"
+                    else "llama3.1:8b"
+                ),
                 confidence={},
                 status="failed",
             )
@@ -243,6 +279,8 @@ class DocumentService:
 
             if not doc:
                 return None
+            if normalize_classification(doc.classification) == "cv":
+                raise ValueError("CV extraction must be confirmed through the CV review workflow")
 
             doc.extracted_data = confirmed_data
             doc.extraction_status = "extracted"

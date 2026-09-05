@@ -56,6 +56,8 @@ import hydenlyneLogoColour from './assets/hydenlyne-logo-colour.png';
 
 const LoginPage = lazy(() => import('./components/LoginPage').then((module) => ({ default: module.LoginPage })));
 const AddCrewMemberModal = lazy(() => import('./components/AddCrewMemberModal').then((module) => ({ default: module.AddCrewMemberModal })));
+const CvReviewModal = lazy(() => import('./components/CvReviewModal').then((module) => ({ default: module.CvReviewModal })));
+const ManageStaffModal = lazy(() => import('./components/ManageStaffModal').then((module) => ({ default: module.ManageStaffModal })));
 const AppMenuDrawer = lazy(() => import('./components/AppMenuDrawer').then((module) => ({ default: module.AppMenuDrawer })));
 const FilterModal = lazy(() => import('./components/FilterModal').then((module) => ({ default: module.FilterModal })));
 const ProfileDetailModal = lazy(() => import('./components/ProfileDetailModal').then((module) => ({ default: module.ProfileDetailModal })));
@@ -99,6 +101,7 @@ export default function App() {
   const { isDark, toggleTheme } = useTheme();
   const { initialized: authInitialized, isAuthenticated, user, logout, refreshSession } = useAuth();
   const canManageDocuments = user?.role === 'admin';
+  const canSubmitCv = user?.role === 'admin' || user?.role === 'staff';
   const [deleteCrewMember] = useMutation(DELETE_CREW_MEMBER);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
@@ -129,6 +132,8 @@ export default function App() {
 
   // Add Crew Member modal state
   const [isAddCrewMemberOpen, setIsAddCrewMemberOpen] = useState(false);
+  const [isCvReviewOpen, setIsCvReviewOpen] = useState(false);
+  const [isStaffAccessOpen, setIsStaffAccessOpen] = useState(false);
 
   const handleAIResults = useCallback((data: CrewQueryResult | null, loading: boolean, isActive: boolean, showSummary: boolean) => {
     setAiQueryData(data);
@@ -469,7 +474,7 @@ export default function App() {
 
           {/* Right Nav */}
           <div className="flex items-center gap-2 shrink-0">
-            {isAuthenticated && (
+            {isAuthenticated && canSubmitCv && (
               <span className="hidden max-w-[180px] truncate text-xs text-secondary sm:inline" title={user?.email}>
                 {user?.email}
               </span>
@@ -479,7 +484,7 @@ export default function App() {
                 Sign in
               </button>
             )}
-            {isAuthenticated && (
+            {isAuthenticated && canSubmitCv && (
               <button type="button" onClick={() => setIsAddCrewMemberOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Add contractor" title="Add a contractor to the network">
                 <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
                 <span className="hidden sm:inline">Add contractor</span>
@@ -509,6 +514,10 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenAddSpecialist={() => setIsAddCrewMemberOpen(true)}
+        onOpenCvReviews={() => setIsCvReviewOpen(true)}
+        canSubmitCv={canSubmitCv}
+        isAdmin={user?.role === 'admin'}
+        onOpenStaffAccess={() => setIsStaffAccessOpen(true)}
         onOpenCompare={() => setIsCompareModalOpen(true)}
         compareCount={compareIds.length}
         isSearchActive={isSearchActive}
@@ -1469,12 +1478,28 @@ export default function App() {
       {/* Add Contractor Modal */}
       <AddCrewMemberModal
         isOpen={isAddCrewMemberOpen}
+        isAdmin={user?.role === 'admin'}
         onClose={() => setIsAddCrewMemberOpen(false)}
         onSuccess={() => {
           showToast('Contractor added successfully');
           refetchProfiles();
         }}
       />
+      <Suspense fallback={null}>
+        <CvReviewModal
+          isOpen={isCvReviewOpen}
+          isAdmin={user?.role === 'admin'}
+          onClose={() => setIsCvReviewOpen(false)}
+          onApproved={() => {
+            showToast('CV approved and contractor published');
+            refetchProfiles();
+          }}
+        />
+        <ManageStaffModal
+          isOpen={isStaffAccessOpen}
+          onClose={() => setIsStaffAccessOpen(false)}
+        />
+      </Suspense>
       <FilterModal
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}

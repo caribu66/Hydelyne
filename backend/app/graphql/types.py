@@ -95,6 +95,7 @@ class CrewMember:
     email: Optional[str] = None
     phone: Optional[str] = None
     role: str = "user"
+    publication_status: str = "approved"
     passport: Optional[PassportInfo] = None
     visa: Optional[VisaInfo] = None
     medical: Optional[MedicalInfo] = None
@@ -192,6 +193,9 @@ class ExtractionStatus(Enum):
     EXTRACTED = "extracted"
     FAILED = "failed"
     NEEDS_REVIEW = "needs_review"
+    AWAITING_REVIEW = "awaiting_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 @strawberry.enum
@@ -244,6 +248,21 @@ class CrewQueryResponse:
     total_issues: Optional[int] = None
     crew_id: Optional[str] = None
     crew_name: Optional[str] = None
+
+
+@strawberry.type
+class CVReviewType:
+    id: str
+    document_id: str
+    crew_member_id: str
+    status: str
+    proposed_data: Optional[str] = None
+    approved_data: Optional[str] = None
+    submitted_by: str
+    reviewed_by: Optional[str] = None
+    review_note: Optional[str] = None
+    created_at: str
+    reviewed_at: Optional[str] = None
 
 
 @strawberry.type

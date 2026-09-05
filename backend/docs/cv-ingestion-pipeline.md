@@ -25,13 +25,11 @@ summaries, agent queries (see `consultant-knowledge-core.md`) — never at inges
 doesn't fit the template (wrong file type, or the parser can't find the expected structure),
 it is **not** sent to AI as a fallback — it's flagged for manual review instead.
 
-## The full lifecycle: "Add Specialist" to a populated profile
+## The full lifecycle: submission, review, and publication
 
-1. **Crew record created immediately.** Submitting the "Add Specialist" form fires
-   `createCrewMember` (GraphQL) — writes the `CrewMember` row, and syncs it into Meilisearch
-   in the same call (`ConsultantKnowledgeService.index_crew_member`, see
-   `consultant-knowledge-core.md`) so it's searchable within the same request, before any CV
-   processing happens.
+1. **A staff-owned draft is created.** The CV-led `createCrewMember` call writes a
+   `CrewMember` with `publication_status="draft"`. It is deliberately excluded from
+   ordinary, keyword, and natural-language search.
 2. **If a CV was attached, it's a separate upload right after.** The modal doesn't send the CV
    as part of crew creation — it creates the crew member first, then does a real multipart
    upload (`POST /api/documents/upload`, `app/api/documents.py`), which creates a `Document`
@@ -42,18 +40,20 @@ it is **not** sent to AI as a fallback — it's flagged for manual review instea
    practice this finishes in under a second now — no LLM round trip to wait on.
 4. **What the worker does** (`SyncDocumentProcessor.process`, `app/services/sync_processor.py`):
    extract text → run `CVProcessingService.extract_cv_deterministically` → write the result
-   onto `Document.extracted_data`/`extracted_text` → since it's classified `cv` and linked to
-   a crew member, immediately call `cv_processing_service.process_cv_extraction` to write into
-   the real profile: `CrewMember` fields (name if still the `"pending cv import"` placeholder,
-   nationality, education, `professional_summary`), `Certification` rows, `WorkHistory` rows.
-5. **Two possible outcomes:**
-   - **Template recognized** → `extraction_status = "extracted"`. The dossier is fully
-     populated: professional summary, skills, certifications, work history, clients,
-     education — see "What's deterministic" below for the exact field list.
+   onto `Document.extracted_data`/`extracted_text` and its `CVReview` proposal. It does not
+   update canonical profile fields.
+5. **Administrator review:** the admin opens the original CV beside the proposal, corrects
+   or rejects values, then approves. Approval applies the reviewed proposal, changes the
+   profile to `approved`, and adds it to Meilisearch. Only then can natural search return it.
+6. **Possible outcomes:**
+   - **Template recognized** → `extraction_status = "awaiting_review"` until approval.
    - **Template not recognized** (non-PDF, or the parser finds no personal info and no work
      history) → `extraction_status` routes to `"needs_review"` via a deliberately low
      confidence signal (`{"all": 0.0}`) — see "Failure path" below. No guessing, no AI
      fallback.
+
+Exact name/email matches block a CV-led draft as a possible duplicate. An admin
+may explicitly confirm that the person is distinct; the system never auto-merges.
 
 ## Where the deterministic extraction actually lives
 

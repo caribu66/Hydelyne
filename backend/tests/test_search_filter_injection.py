@@ -37,7 +37,9 @@ async def test_search_crew_accepts_valid_availability(client):
         )
         assert response.status_code == 200
         _, kwargs = mocked.call_args
-        assert kwargs["filters"] == 'availability_status = "available"'
+        assert kwargs["filters"] == (
+            'publication_status = "approved" AND availability_status = "available"'
+        )
 
 
 @pytest.mark.asyncio
@@ -70,4 +72,21 @@ async def test_search_documents_accepts_valid_filters(client):
         )
         assert response.status_code == 200
         _, kwargs = mocked.call_args
-        assert kwargs["filters"] == f'classification = "identity" AND crew_member_id = "{crew_id}"'
+        assert kwargs["filters"] == (
+            f'extraction_status = "approved" AND classification = "identity" '
+            f'AND crew_member_id = "{crew_id}"'
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_documents_excludes_unapproved_extractions(client):
+    with patch.object(
+        meilisearch_client,
+        "search_documents",
+        AsyncMock(return_value={"hits": []}),
+    ) as mocked:
+        response = await client.get("/api/search/documents", params={"q": "cv"})
+
+    assert response.status_code == 200
+    _, kwargs = mocked.call_args
+    assert kwargs["filters"] == 'extraction_status = "approved"'

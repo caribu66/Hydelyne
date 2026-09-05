@@ -26,7 +26,7 @@ def _maybe_queue_embeddings(document_id: str) -> None:
     except Exception as exc:
         # Semantic indexing is additive; never let a broker hiccup here fail
         # extraction, which already succeeded by this point.
-        logger.warning(f"Could not queue embedding indexing for {document_id}: {exc}")
+        logger.warning("Could not queue embedding indexing (%s)", type(exc).__name__)
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=10)
@@ -45,7 +45,7 @@ def process_document_extraction(self: Task, document_id: str) -> dict[str, Any]:
         _maybe_queue_embeddings(document_id)
         return result
     except Exception as exc:
-        logger.error(f"Extraction failed for {document_id}: {exc}")
+        logger.error("Document extraction task failed (%s)", type(exc).__name__)
         raise self.retry(exc=exc)
 
 
@@ -65,7 +65,7 @@ def process_dropbox_document(self: Task, document_id: str) -> dict[str, Any]:
         _maybe_queue_embeddings(document_id)
         return result
     except Exception as exc:
-        logger.error(f"Dropbox processing failed for {document_id}: {exc}")
+        logger.error("Dropbox processing task failed (%s)", type(exc).__name__)
         raise self.retry(exc=exc)
 
 
@@ -133,5 +133,5 @@ def index_document_embeddings(document_id: str) -> dict:
         finally:
             session.close()
     except Exception as e:
-        logger.error(f"Failed to index embeddings for {document_id}: {e}")
+        logger.error("Embedding indexing failed (%s)", type(e).__name__)
         return {"document_id": document_id, "status": "failed", "error": str(e)}

@@ -11,6 +11,7 @@ richer entities dict, deterministically.
 from __future__ import annotations
 
 import re
+from datetime import date
 from difflib import get_close_matches
 from typing import Any
 
@@ -47,6 +48,8 @@ TYPO_VOCABULARY = {
     "spanish",
     "medical",
     "medicals",
+    "medic",
+    "medics",
     "bosiet",
     "stcw",
     "imca",
@@ -166,6 +169,7 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
         "environmental",
         "pamguard",
         "multibeam",
+        "survey",
         "pam",
         "mmo",
     ):
@@ -173,9 +177,13 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
             detected_terms.append(term)
     if detected_terms:
         entities["skills"] = detected_terms
+    if re.search(r"\bmedics?\b", lower_query) and "medic" not in detected_terms:
+        entities["skills"] = [*detected_terms, "medic"]
 
     if "aberdeen" in lower_query and not entities.get("location"):
         entities["location"] = "Aberdeen"
+    elif "north sea" in lower_query and not entities.get("location"):
+        entities["location"] = "North Sea"
     if (
         "available" in lower_query
         and "unavailable" not in lower_query
@@ -185,12 +193,24 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
     elif "unavailable" in lower_query and not entities.get("availability"):
         entities["availability"] = "unavailable"
 
+    if "next month" in lower_query and "available" in lower_query:
+        today = date.today()
+        next_month_year = today.year + (1 if today.month == 12 else 0)
+        next_month = 1 if today.month == 12 else today.month + 1
+        following_month_year = next_month_year + (1 if next_month == 12 else 0)
+        following_month = 1 if next_month == 12 else next_month + 1
+        entities["availability_by"] = date.fromordinal(
+            date(following_month_year, following_month, 1).toordinal() - 1
+        ).isoformat()
+
     inferred_certifications = list(entities.get("certifications") or [])
     for alias, certificate in CERT_ALIASES.items():
         if " " not in alias and alias in lower_query and certificate not in inferred_certifications:
             inferred_certifications.append(certificate)
     if inferred_certifications:
         entities["certifications"] = inferred_certifications
+        if any(term in lower_query for term in ("valid", "current", "in-date", "in date")):
+            entities["certifications_valid"] = True
 
     experience_match = re.search(
         r"\b(?:at least |minimum of |over )?(\d+(?:\.\d+)?)\s*(?:\+\s*)?(?:years?|yrs?)\s+(?:of\s+)?experience\b",

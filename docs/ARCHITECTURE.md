@@ -112,6 +112,12 @@ and rationale live in `backend/docs/cv-ingestion-pipeline.md` and
 `docs/decisions/0003-deterministic-cv-extraction.md`. Do not reintroduce an
 LLM call into the CV extraction path without a new ADR.
 
+CV-led specialist creation is review-gated. Deterministic extraction is stored
+as a `CVReview` proposal; it does not mutate the canonical profile. Only an
+administrator-approved proposal changes the profile to `approved` and enters
+keyword/natural-language search. Drafts are visible only to their submitting
+staff member and administrators.
+
 Tasks may be delivered more than once. Every transition must tolerate retries,
 record failure safely, and avoid duplicate domain records.
 
@@ -176,4 +182,3 @@ These are debt to reduce, not approved examples for new code:
 - The frontend and backend live in separate, non-atomic Git histories.
 
 See `docs/AUDIT_2026-09-02.md` for evidence and remediation priorities.
-

@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import Optional
 
 import strawberry
-from sqlalchemy import select
 from strawberry import Info
 
-from app.auth.decorators import require_admin, require_auth
+from app.auth.decorators import require_admin, require_auth, require_staff
 from app.database import get_session_factory
 from app.graphql.dtos import (
     CertificationCreateDTO,
@@ -33,6 +32,7 @@ from app.graphql.types import (
     CrewMember,
     CrewQueryResponse,
     CVExtractionResult,
+    CVReviewType,
     DocumentClassification,
     DocumentType,
     InsuranceInfo,
@@ -52,7 +52,14 @@ from app.models import CrewMember as CrewMemberModel
 from app.models import Document as DocumentModel
 from app.models import Project as ProjectModel
 from app.models import WorkHistory as WorkHistoryModel
-from app.services.crew import auth_service, certification_service, crew_service
+from app.services.audit import audit_service
+from app.services.crew import (
+    PossibleDuplicateError,
+    auth_service,
+    certification_service,
+    crew_service,
+)
+from app.services.cv_review import cv_review_service
 from app.services.document_service import document_service
 from app.services.project import project_service
 from app.services.reports import report_service
@@ -80,6 +87,7 @@ def _model_to_graphql_crew_member(model: CrewMemberModel) -> CrewMember:
         email=model.email,
         phone=model.phone,
         role=model.role,
+        publication_status=model.publication_status,
         passport=PassportInfo(
             number=model.passport_number,
             expiry=str(model.passport_expiry) if model.passport_expiry else None,
@@ -197,6 +205,33 @@ def _model_to_graphql_project(model: ProjectModel) -> Project:
 @strawberry.type
 class Query:
     @strawberry.field
+    @require_staff
+    async def cv_reviews(self, info: Info, limit: int = 50, offset: int = 0) -> list[CVReviewType]:
+        actor = info.context["current_user"]
+        reviews = await cv_review_service.list_visible(
+            actor_id=actor.id,
+            actor_role=actor.role,
+            limit=min(max(limit, 1), 100),
+            offset=max(offset, 0),
+        )
+        return [
+            CVReviewType(
+                id=review.id,
+                document_id=review.document_id,
+                crew_member_id=review.crew_member_id,
+                status=review.status,
+                proposed_data=json.dumps(review.proposed_data) if review.proposed_data else None,
+                approved_data=json.dumps(review.approved_data) if review.approved_data else None,
+                submitted_by=review.submitted_by,
+                reviewed_by=review.reviewed_by,
+                review_note=review.review_note,
+                created_at=str(review.created_at),
+                reviewed_at=str(review.reviewed_at) if review.reviewed_at else None,
+            )
+            for review in reviews
+        ]
+
+    @strawberry.field
     @require_auth
     async def me(self, info: Info) -> Optional[CrewMember]:
         user = info.context.get("current_user")
@@ -206,6 +241,18 @@ class Query:
     @require_auth
     async def crew_member(self, info: Info, id: str) -> Optional[CrewMember]:
         crew = await crew_service.get_crew_member(id)
+        actor = info.context["current_user"]
+        if (
+            crew
+            and crew.publication_status != "approved"
+            and actor.role != "admin"
+            and crew.submitted_by != actor.id
+        ):
+            return None
+        if crew:
+            await audit_service.log_profile_access(
+                actor_id=actor.id, action="view_profile", crew_member_id=crew.id
+            )
         return _model_to_graphql_crew_member(crew) if crew else None
 
     @strawberry.field
@@ -227,12 +274,20 @@ class Query:
             limit=limit,
             offset=offset,
         )
+        actor = info.context["current_user"]
+        await audit_service.log_profile_access(
+            actor_id=actor.id, action="list_profiles", result_count=len(crew_list)
+        )
         return [_model_to_graphql_crew_member(c) for c in crew_list]
 
     @strawberry.field
     @require_auth
     async def search_crew(self, info: Info, query: str) -> list[CrewMember]:
         crew_list = await crew_service.list_crew_members(search=query)
+        actor = info.context["current_user"]
+        await audit_service.log_profile_access(
+            actor_id=actor.id, action="keyword_search", result_count=len(crew_list)
+        )
         return [_model_to_graphql_crew_member(c) for c in crew_list]
 
     @strawberry.field
@@ -248,6 +303,11 @@ class Query:
     @strawberry.field
     @require_auth
     async def compliance_status(self, info: Info, crew_id: str) -> str:
+        actor = info.context["current_user"]
+        if not await crew_service.can_access_profile(
+            crew_id, actor_id=actor.id, actor_role=actor.role
+        ):
+            raise ValueError("Crew member not found")
         status = await crew_service.get_compliance_status(crew_id)
         return json.dumps(status)
 
@@ -264,16 +324,30 @@ class Query:
     @require_auth
     async def document(self, info: Info, id: str) -> Optional[DocumentType]:
         doc = await document_service.get_document(id)
+        actor = info.context["current_user"]
+        if (
+            doc
+            and doc.crew_member_id
+            and not await crew_service.can_access_profile(
+                doc.crew_member_id, actor_id=actor.id, actor_role=actor.role
+            )
+        ):
+            return None
         return _model_to_graphql_document(doc) if doc else None
 
     @strawberry.field
     @require_auth
     async def documents_by_crew(self, info: Info, crew_id: str) -> list[DocumentType]:
+        actor = info.context["current_user"]
+        if not await crew_service.can_access_profile(
+            crew_id, actor_id=actor.id, actor_role=actor.role
+        ):
+            return []
         docs = await document_service.get_documents_by_crew(crew_id)
         return [_model_to_graphql_document(d) for d in docs]
 
     @strawberry.field
-    @require_auth
+    @require_admin
     async def pending_reviews(self, info: Info) -> list[DocumentType]:
         docs = await document_service.get_pending_documents()
         return [_model_to_graphql_document(d) for d in docs]
@@ -289,6 +363,12 @@ class Query:
                 query, db_session=session, mode="auto"
             )
         result = search_result.raw or {}
+        actor = info.context["current_user"]
+        await audit_service.log_profile_access(
+            actor_id=actor.id,
+            action="natural_search",
+            result_count=len(result.get("results") or []),
+        )
 
         return CrewQueryResponse(
             intent=result.get("intent", "general"),
@@ -444,7 +524,7 @@ class Mutation:
         return True
 
     @strawberry.mutation
-    @require_admin
+    @require_staff
     async def create_crew_member(
         self,
         info: Info,
@@ -457,6 +537,8 @@ class Mutation:
         gender: Optional[str] = None,
         languages: Optional[list[str]] = None,
         flying_point: Optional[str] = None,
+        cv_submission: bool = False,
+        confirm_distinct: bool = False,
     ) -> CrewMember:
         dto = CrewMemberCreateDTO(
             full_name=full_name,
@@ -469,8 +551,60 @@ class Mutation:
             languages=languages,
             flying_point=flying_point,
         )
-        crew = await crew_service.create_crew_member(dto_to_crew_member_model(dto))
+        actor = info.context["current_user"]
+        if actor.role == "staff" and not cv_submission:
+            from graphql import GraphQLError
+
+            raise GraphQLError(
+                "Staff-created specialists require a CV submission",
+                extensions={"code": "CV_REQUIRED"},
+            )
+        try:
+            crew = await crew_service.create_crew_member(
+                dto_to_crew_member_model(dto),
+                as_draft=cv_submission,
+                submitted_by=actor.id if cv_submission else None,
+                allow_duplicate=actor.role == "admin" and confirm_distinct,
+            )
+        except PossibleDuplicateError as exc:
+            from graphql import GraphQLError
+
+            raise GraphQLError(
+                str(exc),
+                extensions={"code": "POSSIBLE_DUPLICATE", "candidateId": exc.candidate_id},
+            ) from exc
         return _model_to_graphql_crew_member(crew)
+
+    @strawberry.mutation
+    @require_admin
+    async def approve_cv_review(
+        self,
+        info: Info,
+        review_id: str,
+        approved_data: str,
+        note: Optional[str] = None,
+    ) -> bool:
+        parsed = json.loads(approved_data)
+        if not isinstance(parsed, dict):
+            raise ValueError("Approved CV data must be an object")
+        actor = info.context["current_user"]
+        await cv_review_service.approve(
+            review_id, approved_data=parsed, reviewer_id=actor.id, note=note
+        )
+        return True
+
+    @strawberry.mutation
+    @require_admin
+    async def reject_cv_review(self, info: Info, review_id: str, note: str) -> bool:
+        actor = info.context["current_user"]
+        await cv_review_service.reject(review_id, reviewer_id=actor.id, note=note)
+        return True
+
+    @strawberry.mutation
+    @require_admin
+    async def set_staff_role(self, info: Info, user_id: str, enabled: bool) -> CrewMember:
+        user = await crew_service.set_staff_role(user_id, enabled=enabled)
+        return _model_to_graphql_crew_member(user)
 
     @strawberry.mutation
     @require_admin
@@ -704,91 +838,4 @@ class Mutation:
             "uploadCvAndExtract is retired. Upload the CV binary to "
             "/api/documents/upload with classification 'cv'.",
             extensions={"code": "BAD_USER_INPUT"},
-        )
-
-        # Kept below temporarily as unreachable migration reference; remove
-        # with the GraphQL field in the next breaking schema release.
-        from app.services.cv_processing import cv_processing_service
-        from app.services.extraction import extraction_service
-        from app.services.text_extraction import text_extraction_service
-
-        factory = get_session_factory()
-        async with factory() as session:
-            from app.services.upload import safe_path_component
-
-            safe_crew_id = safe_path_component(crew_id, "crew_id")
-            stmt = select(CrewMemberModel).where(CrewMemberModel.id == safe_crew_id)
-            result = await session.execute(stmt)
-            crew = result.scalar_one_or_none()
-            if not crew:
-                raise ValueError(f"Crew member {safe_crew_id} not found")
-
-            doc_id = str(uuid.uuid4())
-            storage_path = f"./data/documents/{safe_crew_id}/{doc_id}_{Path(file_name).name}"
-
-            doc = DocumentModel(
-                id=doc_id,
-                crew_member_id=safe_crew_id,
-                file_name=file_name,
-                file_type=file_type,
-                file_size=file_size,
-                storage_type="local",
-                storage_path=storage_path,
-                classification="cv",
-                extraction_status="pending",
-                uploaded_by="agent",
-            )
-            session.add(doc)
-            await session.commit()
-
-        extracted_data = {"skills": [], "specializations": [], "work_history": []}
-        certs_created = 0
-        work_history_created = 0
-
-        try:
-            mime_to_type = {
-                "application/pdf": "pdf",
-                "application/msword": "doc",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-                "image/jpeg": "jpg",
-                "image/png": "png",
-                "message/rfc822": "eml",
-                "application/vnd.ms-outlook": "msg",
-            }
-            extract_type = mime_to_type.get(
-                file_type, file_type.split("/")[-1] if "/" in file_type else file_type
-            )
-            raw_text = text_extraction_service.extract_text_sync(storage_path, extract_type)
-            extraction_result = extraction_service.extract_document_sync(raw_text, "cv")
-            extracted_data = extraction_result
-
-            processing_result = await cv_processing_service.process_cv_extraction(
-                crew_id, extracted_data, doc_id
-            )
-            certs_created = processing_result.get("certifications_created", 0)
-            work_history_created = processing_result.get("work_history_created", 0)
-
-            async with factory() as session:
-                stmt = select(DocumentModel).where(DocumentModel.id == doc_id)
-                result = await session.execute(stmt)
-                doc_record = result.scalar_one_or_none()
-                if doc_record:
-                    doc_record.extracted_data = extraction_result
-                    doc_record.extraction_status = "extracted"
-                    await session.commit()
-
-        except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.error(f"CV extraction failed for {doc_id}: {e}")
-
-        return CVExtractionResult(
-            document_id=doc_id,
-            crew_id=crew_id,
-            status="extracted",
-            certifications_created=certs_created,
-            work_history_created=work_history_created,
-            skills_found=extracted_data.get("skills", []),
-            specializations_found=extracted_data.get("specializations", []),
         )

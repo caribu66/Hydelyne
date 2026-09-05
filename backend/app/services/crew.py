@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,6 +23,12 @@ from app.services.consultant_knowledge import consultant_knowledge_service
 from app.services.upload import document_upload_service
 
 logger = logging.getLogger(__name__)
+
+
+class PossibleDuplicateError(ValueError):
+    def __init__(self, candidate_id: str):
+        self.candidate_id = candidate_id
+        super().__init__("A possible duplicate specialist already exists")
 
 
 class AuthService:
@@ -55,8 +61,7 @@ class AuthService:
                 if _gs().APP_ENV != "development":
                     return None
                 logger.warning(
-                    "AuthService.authenticate: no password_hash column, allowing dev login for %s",
-                    email,
+                    "AuthService.authenticate: allowing a development login without a password hash"
                 )
 
             token = create_session_token(user.id)
@@ -116,7 +121,14 @@ async def _reload_crew_with_relations(session: AsyncSession, crew_id: str) -> Cr
 class CrewService:
     """Service for crew member operations."""
 
-    async def create_crew_member(self, crew: CrewMember) -> CrewMember:
+    async def create_crew_member(
+        self,
+        crew: CrewMember,
+        *,
+        as_draft: bool = False,
+        submitted_by: str | None = None,
+        allow_duplicate: bool = False,
+    ) -> CrewMember:
         """Persist a new crew member and index them for retrieval.
 
         ``crew`` is an unpersisted model instance built by the caller (the
@@ -124,11 +136,23 @@ class CrewService:
         """
         factory = get_session_factory()
         async with factory() as session:
+            if as_draft and not allow_duplicate:
+                conditions = [func.lower(CrewMember.full_name) == crew.full_name.strip().lower()]
+                if crew.email:
+                    conditions.append(func.lower(CrewMember.email) == crew.email.strip().lower())
+                duplicate = (
+                    await session.execute(select(CrewMember.id).where(or_(*conditions)).limit(1))
+                ).scalar_one_or_none()
+                if duplicate is not None:
+                    raise PossibleDuplicateError(duplicate)
+                crew.publication_status = "draft"
+                crew.submitted_by = submitted_by
             session.add(crew)
             await session.commit()
             crew = await _reload_crew_with_relations(session, crew.id)
 
-        await consultant_knowledge_service.index_crew_member(crew)
+        if crew.publication_status == "approved":
+            await consultant_knowledge_service.index_crew_member(crew)
         return crew
 
     async def update_crew_member(self, crew_id: str, updates: dict[str, Any]) -> CrewMember:
@@ -150,11 +174,29 @@ class CrewService:
             await session.commit()
             crew = await _reload_crew_with_relations(session, crew.id)
 
-        await consultant_knowledge_service.index_crew_member(crew)
+        if crew.publication_status == "approved":
+            await consultant_knowledge_service.index_crew_member(crew)
+        else:
+            await consultant_knowledge_service.remove_from_index(crew.id)
         # The AI summary is generated from these same fields — a stale
         # cached summary after an edit would show outdated facts.
         await cache_service.delete(cache_service._make_key("summary", crew.id))
         return crew
+
+    async def set_staff_role(self, crew_id: str, *, enabled: bool) -> CrewMember:
+        """Promote or demote a non-admin account without altering admin accounts."""
+        factory = get_session_factory()
+        async with factory() as session:
+            crew = (
+                await session.execute(select(CrewMember).where(CrewMember.id == crew_id))
+            ).scalar_one_or_none()
+            if crew is None:
+                raise ValueError("User not found")
+            if crew.role == "admin":
+                raise ValueError("Administrator roles cannot be changed here")
+            crew.role = "staff" if enabled else "user"
+            await session.commit()
+            return await _reload_crew_with_relations(session, crew.id)
 
     async def delete_crew_member(self, crew_id: str, requesting_user_id: Optional[str]) -> bool:
         """Permanently delete a crew member and their managed documents.
@@ -233,6 +275,22 @@ class CrewService:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def can_access_profile(self, crew_id: str, *, actor_id: str, actor_role: str) -> bool:
+        """Drafts are visible only to their submitter and administrators."""
+        factory = get_session_factory()
+        async with factory() as session:
+            crew = (
+                await session.execute(select(CrewMember).where(CrewMember.id == crew_id))
+            ).scalar_one_or_none()
+            return bool(
+                crew
+                and (
+                    crew.publication_status == "approved"
+                    or actor_role == "admin"
+                    or crew.submitted_by == actor_id
+                )
+            )
+
     async def list_crew_members(
         self,
         availability: Optional[str] = None,
@@ -256,6 +314,7 @@ class CrewService:
                 .order_by(CrewMember.created_at.desc())
                 .limit(limit)
                 .offset(offset)
+                .where(CrewMember.publication_status == "approved")
             )
 
             if availability:

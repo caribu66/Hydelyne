@@ -3,6 +3,10 @@ import { GRAPHQL_URL } from '../config'
 
 const apiBase = GRAPHQL_URL.replace(/\/graphql\/?$/, '')
 
+export function documentDownloadUrl(documentId: string): string {
+  return `${apiBase}/api/documents/${encodeURIComponent(documentId)}/download`
+}
+
 export type BE_Classification =
   | 'cert'
   | 'cv'
@@ -67,13 +71,15 @@ export async function previewCv(file: File): Promise<CvPreview> {
 export async function uploadDocument(
   crewId: string,
   file: File,
-  classification?: string
+  classification?: string,
+  idempotencyKey?: string
 ): Promise<UploadResult> {
   const token = getAuthToken()
   const form = new FormData()
   form.append('crew_id', crewId)
   form.append('file', file)
   if (classification) form.append('classification', classification)
+  if (idempotencyKey) form.append('idempotency_key', idempotencyKey)
 
   const resp = await fetch(`${apiBase}/api/documents/upload`, {
     method: 'POST',

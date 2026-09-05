@@ -162,9 +162,13 @@ class CrewQueryService:
         self, query: str, entities: dict[str, Any], db_session: AsyncSession
     ) -> dict[str, Any]:
         """Handle search/filter queries with broad matching across crew data."""
-        stmt = select(CrewMemberModel).options(
-            selectinload(CrewMemberModel.certifications),
-            selectinload(CrewMemberModel.work_history),
+        stmt = (
+            select(CrewMemberModel)
+            .where(CrewMemberModel.publication_status == "approved")
+            .options(
+                selectinload(CrewMemberModel.certifications),
+                selectinload(CrewMemberModel.work_history),
+            )
         )
 
         filters: list[ColumnElement[bool]] = []
@@ -222,11 +226,17 @@ class CrewQueryService:
         # A credential family (such as IMCA) matches every concrete member of
         # that family: IMCA Survey QC, IMCA Geotech, IMCA Client Rep, etc.
         for keyword in entities.get("certification_keywords") or []:
-            filters.append(
-                CrewMemberModel.certifications.any(
-                    CertificationModel.cert_type.ilike(f"%{keyword}%")
+            family_conditions: list[ColumnElement[bool]] = [
+                CertificationModel.cert_type.ilike(f"%{keyword}%")
+            ]
+            if entities.get("certifications_valid"):
+                family_conditions.extend(
+                    [
+                        CertificationModel.expiry_date.is_not(None),
+                        CertificationModel.expiry_date >= date.today(),
+                    ]
                 )
-            )
+            filters.append(CrewMemberModel.certifications.any(and_(*family_conditions)))
 
         # Extract searchable terms from entities
         if entities.get("certifications"):
@@ -252,9 +262,17 @@ class CrewQueryService:
             # Separate EXISTS clauses preserve AND semantics for queries such
             # as "BOSIET and OGUK Medical".
             for cert_type in normalized_certs:
-                filters.append(
-                    CrewMemberModel.certifications.any(CertificationModel.cert_type == cert_type)
-                )
+                cert_conditions: list[ColumnElement[bool]] = [
+                    CertificationModel.cert_type == cert_type
+                ]
+                if entities.get("certifications_valid"):
+                    cert_conditions.extend(
+                        [
+                            CertificationModel.expiry_date.is_not(None),
+                            CertificationModel.expiry_date >= date.today(),
+                        ]
+                    )
+                filters.append(CrewMemberModel.certifications.any(and_(*cert_conditions)))
 
         # Skills become broad text search terms
         if entities.get("skills"):
@@ -277,11 +295,24 @@ class CrewQueryService:
             filters.append(CrewMemberModel.availability_status == "unavailable")
         elif entities.get("availability") == "on assignment":
             filters.append(CrewMemberModel.availability_status == "on_assignment")
+        availability_by = entities.get("availability_by")
+        if isinstance(availability_by, str):
+            try:
+                latest_date = date.fromisoformat(availability_by)
+            except ValueError:
+                latest_date = None
+            if latest_date is not None:
+                filters.append(
+                    or_(
+                        CrewMemberModel.availability_date.is_(None),
+                        CrewMemberModel.availability_date <= latest_date,
+                    )
+                )
 
         # Broad text search across multiple fields
         if search_terms:
-            term_filters: list[ColumnElement[bool]] = []
             for term in search_terms:
+                term_filters: list[ColumnElement[bool]] = []
                 term_filters.append(CrewMemberModel.full_name.ilike(f"%{term}%"))
                 term_filters.append(sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{term}%"))
                 term_filters.append(CrewMemberModel.internal_notes.ilike(f"%{term}%"))
@@ -316,7 +347,11 @@ class CrewQueryService:
                             term_filters.append(
                                 sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{word}%")
                             )
-            filters.append(or_(*term_filters))
+                # Each requested skill/location/project term is a requirement;
+                # the OR applies only to the fields where that term may be
+                # evidenced. This prevents a match on "offshore" alone from
+                # being presented as evidence of "offshore medic" experience.
+                filters.append(or_(*term_filters))
 
         if filters:
             stmt = stmt.where(and_(*filters))
@@ -408,6 +443,7 @@ class CrewQueryService:
 
         stmt = (
             select(CrewMemberModel)
+            .where(CrewMemberModel.publication_status == "approved")
             .options(
                 selectinload(CrewMemberModel.certifications),
                 selectinload(CrewMemberModel.documents),
@@ -518,6 +554,7 @@ class CrewQueryService:
 
         stmt = (
             select(CrewMemberModel)
+            .where(CrewMemberModel.publication_status == "approved")
             .options(selectinload(CrewMemberModel.certifications))
             .join(CertificationModel)
             .where(

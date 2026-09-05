@@ -76,6 +76,7 @@ def _crew_meilisearch_doc(crew: CrewMember) -> dict:
         "nationality": crew.nationality,
         "availability_status": crew.availability_status,
         "tags": crew.tags or [],
+        "publication_status": crew.publication_status,
     }
 
 
@@ -93,7 +94,10 @@ class ConsultantKnowledgeService:
                 selectinload(CrewMember.certifications),
                 selectinload(CrewMember.work_history),
             )
-            .where(CrewMember.id == crew_id)
+            .where(
+                CrewMember.id == crew_id,
+                CrewMember.publication_status == "approved",
+            )
         )
         crew_member = (await db_session.execute(stmt)).scalar_one_or_none()
         if crew_member is None:
@@ -187,7 +191,10 @@ class ConsultantKnowledgeService:
                     selectinload(CrewMember.work_history),
                     selectinload(CrewMember.documents),
                 )
-                .where(CrewMember.id == crew_id)
+                .where(
+                    CrewMember.id == crew_id,
+                    CrewMember.publication_status == "approved",
+                )
             )
             crew_member = (await db_session.execute(stmt)).scalar_one_or_none()
             if crew_member is None:
@@ -220,14 +227,17 @@ class ConsultantKnowledgeService:
         )
         return [hit for hit in hits if hit.get("id") != document_id][:limit]
 
-    async def index_crew_member(self, crew: CrewMember) -> None:
+    async def index_crew_member(self, crew: CrewMember) -> bool:
         """Keep Meilisearch in sync. Called from create/update mutations —
         centralized here so the next new field/entity can't forget it again
         the way createCrewMember/updateCrewMember did before this fix."""
-        await meilisearch_client.index_crew_member(_crew_meilisearch_doc(crew))
+        if crew.publication_status != "approved":
+            return await self.remove_from_index(crew.id)
+        result = await meilisearch_client.index_crew_member(_crew_meilisearch_doc(crew))
+        return result is not None
 
-    async def remove_from_index(self, crew_id: str) -> None:
-        await meilisearch_client.delete_crew_member(crew_id)
+    async def remove_from_index(self, crew_id: str) -> bool:
+        return await meilisearch_client.delete_crew_member(crew_id)
 
 
 consultant_knowledge_service = ConsultantKnowledgeService()

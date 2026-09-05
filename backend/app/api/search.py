@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.auth.decorators import get_current_user_rest, require_admin_rest
 from app.domain.fields import AVAILABILITY_STATUS_VALUES, DOCUMENT_CLASSIFICATIONS
 from app.models import CrewMember
-from app.services.meilisearch import meilisearch_client
+from app.services.audit import audit_service
+from app.services.meilisearch import APPROVED_CREW_FILTER, meilisearch_client
 
 logger = logging.getLogger(__name__)
 
@@ -56,17 +57,24 @@ async def search_crew(
     current_user: CrewMember = Depends(get_current_user_rest),
 ) -> dict[str, Any]:
     """Search crew members using Meilisearch."""
-    filters = None
+    filters = APPROVED_CREW_FILTER
     if availability:
-        filters = _quote_filter_value(
+        availability_filter = _quote_filter_value(
             "availability_status", availability, AVAILABILITY_STATUS_VALUES
         )
+        filters = f"{filters} AND {availability_filter}"
 
     results = await meilisearch_client.search_crew_members(
         query=q,
         filters=filters,
         limit=limit,
         offset=offset,
+    )
+    hits = results.get("hits")
+    await audit_service.log_profile_access(
+        actor_id=current_user.id,
+        action="keyword_search",
+        result_count=len(hits) if isinstance(hits, list) else 0,
     )
     return results
 
@@ -82,7 +90,9 @@ async def search_documents(
     current_user: CrewMember = Depends(get_current_user_rest),
 ) -> dict[str, Any]:
     """Search documents using Meilisearch."""
-    filters_parts = []
+    # Never expose processing, rejected, or failed extraction records through
+    # the document search surface. Reviewers use the CV review queue instead.
+    filters_parts = ['extraction_status = "approved"']
     if classification:
         filters_parts.append(
             _quote_filter_value("classification", classification, DOCUMENT_CLASSIFICATIONS)
@@ -124,18 +134,10 @@ async def index_crew_member(
         if not crew:
             raise HTTPException(status_code=404, detail="Crew member not found")
 
-        crew_data = {
-            "id": crew.id,
-            "full_name": crew.full_name,
-            "email": crew.email,
-            "phone": crew.phone,
-            "nationality": crew.nationality,
-            "availability_status": crew.availability_status,
-            "tags": crew.tags or [],
-        }
+        from app.services.consultant_knowledge import consultant_knowledge_service
 
-        task = await meilisearch_client.index_crew_member(crew_data)
-        return {"status": "indexed", "task": task}
+        await consultant_knowledge_service.index_crew_member(crew)
+        return {"status": "indexed" if crew.publication_status == "approved" else "excluded"}
 
 
 @router.get("/health")

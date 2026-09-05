@@ -154,14 +154,63 @@ export const QUERY_CREW = gql`
 `
 
 export const CREATE_CREW_MEMBER = gql`
-  mutation CreateCrewMember($fullName: String!, $email: String, $phone: String, $nationality: String) {
-    createCrewMember(fullName: $fullName, email: $email, phone: $phone, nationality: $nationality) {
+  mutation CreateCrewMember($fullName: String!, $email: String, $phone: String, $nationality: String, $cvSubmission: Boolean!, $confirmDistinct: Boolean!) {
+    createCrewMember(fullName: $fullName, email: $email, phone: $phone, nationality: $nationality, cvSubmission: $cvSubmission, confirmDistinct: $confirmDistinct) {
       id
       fullName
       email
       phone
       nationality
       availabilityStatus
+    }
+  }
+`
+
+export const CV_REVIEWS_QUERY = gql`
+  query CvReviews($limit: Int!, $offset: Int!) {
+    cvReviews(limit: $limit, offset: $offset) {
+      id
+      documentId
+      crewMemberId
+      status
+      proposedData
+      submittedBy
+      reviewedBy
+      reviewNote
+      createdAt
+      reviewedAt
+    }
+  }
+`
+
+export const APPROVE_CV_REVIEW = gql`
+  mutation ApproveCvReview($reviewId: String!, $approvedData: String!, $note: String) {
+    approveCvReview(reviewId: $reviewId, approvedData: $approvedData, note: $note)
+  }
+`
+
+export const REJECT_CV_REVIEW = gql`
+  mutation RejectCvReview($reviewId: String!, $note: String!) {
+    rejectCvReview(reviewId: $reviewId, note: $note)
+  }
+`
+
+export const STAFF_USERS_QUERY = gql`
+  query StaffUsers($limit: Int!, $offset: Int!) {
+    crewMembers(limit: $limit, offset: $offset) {
+      id
+      fullName
+      email
+      role
+    }
+  }
+`
+
+export const SET_STAFF_ROLE = gql`
+  mutation SetStaffRole($userId: String!, $enabled: Boolean!) {
+    setStaffRole(userId: $userId, enabled: $enabled) {
+      id
+      role
     }
   }
 `

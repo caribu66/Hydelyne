@@ -24,6 +24,12 @@ class CrewMember(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(50))
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="user", index=True)
+    # Existing rows remain approved. New CV-led submissions explicitly use
+    # draft/pending_review until an administrator confirms the extraction.
+    publication_status: Mapped[str] = mapped_column(
+        String(20), default="approved", server_default="approved", index=True
+    )
+    submitted_by: Mapped[Optional[str]] = mapped_column(String(36), index=True)
     address: Mapped[Optional[str]] = mapped_column(Text)
     emergency_contact_name: Mapped[Optional[str]] = mapped_column(String(255))
     emergency_contact_relationship: Mapped[Optional[str]] = mapped_column(String(100))
@@ -168,9 +174,50 @@ class Document(Base):
     extracted_data: Mapped[Optional[dict]] = mapped_column(JSON)
     extraction_confidence: Mapped[Optional[dict]] = mapped_column(JSON)
     uploaded_by: Mapped[Optional[str]] = mapped_column(String(255))
+    upload_key: Mapped[Optional[str]] = mapped_column(String(128), unique=True, index=True)
     uploaded_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
     version_number: Mapped[int] = mapped_column(Integer, default=1)
     previous_version_id: Mapped[Optional[str]] = mapped_column(String(36))
     access_log: Mapped[Optional[list]] = mapped_column(JSON)
 
     crew_member = relationship("CrewMember", back_populates="documents")
+
+
+class CVReview(Base):
+    """Durable review state for one deterministic CV extraction."""
+
+    __tablename__ = "cv_reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    crew_member_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("crew_members.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), default="processing", server_default="processing", index=True
+    )
+    prior_publication_status: Mapped[str] = mapped_column(
+        String(20), default="draft", server_default="draft"
+    )
+    proposed_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    approved_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    submitted_by: Mapped[str] = mapped_column(String(36), index=True)
+    reviewed_by: Mapped[Optional[str]] = mapped_column(String(36), index=True)
+    review_note: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column()
+
+
+class ProfileAccessEvent(Base):
+    """Privacy-safe audit metadata for specialist-profile reads."""
+
+    __tablename__ = "profile_access_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    actor_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    crew_member_id: Mapped[Optional[str]] = mapped_column(String(36), index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    details: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now(), index=True)

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 CREW_MEMBERS_INDEX = "crew_members"
 DOCUMENTS_INDEX = "documents"
+APPROVED_CREW_FILTER = 'publication_status = "approved"'
 
 
 class MeilisearchClient:
@@ -83,6 +84,7 @@ class MeilisearchClient:
                     "gender",
                     "languages",
                     "tags",
+                    "publication_status",
                 ]
             )
             crew_index.update_sortable_attributes(
@@ -170,8 +172,9 @@ class MeilisearchClient:
                 "limit": limit,
                 "offset": offset,
             }
-            if filters:
-                search_params["filter"] = filters
+            search_params["filter"] = (
+                f"{APPROVED_CREW_FILTER} AND {filters}" if filters else APPROVED_CREW_FILTER
+            )
             return index.search(query, search_params)
 
         try:

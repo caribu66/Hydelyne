@@ -26,17 +26,14 @@ class CVProcessingService:
         crew_member_id: str,
         extracted_data: dict[str, Any],
         document_id: str | None = None,
+        *,
+        replace_existing: bool = False,
     ) -> dict[str, Any]:
         """Process extracted CV data and update crew member profile.
 
         Returns summary of what was created/updated.
         """
         factory = get_session_factory()
-        result_summary = {
-            "certifications_created": 0,
-            "work_history_created": 0,
-            "fields_updated": [],
-        }
 
         async with factory() as session:
             crew = await session.execute(
@@ -53,15 +50,13 @@ class CVProcessingService:
                 logger.error(f"Crew member {crew_member_id} not found")
                 return {"error": "Crew member not found"}
 
-            self._update_crew_fields(crew_member, extracted_data, result_summary)
-            await self._create_certifications(
-                session, crew_member, extracted_data, document_id, result_summary
+            result_summary = await self.apply_reviewed_extraction(
+                session=session,
+                crew_member=crew_member,
+                extracted_data=extracted_data,
+                document_id=document_id,
+                replace_existing=replace_existing,
             )
-            await self._create_work_history(
-                session, crew_member, extracted_data, document_id, result_summary
-            )
-
-            crew_member.profile_completeness_score = self._calculate_completeness(crew_member)
             await session.commit()
 
         from app.services.cache import cache_service
@@ -71,6 +66,65 @@ class CVProcessingService:
         await cache_service.delete(cache_service._make_key("summary", crew_member_id))
 
         return result_summary
+
+    async def apply_reviewed_extraction(
+        self,
+        *,
+        session: AsyncSession,
+        crew_member: CrewMember,
+        extracted_data: dict[str, Any],
+        document_id: str | None,
+        replace_existing: bool,
+    ) -> dict[str, Any]:
+        """Apply reviewed fields without committing the caller's transaction."""
+        result_summary: dict[str, Any] = {
+            "certifications_created": 0,
+            "work_history_created": 0,
+            "fields_updated": [],
+        }
+        if replace_existing:
+            self._clear_profile(crew_member)
+        self._update_crew_fields(crew_member, extracted_data, result_summary)
+        await self._create_certifications(
+            session, crew_member, extracted_data, document_id, result_summary
+        )
+        await self._create_work_history(
+            session, crew_member, extracted_data, document_id, result_summary
+        )
+        crew_member.profile_completeness_score = self._calculate_completeness(crew_member)
+        await session.flush()
+        return result_summary
+
+    @staticmethod
+    def _clear_profile(crew_member: CrewMember) -> None:
+        """Clear canonical CV fields inside the import transaction.
+
+        This is used only after explicit administrator approval. Keeping the
+        clear and replacement in one transaction means an import error rolls
+        the complete previous profile back instead of exposing partial data.
+        """
+        for field in (
+            "email",
+            "phone",
+            "nationality",
+            "country_of_residence",
+            "date_of_birth",
+            "gender",
+            "languages",
+            "flying_point",
+            "address",
+            "education",
+            "professional_summary",
+            "geographical_experience",
+            "systems_experience",
+            "training_qualifications",
+            "tags",
+            "experience_months",
+        ):
+            setattr(crew_member, field, None)
+        crew_member.full_name = "Pending CV import"
+        crew_member.certifications.clear()
+        crew_member.work_history.clear()
 
     def _update_crew_fields(
         self,

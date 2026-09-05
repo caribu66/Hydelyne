@@ -31,7 +31,7 @@ async function authenticate(page: Page, theme: 'dark' | 'light' = 'dark') {
   }, theme);
 }
 
-async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: typeof crewMember } = {}) {
+async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: typeof crewMember; role?: 'admin' | 'staff' | 'user' } = {}) {
   await page.route('**/health/services', async (route) => {
     await route.fulfill({
       status: 200,
@@ -47,7 +47,7 @@ async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: 
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ data: { me: { id: 'user-1', fullName: 'Test Recruiter', email: 'recruiter@example.com', role: 'admin' } } }),
+        body: JSON.stringify({ data: { me: { id: 'user-1', fullName: 'Test Recruiter', email: 'recruiter@example.com', role: options.role ?? 'admin' } } }),
       });
       return;
     }
@@ -65,6 +65,39 @@ async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: 
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ data: { crewMembers: [options.member ?? crewMember] } }),
+      });
+      return;
+    }
+
+    if (query.includes('query CvReviews')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            cvReviews: [{
+              id: 'review-1',
+              documentId: 'document-1',
+              crewMemberId: 'crew-draft-1',
+              status: 'awaiting_review',
+              proposedData: JSON.stringify({ full_name: 'Morgan Reed', certifications: ['BOSIET'] }),
+              submittedBy: 'staff-1',
+              reviewedBy: null,
+              reviewNote: null,
+              createdAt: '2026-09-05T10:00:00Z',
+              reviewedAt: null,
+            }],
+          },
+        }),
+      });
+      return;
+    }
+
+    if (query.includes('query StaffUsers')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { crewMembers: [{ id: 'user-2', fullName: 'Jamie Cole', email: 'jamie@example.com', role: 'user' }] } }),
       });
       return;
     }
@@ -213,6 +246,47 @@ test.describe('authenticated specialist workspace', () => {
     expect(dimensions.clientHeight).toBeLessThanOrEqual(dimensions.scrollHeight);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+  });
+
+  test('opens an accessible admin CV review with source evidence', async ({ page }) => {
+    await authenticate(page);
+    await mockCrewApi(page);
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Open workspace menu' }).click();
+    await page.getByRole('button', { name: 'CV submissions' }).click();
+    const dialog = page.getByRole('dialog', { name: 'CV submissions' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'Open original CV' })).toBeVisible();
+    await expect(dialog.getByLabel('Extracted CV information')).toHaveValue(/Morgan Reed/);
+    await expect(dialog.getByRole('button', { name: 'Approve and publish' })).toBeVisible();
+    const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+    expect(accessibility.violations).toEqual([]);
+  });
+
+  test('lets an admin choose which existing accounts become staff', async ({ page }) => {
+    await authenticate(page);
+    await mockCrewApi(page);
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Open workspace menu' }).click();
+    await page.getByRole('button', { name: 'Staff access' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Staff access' });
+    await expect(dialog.getByText('Jamie Cole')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Make staff' })).toBeVisible();
+    const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+    expect(accessibility.violations).toEqual([]);
+  });
+
+  test('does not grant existing normal users staff submission controls', async ({ page }) => {
+    await authenticate(page);
+    await mockCrewApi(page, { role: 'user' });
+    await page.goto('/');
+
+    await expect(page.getByRole('button', { name: 'Add contractor' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Open workspace menu' }).click();
+    await expect(page.getByRole('button', { name: 'CV submissions' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Staff access' })).toHaveCount(0);
   });
 
   test('provides deterministic filters with removable active criteria', async ({ page }) => {

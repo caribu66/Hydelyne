@@ -6,6 +6,7 @@ from typing import Optional
 
 from app.database import get_session_factory
 from app.models import Document as DocumentModel
+from app.models import ProfileAccessEvent
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,27 @@ class AuditService:
 
             await session.commit()
             logger.info(f"Logged {action} on document {document_id} by user {user_id}")
+
+    async def log_profile_access(
+        self,
+        *,
+        actor_id: str,
+        action: str,
+        crew_member_id: str | None = None,
+        result_count: int | None = None,
+    ) -> None:
+        """Record a profile read without storing query text or profile data."""
+        async with get_session_factory()() as session:
+            details = {"result_count": result_count} if result_count is not None else None
+            session.add(
+                ProfileAccessEvent(
+                    actor_id=actor_id,
+                    crew_member_id=crew_member_id,
+                    action=action,
+                    details=details,
+                )
+            )
+            await session.commit()
 
     async def log_extraction(
         self,

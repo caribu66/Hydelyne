@@ -1,11 +1,14 @@
 """Test document upload API."""
 
 import io
-from unittest.mock import MagicMock, patch
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import select
 
 from app.config import get_settings
+from app.models import CrewMember, Document
 from app.services.upload import document_upload_service
 
 
@@ -123,15 +126,19 @@ async def test_preview_cv_returns_empty_fields_for_non_pdf(client):
 
 
 @pytest.mark.asyncio
-async def test_upload_document(client):
+async def test_upload_document(client, db_session):
     """Test file upload endpoint."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="Upload Test Contractor"))
+    await db_session.commit()
+
     # PDF magic bytes + minimal content
     test_file = io.BytesIO(
         b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\nxref\n0 1\n0000000000 65535 f \ntrailer\n<< /Root 1 0 R >>\n%%EOF"
     )
     response = await client.post(
         "/api/documents/upload",
-        data={"crew_id": "test-crew-id"},
+        data={"crew_id": crew_id},
         files={"file": ("test.pdf", test_file, "application/pdf")},
     )
     assert response.status_code == 200
@@ -143,12 +150,16 @@ async def test_upload_document(client):
 
 
 @pytest.mark.asyncio
-async def test_cv_upload_persists_binary_and_queues_extraction(client):
+async def test_cv_upload_persists_binary_and_queues_extraction(client, db_session):
     """The CV flow must send bytes before it can be queued for extraction."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="CV Upload Test Contractor"))
+    await db_session.commit()
+
     cv_bytes = b"%PDF-1.4\nCV content that must reach server storage\n%%EOF"
     response = await client.post(
         "/api/documents/upload",
-        data={"crew_id": "test-crew-id", "classification": "cv"},
+        data={"crew_id": crew_id, "classification": "cv"},
         files={"file": ("candidate-cv.pdf", io.BytesIO(cv_bytes), "application/pdf")},
     )
 
@@ -169,6 +180,153 @@ async def test_cv_upload_persists_binary_and_queues_extraction(client):
     assert deleted.status_code == 204
     missing = await client.get(f"/api/documents/{uploaded['id']}/status")
     assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cv_upload_records_failed_status_when_worker_dispatch_fails(client, db_session):
+    """A broker outage must be visible and must not create another draft."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(
+        CrewMember(
+            id=crew_id,
+            full_name="Failed Queue Contractor",
+            publication_status="draft",
+        )
+    )
+    await db_session.commit()
+
+    with patch(
+        "app.api.documents.process_document_extraction.delay",
+        side_effect=RuntimeError("broker unavailable"),
+    ):
+        response = await client.post(
+            "/api/documents/upload",
+            data={"crew_id": crew_id, "classification": "cv"},
+            files={
+                "file": (
+                    "failed-queue-cv.pdf",
+                    io.BytesIO(b"%PDF-1.4\nqueue failure test\n%%EOF"),
+                    "application/pdf",
+                )
+            },
+        )
+
+    assert response.status_code == 200
+    document_id = response.json()["id"]
+    assert response.json()["status"] == "failed"
+    status = await client.get(f"/api/documents/{document_id}/status")
+    assert status.json()["extraction_status"] == "failed"
+
+    deleted = await client.delete(f"/api/documents/{document_id}")
+    assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_cv_upload_retry_reuses_the_original_document(client, db_session):
+    """A lost upload response must not create a second CV or review record."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(
+        CrewMember(id=crew_id, full_name="Retry Safe Contractor", publication_status="draft")
+    )
+    await db_session.commit()
+    cv_bytes = b"%PDF-1.4\nretry-safe\n%%EOF"
+    form = {"crew_id": crew_id, "classification": "cv", "idempotency_key": "retry-key-1"}
+
+    first = await client.post(
+        "/api/documents/upload",
+        data=form,
+        files={"file": ("retry.pdf", io.BytesIO(cv_bytes), "application/pdf")},
+    )
+    second = await client.post(
+        "/api/documents/upload",
+        data=form,
+        files={"file": ("retry.pdf", io.BytesIO(cv_bytes), "application/pdf")},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    documents = (
+        (await db_session.execute(select(Document).where(Document.crew_member_id == crew_id)))
+        .scalars()
+        .all()
+    )
+    assert len(documents) == 1
+    assert (await client.delete(f"/api/documents/{first.json()['id']}")).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_cv_upload_idempotency_key_cannot_be_reused_for_another_contractor(
+    client, db_session
+):
+    first_id = str(uuid.uuid4())
+    second_id = str(uuid.uuid4())
+    db_session.add_all(
+        [
+            CrewMember(id=first_id, full_name="First Retry Contractor"),
+            CrewMember(id=second_id, full_name="Second Retry Contractor"),
+        ]
+    )
+    await db_session.commit()
+    form = {"crew_id": first_id, "classification": "cv", "idempotency_key": "shared-key"}
+    file_bytes = b"%PDF-1.4\nshared-key\n%%EOF"
+    first = await client.post(
+        "/api/documents/upload",
+        data=form,
+        files={"file": ("first.pdf", io.BytesIO(file_bytes), "application/pdf")},
+    )
+    conflict = await client.post(
+        "/api/documents/upload",
+        data={**form, "crew_id": second_id},
+        files={"file": ("second.pdf", io.BytesIO(file_bytes), "application/pdf")},
+    )
+
+    assert first.status_code == 200
+    assert conflict.status_code == 409
+    assert (await client.delete(f"/api/documents/{first.json()['id']}")).status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_cv_upload_rejects_malformed_idempotency_key(client, db_session):
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="Key Validation Contractor"))
+    await db_session.commit()
+    response = await client.post(
+        "/api/documents/upload",
+        data={"crew_id": crew_id, "classification": "cv", "idempotency_key": "bad key"},
+        files={"file": ("invalid-key.pdf", io.BytesIO(b"%PDF-1.4\n%%EOF"), "application/pdf")},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_staff_cannot_upload_to_another_staff_members_draft(client, db_session, monkeypatch):
+    staff = CrewMember(id=str(uuid.uuid4()), full_name="Upload Staff", role="staff")
+    other_draft = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Other Staff Draft",
+        publication_status="draft",
+        submitted_by=str(uuid.uuid4()),
+    )
+    db_session.add(other_draft)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token", AsyncMock(return_value=staff)
+    )
+
+    response = await client.post(
+        "/api/documents/upload",
+        data={"crew_id": other_draft.id, "classification": "cv"},
+        files={
+            "file": (
+                "private-draft.pdf",
+                io.BytesIO(b"%PDF-1.4\nprivate draft\n%%EOF"),
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

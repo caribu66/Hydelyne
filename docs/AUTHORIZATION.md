@@ -1,8 +1,12 @@
 # Authorization Matrix
 
 This document records the role/operation authorization policy enforced by the
-backend. Roles are: `user` (any authenticated), and `admin`. Machine/API-key
+backend. Roles are: `user` (read-only authenticated), `staff` (may submit
+specialists/CVs), and `admin` (may review and publish). Existing `user`
+accounts are never promoted automatically. Machine/API-key
 access goes through `X-API-Key` for agent uploads (`/api/documents/*`) only.
+Administrators promote or demote existing accounts from the **Staff access**
+screen; it calls the admin-only `setStaffRole` operation.
 
 ## GraphQL Mutations
 
@@ -10,7 +14,9 @@ access goes through `X-API-Key` for agent uploads (`/api/documents/*`) only.
 |---|---|---|---|
 | `login` | none | none | Public |
 | `logout` | `@require_auth` | any | User logs themselves out |
-| `createCrewMember` | `@require_admin` | admin | Org-wide personnel record |
+| `createCrewMember` | `@require_staff` | staff/admin | Staff must use the CV-led draft path; manual admin creation remains compatible |
+| `approveCvReview` / `rejectCvReview` | `@require_admin` | admin | Publishes or rejects staged CV data |
+| `setStaffRole` | `@require_admin` | admin | Explicitly promotes/demotes non-admin accounts |
 | `updateCrewMember` | `@require_admin` | admin | Admin-only until ownership layer ships |
 | `deleteCrewMember` | `@require_admin` | admin | |
 | `uploadDocument` | `@require_admin` | admin | Documents are org-sensitive |
@@ -27,8 +33,10 @@ access goes through `X-API-Key` for agent uploads (`/api/documents/*`) only.
 
 ## GraphQL Queries
 
-All queries remain `@require_auth` (any authenticated user). Read access is
-not segregated by role in this iteration; tightening it is future work.
+Approved profiles remain readable to authenticated users. Draft profiles and
+their documents are visible only to the submitting staff member and admins.
+`cvReviews` requires staff and returns all reviews to admins or only the
+caller's submissions to staff.
 
 This is enforced automatically, not just documented here:
 `test_all_queries_require_auth_decorator` in `backend/tests/test_auth.py`
@@ -46,12 +54,12 @@ auth-required by default.
 | `GET /api/search/documents` | `get_current_user_rest` | any authenticated | Read |
 | `POST /api/search/index/crew/{crew_id}` | `require_admin_rest` | admin | State-changing (Meilisearch write) |
 | `GET /api/search/health` | none | public | Meilisearch liveness only, no data |
-| `POST /api/documents/preview-cv` | `require_admin_rest` | admin | |
-| `POST /api/documents/upload` | `require_admin_rest` | admin | |
+| `POST /api/documents/preview-cv` | `require_staff_rest` | staff/admin | Deterministic CV preview only |
+| `POST /api/documents/upload` | `require_staff_rest` | staff/admin | Staff may upload only to their own draft |
 | `GET /api/documents/{document_id}/download` | `get_current_user_rest` | any authenticated | Read; mirrors GraphQL `document` query policy |
 | `GET /api/documents/{document_id}/status` | `get_current_user_rest` | any authenticated | Read |
 | `DELETE /api/documents/{document_id}` | `require_admin_rest` | admin | |
-| `POST /api/documents/agent/upload` | `require_api_key` | valid `X-API-Key` | Machine/agent access |
+| `POST /api/documents/agent/upload` | `require_api_key` | valid `X-API-Key` | Machine/agent access; CV classification is rejected so review cannot be bypassed |
 | `GET`/`POST /api/dropbox/webhook` | webhook signature | signed payload | Provider-authenticated, not user-authenticated |
 | `POST /api/dropbox/download/{document_id}` | `get_current_user_rest` | any authenticated | Read |
 | `GET /health/` | none | public | Liveness only; minimal detail |
@@ -64,11 +72,9 @@ All mutations and other state-changing operations (document upload/delete,
 search-index writes) touch organization-wide state (personnel, documents,
 certifications, projects, the search index). They require the `admin` role.
 
-Reads are intentionally open to any authenticated user rather than scoped by
-resource ownership: the product's purpose is letting agents browse and search
-across all specialists, so per-record read restriction would work against the
-core use case. This is a deliberate scope boundary, not an oversight — if that
-changes, update this table and the GraphQL/REST dependencies together.
+Confirmed profiles remain open to authenticated users because cross-specialist
+search is the product's core use case. Unpublished drafts are ownership-scoped
+so a submission cannot leak before review.
 
 The role check happens in `@require_admin` (`app/auth/decorators.py`) for
 GraphQL and `require_admin_rest` for REST. The GraphQL response uses

@@ -1,7 +1,7 @@
 import { FC, useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, UserPlus, Loader2, Upload, FileText, CheckCircle } from 'lucide-react';
-import { useMutation } from '@apollo/client';
+import { ApolloError, useMutation } from '@apollo/client';
 import { CREATE_CREW_MEMBER } from '../lib/queries';
 import { getDocumentStatus, previewCv, uploadDocument } from '../lib/documentsApi';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
@@ -10,6 +10,7 @@ interface AddCrewMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  isAdmin: boolean;
 }
 
 interface UploadedCv {
@@ -17,16 +18,20 @@ interface UploadedCv {
   status: string;
 }
 
-export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClose, onSuccess, isAdmin }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [nationality, setNationality] = useState('');
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [uploadedCv, setUploadedCv] = useState<UploadedCv | null>(null);
+  const [createdCrewId, setCreatedCrewId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [confirmDistinct, setConfirmDistinct] = useState(false);
+  const [duplicateCandidateId, setDuplicateCandidateId] = useState<string | null>(null);
   const [step, setStep] = useState<'form' | 'creating' | 'extracting' | 'done'>('form');
+  const uploadKeyRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -37,9 +42,13 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
     setNationality('');
     setCvFile(null);
     setUploadedCv(null);
+    setCreatedCrewId(null);
     setUploadError(null);
     setIsPreviewing(false);
+    setConfirmDistinct(false);
+    setDuplicateCandidateId(null);
     setStep('form');
+    uploadKeyRef.current = null;
   };
 
   const handleClose = () => {
@@ -56,6 +65,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
     if (file) {
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
         setCvFile(file);
+        uploadKeyRef.current = null;
         setUploadError(null);
         setIsPreviewing(true);
         try {
@@ -78,36 +88,49 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() && !cvFile) return;
+    if (!cvFile) return;
 
     setStep('creating');
+    setUploadError(null);
 
     try {
-      const { data } = await createCrewMember({
-        variables: {
-          // A CV-only import is completed by the background extractor.  The
-          // backend replaces this marker with the extracted name, but never
-          // overwrites a name typed by the operator.
-          fullName: fullName.trim() || 'Pending CV import',
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          nationality: nationality.trim() || undefined,
-        },
-      });
-
-      const crewId = data?.createCrewMember?.id;
+      let crewId = createdCrewId;
+      if (!crewId) {
+        const { data } = await createCrewMember({
+          variables: {
+            fullName: fullName.trim() || 'Pending CV import',
+            email: email.trim() || undefined,
+            phone: phone.trim() || undefined,
+            nationality: nationality.trim() || undefined,
+            cvSubmission: true,
+            confirmDistinct,
+          },
+        });
+        crewId = data?.createCrewMember?.id ?? null;
+        setCreatedCrewId(crewId);
+        setDuplicateCandidateId(null);
+      }
 
       if (cvFile && crewId) {
         setStep('extracting');
+        let result: Awaited<ReturnType<typeof uploadDocument>>;
         try {
           // Multipart upload transfers the selected CV bytes; the legacy
           // GraphQL mutation sent metadata only and could never extract it.
-          const result = await uploadDocument(crewId, cvFile, 'cv');
+          uploadKeyRef.current ??= crypto.randomUUID();
+          result = await uploadDocument(crewId, cvFile, 'cv', uploadKeyRef.current);
           setUploadedCv({ documentId: result.id, status: result.status });
+        } catch (extractError) {
+          // Preserve the draft ID so retrying uploads to the same contractor
+          // instead of creating an accidental duplicate.
+          setUploadError(extractError instanceof Error ? extractError.message : 'CV upload failed');
+          setStep('form');
+          return;
+        }
 
-          // The upload endpoint deliberately returns immediately, while the
-          // worker extracts CV data. Wait for its terminal state so the next
-          // view reflects the populated profile rather than just "queued".
+        try {
+          // Polling is separate from upload: a temporary status-read failure
+          // must never cause the CV bytes to be uploaded a second time.
           let status = result.status;
           for (let attempt = 0; attempt < 30 && ['pending', 'processing'].includes(status); attempt += 1) {
             await new Promise((resolve) => window.setTimeout(resolve, 2_000));
@@ -115,17 +138,24 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             status = latest.extraction_status;
             setUploadedCv({ documentId: result.id, status });
           }
-        } catch (extractError) {
-          // The crew record exists even if its optional CV upload fails.
-          // Do not claim that extraction completed.
-          setUploadError(extractError instanceof Error ? extractError.message : 'CV upload failed');
+        } catch (statusError) {
+          setUploadError(statusError instanceof Error ? statusError.message : 'Could not refresh CV status');
         }
       }
 
       setStep('done');
       onSuccess?.();
     } catch (error) {
-      console.error('Failed to create contractor:', error);
+      const message = error instanceof Error ? error.message : 'Could not create contractor';
+      if (error instanceof ApolloError) {
+        const candidateId = error.graphQLErrors
+          .map((graphQLError) => graphQLError.extensions?.candidateId)
+          .find((value): value is string => typeof value === 'string');
+        setDuplicateCandidateId(candidateId ?? null);
+      }
+      setUploadError(message.includes('possible duplicate')
+        ? `${message}. An administrator must check the existing profile before this can continue.`
+        : message);
       setStep('form');
     }
   };
@@ -176,9 +206,9 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             <div className="flex items-center gap-3 p-4 rounded-[10px] bg-positive-soft/30 border border-positive-border/60">
               <CheckCircle className="w-6 h-6 text-positive shrink-0" />
               <div>
-                <p className="font-medium text-positive">Contractor added successfully!</p>
+                <p className="font-medium text-positive">CV submitted for review</p>
                 <p className="text-sm text-positive/80">
-                  {uploadedCv ? 'CV uploaded and profile extraction finished.' : 'No CV was uploaded.'}
+                  An administrator must approve the CV information before this contractor appears in search.
                 </p>
               </div>
             </div>
@@ -193,7 +223,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
 
             {uploadError && (
               <p className="rounded-[10px] border border-warning-border/60 bg-warning-soft/30 p-3 text-sm text-warning">
-                The contractor was created, but the CV was not uploaded: {uploadError}
+                The CV needs attention: {uploadError}
               </p>
             )}
 
@@ -207,6 +237,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {createdCrewId && <p className="rounded-lg border border-warning-border bg-warning-soft/30 p-3 text-sm text-warning">The draft is saved. Retry the CV upload below; a second contractor will not be created.</p>}
             <div>
               <label htmlFor="fullName" className="block text-sm font-medium text-secondary mb-1.5">
                 Full name {!cvFile && <span className="text-danger">*</span>}
@@ -218,10 +249,17 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder={cvFile ? 'Optional — extracted from CV if left blank' : 'e.g. John Smith'}
                 required={!cvFile}
-                disabled={step !== 'form'}
+                disabled={step !== 'form' || Boolean(createdCrewId)}
                 className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
+
+            {isAdmin && duplicateCandidateId && (
+              <label className="flex items-start gap-3 rounded-[10px] border border-border-subtle bg-surface-raised/40 p-3 text-sm text-secondary">
+                <input type="checkbox" checked={confirmDistinct} onChange={(event) => setConfirmDistinct(event.target.checked)} className="mt-0.5 h-4 w-4 accent-current" />
+                <span><strong className="block font-semibold text-primary">This is a different specialist</strong> Use only after checking a possible duplicate result.</span>
+              </label>
+            )}
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-secondary mb-1.5">
@@ -233,7 +271,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. john@example.com"
-                disabled={step !== 'form'}
+                disabled={step !== 'form' || Boolean(createdCrewId)}
                 className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
@@ -248,7 +286,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="e.g. +44 123 456789"
-                disabled={step !== 'form'}
+                disabled={step !== 'form' || Boolean(createdCrewId)}
                 className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
@@ -263,14 +301,14 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 value={nationality}
                 onChange={(e) => setNationality(e.target.value)}
                 placeholder="e.g. British"
-                disabled={step !== 'form'}
+                disabled={step !== 'form' || Boolean(createdCrewId)}
                 className="w-full px-3 py-2.5 rounded-[10px] bg-surface-raised border border-border-strong text-primary placeholder:text-muted focus:outline-none focus:border-border-strong focus:ring-1 focus:ring-focus/20 disabled:opacity-50"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-secondary mb-1.5">
-                CV (PDF) - Optional
+                CV (PDF) <span className="text-danger">*</span>
               </label>
               <input
                 ref={fileInputRef}
@@ -292,6 +330,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                       type="button"
                       onClick={() => {
                         setCvFile(null);
+                        uploadKeyRef.current = null;
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
                       className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-secondary hover:bg-surface-selected hover:text-primary cursor-pointer"
@@ -319,7 +358,12 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
                 </div>
               )}
               {uploadError && step === 'form' && (
-                <p className="mt-2 text-sm text-warning">{uploadError}</p>
+                <div className="mt-2 space-y-2 rounded-lg border border-warning-border bg-warning-soft/30 p-3 text-sm text-warning">
+                  <p>{uploadError}</p>
+                  {isAdmin && duplicateCandidateId && (
+                    <button type="button" onClick={() => { setCreatedCrewId(duplicateCandidateId); setDuplicateCandidateId(null); setUploadError(null); }} className="min-h-11 rounded-lg border border-warning-border bg-surface px-3 font-semibold text-primary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus">Use the existing contractor</button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -348,10 +392,12 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
               </button>
               <button
                 type="submit"
-                disabled={step !== 'form' || isPreviewing || (!fullName.trim() && !cvFile)}
+                disabled={step !== 'form' || isPreviewing || !cvFile}
                 className="min-h-11 flex-1 px-4 py-2.5 rounded-[10px] bg-action hover:bg-action-hover disabled:bg-surface-selected disabled:text-muted text-on-action transition-colors cursor-pointer font-medium flex items-center justify-center gap-2"
               >
-                {step === 'form' ? 'Add contractor' : <Loader2 className="w-4 h-4 animate-spin" />}
+                {step === 'form'
+                  ? createdCrewId ? 'Retry CV upload' : 'Add contractor'
+                  : <Loader2 className="w-4 h-4 animate-spin" />}
               </button>
             </div>
           </form>

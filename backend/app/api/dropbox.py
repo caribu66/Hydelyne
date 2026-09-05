@@ -67,7 +67,7 @@ async def dropbox_webhook_handler(
         body = _json.loads(raw_body.decode() or "{}")
     except _json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
-    logger.info(f"Dropbox webhook received: {body}")
+    logger.info("Dropbox webhook received")
 
     list_folder = body.get("list_folder", {})
     accounts = list_folder.get("accounts", [])
@@ -247,7 +247,7 @@ async def process_dropbox_file(file_entry: dict) -> None:
         await session.refresh(doc)
 
         process_dropbox_document.delay(doc.id)
-        logger.info(f"New Dropbox file queued: {file_path}")
+        logger.info("New managed Dropbox document queued")
 
 
 async def save_dropbox_cursor(account_id: str, cursor: Optional[str]) -> None:

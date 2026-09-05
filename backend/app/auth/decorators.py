@@ -108,6 +108,31 @@ def require_admin(func: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
+def require_staff(func: F) -> F:
+    """Require a staff or administrator account."""
+
+    @wraps(func)
+    async def wrapper(self: object, info: Info, *args: object, **kwargs: object) -> object:
+        request = info.context.get("request")
+        if not request:
+            from graphql import GraphQLError
+
+            raise GraphQLError("No request context", extensions={"code": "UNAUTHENTICATED"})
+        user = await auth_service.get_user_from_token(_extract_token(request) or "")
+        if not user:
+            from graphql import GraphQLError
+
+            raise GraphQLError("Authentication required", extensions={"code": "UNAUTHENTICATED"})
+        if (getattr(user, "role", "user") or "user") not in {"admin", "staff"}:
+            from graphql import GraphQLError
+
+            raise GraphQLError("Staff access required", extensions={"code": "FORBIDDEN"})
+        info.context["current_user"] = user
+        return await func(self, info, *args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]
+
+
 # ---- REST (FastAPI) auth dependencies ----
 
 
@@ -132,6 +157,16 @@ async def require_admin_rest(request: Request) -> CrewMember:
     role = getattr(user, "role", "user") or "user"
     if role != "admin":
         raise _HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+async def require_staff_rest(request: Request) -> CrewMember:
+    """Require a staff or administrator account on a REST endpoint."""
+    from fastapi import HTTPException as _HTTPException
+
+    user = await get_current_user_rest(request)
+    if (getattr(user, "role", "user") or "user") not in {"admin", "staff"}:
+        raise _HTTPException(status_code=403, detail="Staff access required")
     return user
 
 

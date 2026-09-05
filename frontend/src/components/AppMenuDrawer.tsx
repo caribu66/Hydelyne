@@ -11,6 +11,8 @@ import {
   Sun,
   Table,
   UserPlus,
+  ClipboardCheck,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
@@ -23,6 +25,10 @@ interface AppMenuDrawerProps {
   onToggleTheme: () => void;
   onOpenShortcuts: () => void;
   onOpenAddSpecialist: () => void;
+  onOpenCvReviews: () => void;
+  canSubmitCv: boolean;
+  isAdmin: boolean;
+  onOpenStaffAccess: () => void;
   onOpenCompare: () => void;
   compareCount: number;
   isSearchActive: boolean;
@@ -43,6 +49,10 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
   onToggleTheme,
   onOpenShortcuts,
   onOpenAddSpecialist,
+  onOpenCvReviews,
+  canSubmitCv,
+  isAdmin,
+  onOpenStaffAccess,
   onOpenCompare,
   compareCount,
   isSearchActive,
@@ -109,10 +119,22 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
               <div>
                 <p className="mb-2 text-xs font-mono uppercase tracking-[0.18em] text-muted">Workspace actions</p>
                 <div className="space-y-1">
-                  {isAuthenticated && (
+                  {isAuthenticated && canSubmitCv && (
                     <button type="button" onClick={() => closeAfter(onOpenAddSpecialist)} className="menu-drawer-action menu-drawer-action-primary">
                       <UserPlus className="h-4 w-4" aria-hidden="true" />
                       <span>Add contractor</span>
+                    </button>
+                  )}
+                  {isAuthenticated && isAdmin && (
+                    <button type="button" onClick={() => closeAfter(onOpenStaffAccess)} className="menu-drawer-action">
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      <span>Staff access</span>
+                    </button>
+                  )}
+                  {isAuthenticated && canSubmitCv && (
+                    <button type="button" onClick={() => closeAfter(onOpenCvReviews)} className="menu-drawer-action">
+                      <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                      <span>CV submissions</span>
                     </button>
                   )}
                   {compareCount > 0 && isAuthenticated && (

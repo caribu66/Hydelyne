@@ -1,6 +1,6 @@
 """Regression tests for resilient natural-language crew search."""
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -41,6 +41,25 @@ def test_experience_query_extracts_a_minimum_years_requirement():
 
     assert result["entities"]["nationality"] == "Spanish"
     assert result["entities"]["min_experience_years"] == 3.0
+
+
+def test_common_natural_search_phrases_have_offline_rules():
+    north_sea = apply_deterministic_query_rules(
+        "Who has worked in the North Sea?", {"intent": "search", "entities": {}}
+    )
+    next_month = apply_deterministic_query_rules(
+        "Show surveyors available next month.", {"intent": "search", "entities": {}}
+    )
+    medic = apply_deterministic_query_rules(
+        "Find offshore medics with valid BOSIET.", {"intent": "search", "entities": {}}
+    )
+
+    assert north_sea["entities"]["location"] == "North Sea"
+    assert next_month["entities"]["availability"] == "available"
+    assert date.fromisoformat(next_month["entities"]["availability_by"]) > date.today()
+    assert "medic" in medic["entities"]["skills"]
+    assert medic["entities"]["certifications"] == ["BOSIET"]
+    assert medic["entities"]["certifications_valid"] is True
 
 
 def test_polish_pam_mmo_query_keeps_nationality_and_skill_constraints():
@@ -145,3 +164,74 @@ async def test_candidate_search_matrix(db_session):
     for query, entities, expected_id in searches:
         result = await service._handle_search(query, entities, db_session)
         assert expected_id in {candidate["id"] for candidate in result["results"]}, query
+
+
+@pytest.mark.asyncio
+async def test_valid_certificate_and_availability_date_are_enforced(db_session):
+    eligible = CrewMember(
+        full_name="Eligible Medic",
+        availability_status="available",
+        availability_date=date.today() + timedelta(days=10),
+        tags=["offshore medic"],
+    )
+    expired = CrewMember(
+        full_name="Expired Medic",
+        availability_status="available",
+        availability_date=date.today() + timedelta(days=10),
+        tags=["offshore medic"],
+    )
+    db_session.add_all([eligible, expired])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Certification(
+                crew_member_id=eligible.id,
+                cert_type="BOSIET",
+                expiry_date=date.today() + timedelta(days=120),
+            ),
+            Certification(
+                crew_member_id=expired.id,
+                cert_type="BOSIET",
+                expiry_date=date.today() - timedelta(days=1),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    service = CrewQueryService()
+    result = await service._handle_search(
+        "Find offshore medics with valid BOSIET",
+        apply_deterministic_query_rules(
+            "Find offshore medics with valid BOSIET", {"intent": "search", "entities": {}}
+        )["entities"],
+        db_session,
+    )
+
+    assert [candidate["id"] for candidate in result["results"]] == [eligible.id]
+
+
+@pytest.mark.asyncio
+async def test_search_falls_back_when_local_ai_service_is_unavailable(db_session, monkeypatch):
+    """Search remains deterministic and publication-safe during Ollama downtime."""
+    approved = CrewMember(
+        full_name="Offline Search Medic",
+        publication_status="approved",
+        tags=["offshore medic"],
+    )
+    draft = CrewMember(
+        full_name="Offline Hidden Medic",
+        publication_status="draft",
+        submitted_by="staff-1",
+        tags=["offshore medic"],
+    )
+    db_session.add_all([approved, draft])
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew_query.ollama_client.extract",
+        AsyncMock(side_effect=RuntimeError("local AI unavailable")),
+    )
+
+    result = await CrewQueryService().process_query("Find offshore medics", db_session)
+
+    assert [candidate["id"] for candidate in result["results"]] == [approved.id]
+    assert result["criteria"]["skills"] == ["offshore", "medic"]

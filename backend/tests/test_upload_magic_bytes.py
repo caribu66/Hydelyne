@@ -3,11 +3,21 @@
 import io
 
 import pytest
+import pytest_asyncio
+
+from app.models import CrewMember
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR"
 PDF_SIGNATURE = b"%PDF-1.4\n%test\n"
 JPG_SIGNATURE = b"\xff\xd8\xff\xe0\x00\x10JFIF"
 DOCX_SIGNATURE = b"PK\x03\x04\x14\x00\x00\x00"
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def existing_upload_crew(db_session):
+    """Uploads require a real parent record; foreign-key orphans are rejected."""
+    db_session.add(CrewMember(id="test-crew-id", full_name="Magic Byte Test Contractor"))
+    await db_session.commit()
 
 
 @pytest.mark.asyncio

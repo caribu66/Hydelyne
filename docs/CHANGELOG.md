@@ -10,6 +10,51 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Live migration and search projection rebuild (Codex)
+
+Applied Alembic revisions 013 and 014 to the configured live PostgreSQL
+database, advancing it to `014_upload_idempotency`. Rebuilt the Meilisearch
+contractor projection: all 110 approved contractors were indexed with
+`publication_status=approved`; no current non-approved records were indexed.
+The live backend health check returned healthy.
+
+## 2026-09-05 — Review-gated CV ingestion and staff submissions (Codex)
+
+Added a `staff` role boundary and changed CV-led specialist creation into a
+draft → deterministic extraction → administrator review → publication flow.
+CV extraction now stages a durable `CVReview` proposal and never changes or
+indexes the canonical profile until an admin approves the reviewed data.
+Drafts are excluded from ordinary and natural-language search and are visible
+only to their submitter or an admin. Exact name/email duplicates are blocked
+unless an administrator explicitly confirms the person is distinct.
+
+Added migrations `013_add_cv_review_workflow` and
+`014_add_document_upload_idempotency`, staff/admin authorization,
+approval/rejection and role-promotion GraphQL operations, draft document access
+checks, the guided submission/review UI, an admin staff-access screen,
+privacy-safe profile-read auditing, and focused security/publication tests.
+Review decisions are transactionally locked so concurrent administrators cannot
+publish conflicting outcomes.
+CV uploads also carry a bounded idempotency key so a lost response and browser
+retry cannot create a second document for the same submission.
+Document search now excludes all processing, rejected, and failed extractions.
+The legacy password migration now supports offline SQL generation, allowing the
+complete migration chain to be checked before deployment.
+Added `backend/reindex_crew_search.py` for safe, repeatable rebuilding of the
+Meilisearch projection after direct imports or search-field contract changes.
+The upload UI safely retries against the original draft, queue failures are
+visible, and legacy agent CV uploads cannot bypass review. Natural-search
+fallback rules cover North Sea work, surveyors available next month, offshore
+medics, in-date qualifications, and experience thresholds when the local AI
+service is unavailable.
+
+Validation: backend Ruff, mypy, Bandit, 160 pytest tests (2 deselected), one
+Alembic head, and PostgreSQL upgrade/downgrade SQL pass. Frontend lint, 54 unit
+tests, production build, strict UI audit, and Playwright (105 passed, 3 skipped)
+pass; browser coverage
+includes accessible CV review and staff-access dialogs across mobile, tablet,
+desktop, and wide viewports.
+
 ## 2026-09-05 — Expiry & renewal alerts engine and compliance automation (Slice 3) (Antigravity)
 
 Implemented the offshore crewing compliance alert engine, automated status transitions,

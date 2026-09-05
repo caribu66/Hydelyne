@@ -249,14 +249,12 @@ class DocumentUploadService:
                 )
 
                 if response.status_code == 200:
-                    logger.info(f"Uploaded to Dropbox: {dropbox_path}")
+                    logger.info("Uploaded managed document to Dropbox")
                     return dropbox_path
                 else:
-                    logger.warning(
-                        f"Dropbox upload failed ({response.status_code}): {response.text[:200]}"
-                    )
+                    logger.warning("Dropbox upload failed with status %s", response.status_code)
         except Exception as e:
-            logger.warning(f"Dropbox upload error: {e}")
+            logger.warning("Dropbox upload error (%s)", type(e).__name__)
 
         return None
 
@@ -274,7 +272,7 @@ class DocumentUploadService:
             # Resolve and verify the path stays within cache_path
             resolved = local_path.resolve()
             if not str(resolved).startswith(str(self.cache_path.resolve())):
-                logger.warning(f"Refusing out-of-cache read: {storage_path}")
+                logger.warning("Refusing out-of-cache document read")
                 return None
             return local_path.read_bytes()
 
@@ -422,7 +420,7 @@ class DocumentUploadService:
                         f"Dropbox download failed ({response.status_code}): {response.text[:200]}"
                     )
         except Exception as e:
-            logger.warning(f"Dropbox download error: {e}")
+            logger.warning("Dropbox download error (%s)", type(e).__name__)
 
         return None
 

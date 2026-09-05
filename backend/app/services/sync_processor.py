@@ -72,6 +72,19 @@ class SyncDocumentProcessor:
             if not doc:
                 return {"error": "Document not found", "status": "failed"}
 
+            if doc.classification == "cv":
+                from app.models import CVReview
+
+                existing_review = session.execute(
+                    select(CVReview).where(CVReview.document_id == document_id)
+                ).scalar_one_or_none()
+                if existing_review and existing_review.status in {"approved", "rejected"}:
+                    return {
+                        "document_id": document_id,
+                        "status": existing_review.status,
+                        "classification": "cv",
+                    }
+
             doc.extraction_status = "processing"
             session.commit()
 
@@ -135,35 +148,18 @@ class SyncDocumentProcessor:
 
                 classification = normalize_classification(doc.classification)
 
-                # If this is a CV, process the extracted data into crew member profile
+                # CV data is staged for an administrator. It must not update
+                # the canonical/searchable profile before explicit approval.
                 if classification == "cv" and doc.crew_member_id:
-                    import asyncio
+                    from app.models import CVReview
 
-                    from app.database import dispose_engine
-                    from app.services.cv_processing import cv_processing_service
-
-                    crew_member_id = doc.crew_member_id
-
-                    async def _enrich_profile_and_release_engine() -> None:
-                        # This processor is called by synchronous Celery tasks;
-                        # run the async profile-enrichment service to completion,
-                        # then dispose the async engine before this event loop
-                        # closes. asyncio.run() opens a fresh loop every call, so
-                        # a long-lived worker process reusing the async engine
-                        # singleton across tasks fails on the second CV with
-                        # "attached to a different loop" — disposing releases the
-                        # singleton so the next task's asyncio.run() call gets a
-                        # fresh engine bound to its own fresh loop.
-                        try:
-                            await cv_processing_service.process_cv_extraction(
-                                crew_member_id=crew_member_id,
-                                extracted_data=extraction_result,
-                                document_id=document_id,
-                            )
-                        finally:
-                            await dispose_engine()
-
-                    asyncio.run(_enrich_profile_and_release_engine())
+                    review = session.execute(
+                        select(CVReview).where(CVReview.document_id == document_id)
+                    ).scalar_one_or_none()
+                    if review is not None:
+                        review.proposed_data = {**(review.proposed_data or {}), **extraction_result}
+                        review.status = "awaiting_review" if status != "failed" else "failed"
+                    status = "awaiting_review" if status != "failed" else "failed"
 
                 elif classification == "certificate" and doc.crew_member_id:
                     import asyncio
@@ -186,9 +182,6 @@ class SyncDocumentProcessor:
 
                     asyncio.run(_link_cert_and_release_engine())
 
-                # Do not expose a terminal document status until any CV fields
-                # have been committed.  The UI uses this state to refresh the
-                # crew profile after an upload.
                 doc.extraction_status = status
                 session.commit()
                 return {
@@ -198,10 +191,9 @@ class SyncDocumentProcessor:
                 }
 
             except Exception as e:
-                # exception(), not error(): without the traceback an extraction
-                # failure only reports the exception text, which is rarely enough
-                # to locate the stage that broke.
-                logger.exception(f"Extraction failed for {document_id}: {e}")
+                # Exception messages may contain a CV filename or storage path.
+                # Keep the failure observable without logging private metadata.
+                logger.error("Document extraction failed (%s)", type(e).__name__)
                 doc.extraction_status = "failed"
                 session.commit()
                 return {"error": str(e), "status": "failed"}
