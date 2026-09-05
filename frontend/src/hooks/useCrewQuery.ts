@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLazyQuery } from '@apollo/client';
 import { QUERY_CREW } from '../lib/queries';
 
@@ -180,18 +180,28 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
     };
   }, [debouncedQuery, shouldUseAI, executeQuery]);
 
-  const result: CrewQueryResult | null = data?.queryCrew
-    ? {
-        intent: data.queryCrew.intent,
-        query: data.queryCrew.query,
-        summary: data.queryCrew.summary,
-        results: parseCrewResults(data.queryCrew.results),
-        criteria: parseCrewCriteria(data.queryCrew.criteria),
-        totalIssues: data.queryCrew.totalIssues ?? undefined,
-        crewId: data.queryCrew.crewId ?? undefined,
-        crewName: data.queryCrew.crewName ?? undefined,
-      }
-    : null;
+  // Memoized so this stays referentially stable across renders when the
+  // underlying Apollo data hasn't changed. Without this, a fresh object
+  // literal on every render fed an effect elsewhere (ModernHeroSearch's
+  // onAIResults effect) whose dependency array never stabilized, causing
+  // setState -> re-render -> new object -> effect fires -> setState,
+  // forever ("Maximum update depth exceeded" in production).
+  const result: CrewQueryResult | null = useMemo(
+    () =>
+      data?.queryCrew
+        ? {
+            intent: data.queryCrew.intent,
+            query: data.queryCrew.query,
+            summary: data.queryCrew.summary,
+            results: parseCrewResults(data.queryCrew.results),
+            criteria: parseCrewCriteria(data.queryCrew.criteria),
+            totalIssues: data.queryCrew.totalIssues ?? undefined,
+            crewId: data.queryCrew.crewId ?? undefined,
+            crewName: data.queryCrew.crewName ?? undefined,
+          }
+        : null,
+    [data],
+  );
 
   return {
     data: result,

@@ -1184,6 +1184,39 @@ reintroduce and closes a symmetric backend test gap.
 - Ordered the paginated specialist list newest-first. This prevents recently
   added consultants from falling beyond the frontend's first 100 records.
 
+## 2026-09-04 — Fix infinite re-render loop in natural-language search (Claude Code)
+
+Salvaged from `claude/strange-shannon-e680d4` — a real, confirmed-still-live
+bug on `main` before this port, unrelated to anything else in this session.
+
+Found during a live application review: a natural-language search (e.g.
+"Who has medical experience?") triggered a continuously-firing "Maximum
+update depth exceeded" React error — an actual infinite re-render loop
+burning CPU in the browser tab, not a one-off warning.
+
+Root cause: `useCrewQuery.ts` built the returned `CrewQueryResult` object as
+a fresh literal on every hook call, never memoized. `ModernHeroSearch.tsx`'s
+`onAIResults` effect depends on that object reference; since it was never
+referentially stable when the underlying data hadn't changed, the effect
+fired every render, called `setAiQueryData` in `App.tsx`, which triggered
+the re-render that produced a new object, which fired the effect again —
+forever, once an AI-classified query populated `data.queryCrew`.
+
+Fixed by wrapping the object construction in `useMemo(() => ..., [data])`.
+Verified via a genuinely fresh tab (not a warm Vite HMR session, which
+produced an unrelated, expected "Rendered more hooks than previous render"
+transient once from hot-swapping in a new hook mid-session — not a real bug,
+confirmed gone on a clean reload): zero console errors on repeated NL
+searches. `npm run lint`, `test` (46 passed), and `build` all clean.
+
+**Follow-up noted, not investigated further:** the search results header
+("Found 13 specialists") and the criteria panel ("14 specialists meet every
+requirement") showed inconsistent counts for the same query, reproducibly.
+Also, one credentials/training row on a real profile concatenated education
+and a training course without a separator ("Maritime — Maritime Academy
+Szczecin, Poland Compressed Air Emergency Breathing UK").
+
+
 ## 2026-09-04 — Fix db port conflict with host Postgres; resolve stack outage (Claude Code)
 
 Found the whole containerized stack down ~44h (a host reboot). Restarting
