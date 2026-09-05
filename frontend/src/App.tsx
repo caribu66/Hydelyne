@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useState, useMemo, useEffect, useCallback, MouseEvent } from 'react';
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback, useRef, MouseEvent, KeyboardEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SortOption } from './types';
@@ -50,6 +50,8 @@ import {
   X,
   UserPlus,
   Menu,
+  GripVertical,
+  Star,
 } from 'lucide-react';
 import hydenlyneLogoWhite from './assets/hydenlyne-logo-white.png';
 import hydenlyneLogoColour from './assets/hydenlyne-logo-colour.png';
@@ -96,6 +98,12 @@ function queryFromCriteria(criteria: Record<string, unknown>): string {
   if (Array.isArray(criteria.skills)) criteria.skills.forEach((value) => parts.push(`with ${String(value)} experience`));
   return parts.join(' ');
 }
+
+const SPLIT_RATIO_STORAGE_KEY = 'hydenlyne_split_pane_ratio';
+const DEFAULT_SPLIT_RATIO = 35;
+const MIN_SPLIT_RATIO = 25;
+const MAX_SPLIT_RATIO = 60;
+const SNAP_RATIOS = [35, 50, 28];
 
 export default function App() {
   const { isDark, toggleTheme } = useTheme();
@@ -231,6 +239,104 @@ export default function App() {
 
   // Focused Workspace mode for working comfortably on a contractor
   const [isFocusMode, setIsFocusMode] = useState(false);
+
+  // Split-pane layout ratio (percentage of left list pane on desktop)
+  const [splitRatio, setSplitRatio] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(SPLIT_RATIO_STORAGE_KEY);
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!Number.isNaN(parsed) && parsed >= MIN_SPLIT_RATIO && parsed <= MAX_SPLIT_RATIO) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore localStorage availability issues
+    }
+    return DEFAULT_SPLIT_RATIO;
+  });
+
+  const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+
+  const updateSplitRatio = useCallback((newRatio: number) => {
+    const clamped = Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, Math.round(newRatio * 10) / 10));
+    setSplitRatio(clamped);
+    try {
+      localStorage.setItem(SPLIT_RATIO_STORAGE_KEY, clamped.toString());
+    } catch {
+      // Ignore storage write errors
+    }
+  }, []);
+
+  const handleSplitterPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    setIsDraggingSplitter(true);
+
+    const container = splitContainerRef.current;
+    if (!container) return;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const relativeX = moveEvent.clientX - rect.left;
+      const percentage = (relativeX / rect.width) * 100;
+      const clamped = Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, Math.round(percentage * 10) / 10));
+      setSplitRatio(clamped);
+    };
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+      document.body.style.removeProperty('cursor');
+      document.body.style.removeProperty('user-select');
+      setIsDraggingSplitter(false);
+
+      const rect = container.getBoundingClientRect();
+      if (rect.width > 0) {
+        const relativeX = upEvent.clientX - rect.left;
+        const percentage = (relativeX / rect.width) * 100;
+        updateSplitRatio(percentage);
+      }
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  }, [updateSplitRatio]);
+
+  const handleSplitterDoubleClick = useCallback(() => {
+    // Cycle between snap presets: 35% -> 50% -> 28% -> 35%
+    const currentRounded = Math.round(splitRatio);
+    const currentIndex = SNAP_RATIOS.findIndex((ratio) => Math.abs(ratio - currentRounded) <= 2);
+    const nextRatio = (currentIndex >= 0 && SNAP_RATIOS[(currentIndex + 1) % SNAP_RATIOS.length] !== undefined)
+      ? (SNAP_RATIOS[(currentIndex + 1) % SNAP_RATIOS.length] ?? DEFAULT_SPLIT_RATIO)
+      : DEFAULT_SPLIT_RATIO;
+    updateSplitRatio(nextRatio);
+  }, [splitRatio, updateSplitRatio]);
+
+  const handleSplitterKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      updateSplitRatio(splitRatio - 2);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      updateSplitRatio(splitRatio + 2);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      updateSplitRatio(MIN_SPLIT_RATIO);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      updateSplitRatio(MAX_SPLIT_RATIO);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleSplitterDoubleClick();
+    }
+  }, [splitRatio, updateSplitRatio, handleSplitterDoubleClick]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -374,6 +480,9 @@ export default function App() {
     handleNextProfile,
     setIsShortcutsOpen,
     showToast,
+    viewMode,
+    setViewMode,
+    onToggleCompare: handleToggleCompare,
   });
 
   // Auth gate: block until we know session state
@@ -446,7 +555,13 @@ export default function App() {
             className="flex items-center gap-2.5 cursor-pointer select-none group focus:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-lg"
             aria-label="Go to Hydenlyne home"
           >
-            <img src={isDark ? hydenlyneLogoWhite : hydenlyneLogoColour} alt="Hydenlyne" className="w-[104px] h-auto" />
+            <img
+              src={isDark ? hydenlyneLogoWhite : hydenlyneLogoColour}
+              alt="Hydenlyne"
+              width={104}
+              height={28}
+              className="w-[104px] h-auto"
+            />
           </button>
 
           {/* Right Nav */}
@@ -524,8 +639,8 @@ export default function App() {
             </button>
           </div>
         )}
-        {/* Modern Search Bar: stays available while scanning a long result set. */}
-        <div className={isSearchActive ? 'sticky top-16 z-20 -mx-4 px-4 bg-canvas/90 backdrop-blur-md sm:-mx-6 sm:px-6' : ''}>
+        {/* Modern Search Bar: stays available while scanning a long result set with seamless layout transition */}
+        <div className={`transition-all duration-300 ease-out ${isSearchActive ? 'sticky top-16 z-20 -mx-4 px-4 bg-canvas/90 backdrop-blur-md sm:-mx-6 sm:px-6 py-1 border-b border-border-subtle/50' : 'py-2'}`}>
           <ModernHeroSearch
             query={query}
             onChange={(val) => {
@@ -647,239 +762,70 @@ export default function App() {
             {profilesLoading ? (
               <SkeletonResults viewMode="list" />
             ) : results.length > 0 ? (
-              viewMode === 'split' ? (
-                isFocusMode ? (
-                  /* Focused Contractor Workspace (Enlarged & Centered for comfortable working) */
-                  <div className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-canvas/95 px-2 py-3 sm:p-4 backdrop-blur-sm">
-                    {/* Crew Selector Navigation Strip */}
-                    <div className="w-full max-w-6xl mx-auto flex items-center justify-between bg-surface/90 border border-border-subtle p-2.5 sm:p-3 rounded-[14px] backdrop-blur-md shadow-xl gap-3 shrink-0">
-                      <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none max-w-2xl">
-                        {results.map((profile, idx) => {
-                          const isSel = (activeSelectedProfile?.id || selectedProfileId) === profile.id;
-                          return (
-                            <button
-                              key={profile.id}
-                              id={`specialist-result-${profile.id}`}
-                              type="button"
-                              onClick={() => setSelectedProfileId(profile.id)}
-                              className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-[10px] text-xs font-medium shrink-0 transition-all cursor-pointer ${
-                                isSel
-                                  ? 'bg-surface-raised text-primary border border-border-strong shadow-md font-semibold'
-                                  : 'bg-canvas/60 border border-border-subtle text-secondary hover:bg-surface-raised/80 hover:text-primary'
-                              }`}
-                            >
-                              <img
-                                src={profile.avatar}
-                                alt={profile.name}
-                                referrerPolicy="no-referrer"
-                                className="w-5 h-5 rounded-full object-cover border border-border-strong"
-                              />
-                              <span className="truncate max-w-[110px]">{profile.name}</span>
-                              <span className="font-mono text-xs opacity-60">#{idx + 1}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setIsFocusMode(false)}
-                          className="px-3.5 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-primary text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          title="Exit Focus Mode (F / Esc)"
-                        >
-                          <span>Exit Focus</span>
-                          <span className="font-mono text-xs text-secondary">Esc</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Centered Enlarged Contractor dossier Card */}
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={activeSelectedProfile ? activeSelectedProfile.id : 'empty-focus'}
-                        initial={{ opacity: 0, scale: 0.98, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.98, y: -10 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                        className="w-full max-w-6xl mx-auto flex-1 min-h-0 flex justify-center"
-                      >
-                        <Suspense fallback={<DossierFallback />}>
-                        <SpecialistDossierPane
-                          profile={activeSelectedProfile}
-                          searchQuery={committedQuery}
-                          isBookmarked={activeSelectedProfile ? isBookmarked(activeSelectedProfile.id) : false}
-                          onToggleBookmark={toggleBookmark}
-                          onShowToast={showToast}
-                          isCompared={activeSelectedProfile ? compareIds.includes(activeSelectedProfile.id) : false}
-                          onToggleCompare={handleToggleCompare}
-                          onRequestMobilization={handleRequestMobilization}
-                          onPrintDossier={handlePrintDossier}
-                          documents={activeSelectedProfile ? getDocumentsForProfile(activeSelectedProfile.id) : []}
-                          summary={activeSelectedProfile ? getSummaryForProfile(activeSelectedProfile.id) : undefined}
-                          summaryLoading={activeSelectedProfile ? isSummaryLoading(activeSelectedProfile.id) : false}
-                          onAddDocument={() => activeSelectedProfile && void refreshDocuments(activeSelectedProfile.id)}
-                          onRemoveDocument={async (docId) => {
-                            if (activeSelectedProfile) await removeDocument(activeSelectedProfile.id, docId);
-                          }}
-                          canManageDocuments={canManageDocuments}
-                          canDeleteCrew={canManageDocuments && user?.id !== activeSelectedProfile?.id}
-                          onDeleteCrew={handleDeleteCrewMember}
-                          isFocusMode={true}
-                          onToggleFocusMode={() => setIsFocusMode(false)}
-                          onPrevProfile={handlePrevProfile}
-                          onNextProfile={handleNextProfile}
-                          profileIndex={currentSelectedIdx >= 0 ? currentSelectedIdx : 0}
-                          totalProfiles={results.length}
-                        />
-                        </Suspense>
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-                ) : (
-                  /* Standard Split-Pane Operations Command */
-                  <div className="scan-workspace grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch min-h-0 md:min-h-[520px] py-2 sm:py-3">
-                    {/* Left Column: Animated List */}
-                    <section aria-label="Contractor search results" className="md:col-span-4 min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2">
-                      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Results</span>
-                        <span className="font-mono text-xs text-muted">Select to view dossier</span>
-                      </div>
-                      <AnimatePresence mode="popLayout">
-                        {results.map((profile, index) => {
-                          const isSelected = selectedProfileId === profile.id;
-                          const isProfileBookmarked = isBookmarked(profile.id);
-                          const isCompared = compareIds.includes(profile.id);
-                          const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
-                          const matchedResult = aiQueryData?.results.find((result) => result.id === profile.id);
-
-                          return (
-                            <motion.div
-                              layout
-                              initial={{ opacity: 0, y: 14, scale: 0.98 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -10, scale: 0.96 }}
-                              transition={{
-                                duration: 0.22,
-                                delay: Math.min(index * 0.02, 0.18),
-                                ease: [0.16, 1, 0.3, 1],
-                              }}
-                              key={profile.id}
-                              className={`group relative p-3.5 rounded-[14px] border transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
-                                isSelected
-                                  ? 'bg-surface border-border-strong shadow-lg shadow-black/10'
-                                  : 'bg-transparent hover:bg-surface/60 border-transparent hover:border-border-subtle'
-                              }`}
-                            >
+              <AnimatePresence mode="wait">
+                {viewMode === 'split' ? (
+                  isFocusMode ? (
+                    /* Focused Contractor Workspace (Enlarged & Centered for comfortable working) */
+                    <motion.div
+                      key="focus-workspace"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-canvas/95 px-2 py-3 sm:p-4 backdrop-blur-sm"
+                    >
+                      {/* Crew Selector Navigation Strip */}
+                      <div className="w-full max-w-6xl mx-auto flex items-center justify-between bg-surface/90 border border-border-subtle p-2.5 sm:p-3 rounded-[14px] backdrop-blur-md shadow-xl gap-3 shrink-0">
+                        <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none max-w-2xl">
+                          {results.map((profile, idx) => {
+                            const isSel = (activeSelectedProfile?.id || selectedProfileId) === profile.id;
+                            return (
                               <button
-                                type="button"
+                                key={profile.id}
                                 id={`specialist-result-${profile.id}`}
-                                onClick={() => {
-                                  setSelectedProfileId(profile.id);
-                                  if (window.matchMedia('(max-width: 767px)').matches) setModalProfile(profile);
-                                }}
-                                className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
-                                aria-label={`View ${profile.name} dossier, ${profile.title}`}
-                                aria-current={isSelected ? 'true' : undefined}
+                                type="button"
+                                onClick={() => setSelectedProfileId(profile.id)}
+                                className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-[10px] text-xs font-medium shrink-0 transition-all cursor-pointer ${
+                                  isSel
+                                    ? 'bg-surface-raised text-primary border border-border-strong shadow-md font-semibold'
+                                    : 'bg-canvas/60 border border-border-subtle text-secondary hover:bg-surface-raised/80 hover:text-primary'
+                                }`}
                               >
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className="relative shrink-0">
-                                  <img
-                                    src={profile.avatar}
-                                    alt={profile.name}
-                                    referrerPolicy="no-referrer"
-                                    className="w-11 h-11 rounded-lg object-cover border border-border-subtle/90 group-hover:border-border-strong transition-colors"
-                                  />
-                                  {isAvailableNow && (
-                                    <span
-                                      className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-positive border-2 border-border-subtle"
-                                      title="Available immediately"
-                                    />
-                                  )}
-                                </div>
-
-                                <div className="min-w-0 space-y-1 flex-1">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                    <h3 className={`font-semibold text-sm tracking-tight truncate ${isSelected ? 'text-accent' : 'text-primary group-hover:text-primary'}`}>
-                                        <HighlightText text={profile.name} query={committedQuery} />
-                                      </h3>
-                                      {profile.isHighlyRecommended && (
-                                        <span title="Verified Contractor"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
-                                      )}
-                                    </div>
-
-                                    <span className="text-xs font-mono font-semibold text-primary shrink-0">
-                                      {profile.dayRate ? `£${profile.dayRate}/d` : 'Rate n/a'}
-                                    </span>
-                                  </div>
-
-                                  <p className="text-xs text-secondary truncate font-normal">
-                                    <HighlightText text={profile.title} query={committedQuery} />
-                                  </p>
-
-                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-secondary pt-1">
-                                    <span className="badge-accent px-1.5 py-0.5 rounded font-medium">
-                                      {profile.department}
-                                    </span>
-                                    <span className={`px-1.5 py-0.5 rounded font-medium ${isAvailableNow ? 'badge-positive' : 'badge-neutral'}`}>
-                                      {profile.availability.replace('Available ', '')}
-                                    </span>
-                                    <span className="truncate text-secondary">{profile.location.split(',')[0]}</span>
-                                    <span className="font-mono text-secondary">{profile.yearsOfExperience}y</span>
-                                    {profile.rating && <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 pt-1 text-xs text-muted">
-                                    {profile.skills.slice(0, 2).map((skill) => (
-                                      <span key={skill} className="truncate rounded-md border border-border-subtle bg-canvas/60 px-1.5 py-0.5 text-secondary">
-                                        <HighlightText text={skill} query={committedQuery} />
-                                      </span>
-                                    ))}
-                                    {profile.skills.length > 2 && <span className="shrink-0 font-mono">+{profile.skills.length - 2}</span>}
-                                  </div>
-                                  {aiQueryActive && (
-                                    <MatchEvidence
-                                      profile={profile}
-                                      criteria={aiQueryData?.criteria}
-                                      resultCertifications={matchedResult?.certifications}
-                                      compact
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                              </button>
-
-                              {/* Secondary actions stay available without competing with dossier selection. */}
-                              <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
-                                <SpecialistActionsMenu
-                                  profile={profile}
-                                  isBookmarked={isProfileBookmarked}
-                                  isCompared={isCompared}
-                                  onToggleBookmark={() => toggleBookmark(profile.id)}
-                                  onToggleCompare={() => handleToggleCompare(profile)}
-                                  onRequestMobilization={() => handleRequestMobilization(profile)}
+                                <img
+                                  src={profile.avatar}
+                                  alt={profile.name}
+                                  referrerPolicy="no-referrer"
+                                  className="w-5 h-5 rounded-full object-cover border border-border-strong"
                                 />
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </section>
+                                <span className="truncate max-w-[110px]">{profile.name}</span>
+                                <span className="font-mono text-xs opacity-60">#{idx + 1}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
 
-                    {/* Right Column: Live Contractor dossier */}
-                    <div className="hidden md:col-span-8 md:block min-h-0 h-full overflow-hidden md:sticky md:top-20">
-                      <div className="mb-2 flex items-center justify-between px-1 md:hidden">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Selected dossier</span>
-                        <span className="text-xs text-muted">Scroll for details</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setIsFocusMode(false)}
+                            className="px-3.5 py-1.5 rounded-[10px] bg-surface-raised hover:bg-surface-selected border border-border-strong text-primary text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                            title="Exit Focus Mode (F / Esc)"
+                          >
+                            <span>Exit Focus</span>
+                            <span className="font-mono text-xs text-secondary">Esc</span>
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Centered Enlarged Contractor dossier Card */}
                       <AnimatePresence mode="wait">
                         <motion.div
-                          key={activeSelectedProfile ? activeSelectedProfile.id : 'empty'}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -8 }}
+                          key={activeSelectedProfile ? activeSelectedProfile.id : 'empty-focus'}
+                          initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98, y: -10 }}
                           transition={{ duration: 0.2, ease: 'easeOut' }}
-                          className="h-full min-h-0"
+                          className="w-full max-w-6xl mx-auto flex-1 min-h-0 flex justify-center"
                         >
                           <Suspense fallback={<DossierFallback />}>
                           <SpecialistDossierPane
@@ -897,19 +843,13 @@ export default function App() {
                             summaryLoading={activeSelectedProfile ? isSummaryLoading(activeSelectedProfile.id) : false}
                             onAddDocument={() => activeSelectedProfile && void refreshDocuments(activeSelectedProfile.id)}
                             onRemoveDocument={async (docId) => {
-                              if (activeSelectedProfile) {
-                                try {
-                                  await removeDocument(activeSelectedProfile.id, docId);
-                                } catch {
-                                  showToast('Failed to remove document');
-                                }
-                              }
+                              if (activeSelectedProfile) await removeDocument(activeSelectedProfile.id, docId);
                             }}
                             canManageDocuments={canManageDocuments}
                             canDeleteCrew={canManageDocuments && user?.id !== activeSelectedProfile?.id}
                             onDeleteCrew={handleDeleteCrewMember}
-                            isFocusMode={false}
-                            onToggleFocusMode={() => setIsFocusMode(true)}
+                            isFocusMode={true}
+                            onToggleFocusMode={() => setIsFocusMode(false)}
                             onPrevProfile={handlePrevProfile}
                             onNextProfile={handleNextProfile}
                             profileIndex={currentSelectedIdx >= 0 ? currentSelectedIdx : 0}
@@ -918,31 +858,307 @@ export default function App() {
                           </Suspense>
                         </motion.div>
                       </AnimatePresence>
-                    </div>
-                  </div>
-                )
-              ) : viewMode === 'table' ? (
-                /* High-Density Spreadsheet Matrix */
-                <Suspense fallback={<SkeletonResults viewMode="list" />}>
-                <SpecialistTableView
-                  profiles={results}
-                  searchQuery={committedQuery}
-                  selectedId={selectedProfileId}
-                  onSelectProfile={(p) => {
-                    setSelectedProfileId(p.id);
-                    setModalProfile(p);
-                  }}
-                  isBookmarked={isBookmarked}
-                  onToggleBookmark={toggleBookmark}
-                  onShowToast={showToast}
-                  compareIds={compareIds}
-                  onToggleCompare={handleToggleCompare}
-                  onRequestMobilization={handleRequestMobilization}
-                />
-                </Suspense>
-              ) : (
-                /* Visual Grid Cards View with Motion */
-                <motion.div layout className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    </motion.div>
+                  ) : (
+                    /* Standard Split-Pane Operations Command */
+                    <motion.div
+                      key="split-layout"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      ref={splitContainerRef}
+                      className="scan-workspace flex flex-col md:flex-row items-stretch min-h-0 md:h-[calc(100vh-145px)] md:min-h-[660px] py-2 sm:py-3"
+                    >
+                      {/* Left Column: Animated List */}
+                      <section
+                        aria-label="Contractor search results"
+                        style={{ width: `${splitRatio}%` }}
+                        className="w-full md:w-auto min-h-0 h-full overflow-y-auto pr-1 scan-scroll-panel space-y-2 shrink-0 max-w-full"
+                      >
+                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-canvas/95 px-1 pb-2 pt-1 backdrop-blur-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Results</span>
+                            <span className="hidden sm:inline-flex items-center gap-1 font-mono text-xs text-muted">
+                              <kbd className="px-1 py-0.2 rounded bg-surface border border-border-subtle text-secondary font-mono text-xs">J</kbd>
+                              <kbd className="px-1 py-0.2 rounded bg-surface border border-border-subtle text-secondary font-mono text-xs">K</kbd>
+                              <span>to navigate</span>
+                            </span>
+                          </div>
+                          <span className="font-mono text-xs text-muted">Select to view dossier</span>
+                        </div>
+                        <AnimatePresence mode="popLayout">
+                          {results.map((profile, index) => {
+                            const isSelected = selectedProfileId === profile.id;
+                            const isProfileBookmarked = isBookmarked(profile.id);
+                            const isCompared = compareIds.includes(profile.id);
+                            const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
+                            const matchedResult = aiQueryData?.results.find((result) => result.id === profile.id);
+
+                            return (
+                              <motion.div
+                                layout
+                                initial={{ opacity: 0, y: 14 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{
+                                  duration: 0.22,
+                                  delay: Math.min(index * 0.02, 0.18),
+                                  ease: [0.16, 1, 0.3, 1],
+                                }}
+                                key={profile.id}
+                                className={`group relative p-3.5 rounded-[14px] border transition-all duration-200 cursor-pointer flex items-center justify-between gap-3 ${
+                                  isSelected
+                                    ? 'bg-surface border-border-strong shadow-md ring-1 ring-border-strong'
+                                    : 'bg-surface/30 hover:bg-surface/80 border-border-subtle/60 hover:border-border-subtle'
+                                }`}
+                              >
+                                {/* Left active selection accent indicator bar */}
+                                <div
+                                  className={`absolute left-0 top-3.5 bottom-3.5 w-1 rounded-r-full transition-all duration-200 ${
+                                    isSelected ? 'bg-primary opacity-100' : 'bg-transparent opacity-0'
+                                  }`}
+                                  aria-hidden="true"
+                                />
+
+                                <button
+                                  type="button"
+                                  id={`specialist-result-${profile.id}`}
+                                  onClick={() => {
+                                    setSelectedProfileId(profile.id);
+                                    if (window.matchMedia('(max-width: 767px)').matches) setModalProfile(profile);
+                                  }}
+                                  className="flex items-start gap-3.5 min-w-0 flex-1 text-left cursor-pointer pl-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-lg"
+                                  aria-label={`View ${profile.name} dossier, ${profile.title}`}
+                                  aria-current={isSelected ? 'true' : undefined}
+                                >
+                                  <div className="relative shrink-0 mt-0.5">
+                                    <img
+                                      src={profile.avatar}
+                                      alt={profile.name}
+                                      referrerPolicy="no-referrer"
+                                      className="w-12 h-12 rounded-xl object-cover border border-border-subtle shadow-xs group-hover:border-border-strong transition-colors"
+                                    />
+                                    {isAvailableNow && (
+                                      <span
+                                        className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-positive border-2 border-surface shadow-xs"
+                                        title="Available immediately"
+                                      />
+                                    )}
+                                  </div>
+
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    {/* Row 1: Name, Badges & Rates */}
+                                    <div className="flex items-baseline justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <h3 className="font-semibold text-sm text-primary group-hover:text-primary transition-colors truncate">
+                                          <HighlightText text={profile.name} query={committedQuery} />
+                                        </h3>
+                                        {profile.isHighlyRecommended && (
+                                          <span className="badge-accent shrink-0 px-1.5 py-0.2 rounded text-xs font-semibold">
+                                            Top Fit
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="font-mono font-bold text-xs text-primary shrink-0">
+                                        {profile.dayRate ? `£${profile.dayRate}/d` : 'Rate on req'}
+                                      </span>
+                                    </div>
+
+                                    {/* Row 2: Headline Role */}
+                                    <p className="text-xs text-secondary truncate font-medium">
+                                      <HighlightText text={profile.title} query={committedQuery} />
+                                    </p>
+
+                                    {/* Row 3: Availability & Rating */}
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <span className={`inline-flex items-center gap-1 font-medium ${isAvailableNow ? 'text-positive' : 'text-secondary'}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
+                                        <span className="truncate">{(profile.availability || 'Available').replace('Available ', '')}</span>
+                                      </span>
+                                      <span>·</span>
+                                      <span className="text-secondary flex items-center gap-0.5 font-mono">
+                                        <Star className="w-3 h-3 text-warning fill-warning" />
+                                        <span>{profile.rating || 4.9}</span>
+                                      </span>
+                                      <span>·</span>
+                                      <span className="text-secondary truncate">{profile.department}</span>
+                                    </div>
+
+                                    {/* Row 4: Clean Metadata Strip (Location & Experience) */}
+                                    <div className="flex items-center gap-2 text-xs text-muted">
+                                      <span className="truncate text-secondary">{profile.location.split(',')[0]}</span>
+                                      <span>·</span>
+                                      <span className="font-mono text-secondary shrink-0">{profile.yearsOfExperience}y exp</span>
+                                      {profile.skills.length > 0 && (
+                                        <>
+                                          <span>·</span>
+                                          <span className="truncate text-secondary">
+                                            {profile.skills.slice(0, 2).join(', ')}
+                                            {profile.skills.length > 2 ? ` +${profile.skills.length - 2}` : ''}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+
+                                    {aiQueryActive && (
+                                      <MatchEvidence
+                                        profile={profile}
+                                        criteria={aiQueryData?.criteria}
+                                        resultCertifications={matchedResult?.certifications}
+                                        compact
+                                      />
+                                    )}
+                                  </div>
+                                </button>
+
+                                {/* Secondary actions stay available without competing with dossier selection. */}
+                                <div className="shrink-0 self-start mt-0.5" onClick={(event) => event.stopPropagation()}>
+                                  <SpecialistActionsMenu
+                                    profile={profile}
+                                    isBookmarked={isProfileBookmarked}
+                                    isCompared={isCompared}
+                                    onToggleBookmark={() => toggleBookmark(profile.id)}
+                                    onToggleCompare={() => handleToggleCompare(profile)}
+                                    onRequestMobilization={() => handleRequestMobilization(profile)}
+                                  />
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </AnimatePresence>
+                      </section>
+
+                      {/* Desktop Split-Pane Draggable Resizer Gutter */}
+                      <div
+                        role="separator"
+                        tabIndex={0}
+                        aria-orientation="vertical"
+                        aria-label="Resize results and dossier panes. Use arrow keys to adjust, double click to cycle presets."
+                        aria-valuenow={Math.round(splitRatio)}
+                        aria-valuemin={MIN_SPLIT_RATIO}
+                        aria-valuemax={MAX_SPLIT_RATIO}
+                        onPointerDown={handleSplitterPointerDown}
+                        onDoubleClick={handleSplitterDoubleClick}
+                        onKeyDown={handleSplitterKeyDown}
+                        title="Drag to resize panes · Double-click to cycle presets (35% / 50% / 28%)"
+                        className={`hidden md:flex items-center justify-center relative select-none cursor-col-resize w-3.5 -mx-1 shrink-0 z-20 transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-full ${
+                          isDraggingSplitter ? 'cursor-col-resize' : ''
+                        }`}
+                      >
+                        {/* Vertical line indicator */}
+                        <div
+                          className={`w-0.5 h-full transition-colors duration-150 rounded-full ${
+                            isDraggingSplitter
+                              ? 'bg-primary'
+                              : 'bg-border-subtle group-hover:bg-border-strong group-focus-visible:bg-primary'
+                          }`}
+                        />
+                        {/* Subtle centered grip pills */}
+                        <div
+                          className={`absolute top-1/2 -translate-y-1/2 w-3 h-8 rounded-full border flex items-center justify-center transition-all duration-150 shadow-xs ${
+                            isDraggingSplitter
+                              ? 'bg-surface-raised border-border-strong text-primary scale-110'
+                              : 'bg-surface border-border-subtle text-muted group-hover:border-border-strong group-hover:text-secondary'
+                          }`}
+                        >
+                          <GripVertical className="w-2.5 h-2.5" />
+                        </div>
+                      </div>
+
+                      {/* Right Column: Live Contractor dossier */}
+                      <div className="hidden md:block flex-1 min-w-0 pl-1 min-h-0 h-full overflow-hidden md:sticky md:top-20">
+                        <div className="mb-2 flex items-center justify-between px-1 md:hidden">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-secondary">Selected dossier</span>
+                          <span className="text-xs text-muted">Scroll for details</span>
+                        </div>
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={activeSelectedProfile ? activeSelectedProfile.id : 'empty'}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            className="h-full min-h-0"
+                          >
+                            <Suspense fallback={<DossierFallback />}>
+                            <SpecialistDossierPane
+                              profile={activeSelectedProfile}
+                              searchQuery={committedQuery}
+                              isBookmarked={activeSelectedProfile ? isBookmarked(activeSelectedProfile.id) : false}
+                              onToggleBookmark={toggleBookmark}
+                              onShowToast={showToast}
+                              isCompared={activeSelectedProfile ? compareIds.includes(activeSelectedProfile.id) : false}
+                              onToggleCompare={handleToggleCompare}
+                              onRequestMobilization={handleRequestMobilization}
+                              onPrintDossier={handlePrintDossier}
+                              documents={activeSelectedProfile ? getDocumentsForProfile(activeSelectedProfile.id) : []}
+                              summary={activeSelectedProfile ? getSummaryForProfile(activeSelectedProfile.id) : undefined}
+                              summaryLoading={activeSelectedProfile ? isSummaryLoading(activeSelectedProfile.id) : false}
+                              onAddDocument={() => activeSelectedProfile && void refreshDocuments(activeSelectedProfile.id)}
+                              onRemoveDocument={async (docId) => {
+                                if (activeSelectedProfile) {
+                                  try {
+                                    await removeDocument(activeSelectedProfile.id, docId);
+                                  } catch {
+                                    showToast('Failed to remove document');
+                                  }
+                                }
+                              }}
+                              canManageDocuments={canManageDocuments}
+                              canDeleteCrew={canManageDocuments && user?.id !== activeSelectedProfile?.id}
+                              onDeleteCrew={handleDeleteCrewMember}
+                              isFocusMode={false}
+                              onToggleFocusMode={() => setIsFocusMode(true)}
+                              onPrevProfile={handlePrevProfile}
+                              onNextProfile={handleNextProfile}
+                              profileIndex={currentSelectedIdx >= 0 ? currentSelectedIdx : 0}
+                              totalProfiles={results.length}
+                            />
+                            </Suspense>
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )
+                ) : viewMode === 'table' ? (
+                  /* High-Density Spreadsheet Matrix */
+                  <motion.div
+                    key="table-layout"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                  >
+                    <Suspense fallback={<SkeletonResults viewMode="list" />}>
+                      <SpecialistTableView
+                        profiles={results}
+                        searchQuery={committedQuery}
+                        selectedId={selectedProfileId}
+                        onSelectProfile={(p) => {
+                          setSelectedProfileId(p.id);
+                          setModalProfile(p);
+                        }}
+                        isBookmarked={isBookmarked}
+                        onToggleBookmark={toggleBookmark}
+                        onShowToast={showToast}
+                        compareIds={compareIds}
+                        onToggleCompare={handleToggleCompare}
+                        onRequestMobilization={handleRequestMobilization}
+                      />
+                    </Suspense>
+                  </motion.div>
+                ) : (
+                  /* Visual Grid Cards View with Motion */
+                  <motion.div
+                    key="grid-layout"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    layout
+                    className="grid grid-cols-1 md:grid-cols-2 gap-3.5"
+                  >
                   <AnimatePresence mode="popLayout">
                     {results.map((profile, index) => {
                       const isProfileBookmarked = isBookmarked(profile.id);
@@ -1093,7 +1309,8 @@ export default function App() {
                     })}
                   </AnimatePresence>
                 </motion.div>
-              )
+              )}
+            </AnimatePresence>
             ) : (
               /* Clean Animated Empty State */
               <motion.div
@@ -1135,6 +1352,39 @@ export default function App() {
         onRemoveProfile={handleRemoveCompare}
       />
 
+      {/* Power-User Keyboard Command Bar Hint */}
+      {isSearchActive && (
+        <aside
+          aria-label="Keyboard shortcuts hint"
+          className="fixed bottom-3 right-4 z-30 hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface/90 border border-border-subtle shadow-md backdrop-blur-md text-xs text-secondary select-none transition-opacity hover:opacity-100 opacity-70"
+        >
+          <span className="flex items-center gap-1 font-mono text-xs">
+            <kbd className="px-1 py-0.2 rounded bg-surface-raised border border-border-subtle text-secondary">J</kbd>
+            <kbd className="px-1 py-0.2 rounded bg-surface-raised border border-border-subtle text-secondary">K</kbd>
+            <span className="text-muted ml-0.5">navigate</span>
+          </span>
+          <span className="text-muted">·</span>
+          <span className="flex items-center gap-1 font-mono text-xs">
+            <kbd className="px-1 py-0.2 rounded bg-surface-raised border border-border-subtle text-secondary">S</kbd>
+            <span className="text-muted ml-0.5">shortlist</span>
+          </span>
+          <span className="text-muted">·</span>
+          <span className="flex items-center gap-1 font-mono text-xs">
+            <kbd className="px-1 py-0.2 rounded bg-surface-raised border border-border-subtle text-secondary">X</kbd>
+            <span className="text-muted ml-0.5">compare</span>
+          </span>
+          <span className="text-muted">·</span>
+          <button
+            type="button"
+            onClick={() => setIsShortcutsOpen(true)}
+            className="flex items-center gap-1 text-primary hover:underline cursor-pointer ml-1"
+          >
+            <kbd className="px-1 py-0.2 rounded bg-surface-raised border border-border-strong text-primary font-bold">?</kbd>
+            <span>all keys</span>
+          </button>
+        </aside>
+      )}
+
       {/* Candidate Comparison Modal */}
       <Suspense fallback={null}>
       <CandidateCompareModal
@@ -1171,31 +1421,33 @@ export default function App() {
       )}
 
       {/* Standalone Detail Modal */}
-      {modalProfile && (
-        <ProfileDetailModal
-          profile={modalProfile}
-          onClose={() => setModalProfile(null)}
-          isBookmarked={isBookmarked(modalProfile.id)}
-          onToggleBookmark={(id) => toggleBookmark(id)}
-          onShowToast={showToast}
-          isCompared={compareIds.includes(modalProfile.id)}
-          onToggleCompare={handleToggleCompare}
-          onRequestMobilization={handleRequestMobilization}
-          onPrintDossier={handlePrintDossier}
-          documents={getDocumentsForProfile(modalProfile.id)}
-          onAddDocument={() => void refreshDocuments(modalProfile.id)}
-          onRemoveDocument={async (docId) => {
-            try {
-              await removeDocument(modalProfile.id, docId);
-            } catch {
-              showToast('Failed to remove document');
-            }
-          }}
-          canManageDocuments={canManageDocuments}
-          canDeleteCrew={canManageDocuments && user?.id !== modalProfile.id}
-          onDeleteCrew={handleDeleteCrewMember}
-        />
-      )}
+      <AnimatePresence>
+        {modalProfile && (
+          <ProfileDetailModal
+            profile={modalProfile}
+            onClose={() => setModalProfile(null)}
+            isBookmarked={isBookmarked(modalProfile.id)}
+            onToggleBookmark={(id) => toggleBookmark(id)}
+            onShowToast={showToast}
+            isCompared={compareIds.includes(modalProfile.id)}
+            onToggleCompare={handleToggleCompare}
+            onRequestMobilization={handleRequestMobilization}
+            onPrintDossier={handlePrintDossier}
+            documents={getDocumentsForProfile(modalProfile.id)}
+            onAddDocument={() => void refreshDocuments(modalProfile.id)}
+            onRemoveDocument={async (docId) => {
+              try {
+                await removeDocument(modalProfile.id, docId);
+              } catch {
+                showToast('Failed to remove document');
+              }
+            }}
+            canManageDocuments={canManageDocuments}
+            canDeleteCrew={canManageDocuments && user?.id !== modalProfile.id}
+            onDeleteCrew={handleDeleteCrewMember}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Shortcuts Guide Modal */}
       <ShortcutsModal

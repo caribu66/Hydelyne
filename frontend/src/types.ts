@@ -133,3 +133,5 @@ export interface FilterPreset {
   query?: string;
   filters: Partial<FilterState>;
 }
+
+export type DossierTab = 'dossier' | 'experience' | 'expertise' | 'systems' | 'credentials' | 'radar' | 'vault';

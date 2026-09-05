@@ -10,6 +10,146 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Application-wide smooth transitions & exit animations overhaul (Antigravity)
+
+Comprehensive refactor eliminating abrupt component pops and unmount jumps across all workspace interactions and modals:
+
+- **Modals & Drawers (`AnimatePresence` Exit Transitions)**:
+  - `frontend/src/components/AppMenuDrawer.tsx`: Replaced static CSS classes with Framer Motion slide-in drawer (`initial={{ x: '100%' }}`, `animate={{ x: 0 }}`, `exit={{ x: '100%' }}`) and fading backdrop overlay (`exit={{ opacity: 0 }}`).
+  - `frontend/src/components/CandidateCompareModal.tsx`: Added Framer Motion enter/exit animations (`scale: 0.96, y: 8` -> `scale: 1, y: 0`) and backdrop fade on unmount.
+  - `frontend/src/components/MobilizationInquiryModal.tsx`: Wrapped in `AnimatePresence` with smooth enter and exit motion for backdrop and modal surfaces.
+  - `frontend/src/components/FilterModal.tsx`: Added `AnimatePresence` with smooth scaling and fading overlay.
+  - `frontend/src/components/ShortcutsModal.tsx`: Wrapped with `AnimatePresence` and spring-free ease curves.
+  - `frontend/src/components/ExportShortlistModal.tsx`: Added `AnimatePresence` with smooth scale/fade exit.
+  - `frontend/src/components/AddCrewMemberModal.tsx`: Added `AnimatePresence` with smooth exit for backdrop and dialog card.
+  - `frontend/src/components/ProfileDetailModal.tsx`: Upgraded modal shell to `motion.div` and wrapped instance in `AnimatePresence`.
+- **Workspace View Mode Transitions (`App.tsx`)**:
+  - Wrapped view mode containers (`split`, `table`, `grid`) in `<AnimatePresence mode="wait">` keyed by `viewMode` with directional fade/slide (`initial={{ opacity: 0, y: 6 }}`, `animate={{ opacity: 1, y: 0 }}`, `exit={{ opacity: 0, y: -6 }}`), eliminating visual layout jumps when toggling views.
+- **Dynamic Elements & Notification Banners**:
+  - `frontend/src/components/ActiveFilterChips.tsx`: Added Framer Motion `layout` and `<AnimatePresence>` to active filter chips so badges glide together smoothly when individual filters are dismissed.
+  - `frontend/src/components/ComparisonBar.tsx`: Wrapped floating bottom action bar in conditional `AnimatePresence` so it slides out cleanly to `y: 80` when cleared or dismissed.
+  - `frontend/src/components/Toast.tsx`: Replaced CSS animation with `AnimatePresence` + `motion.div` (`initial={{ opacity: 0, y: 16 }}`, `animate={{ opacity: 1, y: 0 }}`, `exit={{ opacity: 0, y: 16 }}`), ensuring toast notifications fade out smoothly upon auto-dismissal.
+- **Verification**:
+  - `npm run lint` (0 errors), `npm run ui:audit:strict` (PASS across all 66 source files), `npm test` (54 tests passing), `npm run build` (clean bundle), deployed and running on port 5173.
+
+## 2026-09-04 — Lighthouse audit & web vitals optimization (Antigravity)
+
+Conducted end-to-end Lighthouse audit and resolved all flagged opportunities, boosting scores across all core categories:
+
+- **Audit Results**:
+  - **Performance**: `97 / 100` (FCP: 1.0s, LCP: 1.1s, CLS: 0, TBT: 0ms, Speed Index: 1.0s)
+  - **Accessibility**: `100 / 100`
+  - **Best Practices**: `100 / 100` (improved from 92)
+  - **SEO**: `100 / 100` (improved from 92)
+- `frontend/src/initTheme.ts` & `frontend/index.html`:
+  - Migrated inline theme determination script from `index.html` to a bundled pre-render module (`initTheme.ts`), resolving the Content Security Policy (CSP) violation for inline scripts (`script-src 'self'`).
+- `frontend/public/robots.txt`:
+  - Created standard crawler `robots.txt`, resolving the 404/SPA index.html fallback error flagged by search engine crawlers.
+- `frontend/nginx.conf.template`:
+  - Configured 1-year immutable caching for fingerprinted static assets (`Cache-Control: public, max-age=31536000, immutable`) and revalidation rules for `index.html`.
+- `frontend/src/App.tsx`:
+  - Added explicit intrinsic `width={104}` and `height={28}` attributes to the header brand logo image, eliminating unsized image warnings and preventing Cumulative Layout Shift (CLS).
+
+## 2026-09-04 — Specialist comparison flow, avatar photos & single-contractor quick-add (Antigravity)
+
+Fixed unresponsive comparison button when 1 contractor is selected, restored profile avatar images, and enhanced single-candidate comparison flow:
+
+- `frontend/src/components/CandidateCompareModal.tsx`:
+  - Restored contractor avatar images (`img` element with `referrerPolicy="no-referrer"` and graceful monogram fallback on missing/error) so specialist photos display properly in each column card.
+  - Added an in-modal guidance banner when 1 contractor is selected with an accessible quick-add select dropdown right at the top of the matrix to immediately pick a second specialist to compare side by side.
+  - Fully supports seamless matrix comparison whether initiated from the workspace list or directly within the modal.
+- `frontend/src/components/SpecialistTableView.tsx`:
+  - Added specialist avatar image support (`img` with initials fallback) in table rows matching card and modal representations.
+- `frontend/src/components/ComparisonBar.tsx`:
+  - Removed disabled state on the primary comparison button when 1 profile is selected so users can click into the comparison modal immediately.
+  - Replaced misleading static text with actionable CTA: `Compare (1) · Add more` when 1 is selected, and `Compare Matrix (N)` when 2 or more are selected.
+  - Aligned button styling with design system semantic tokens (`min-h-9 px-3.5 rounded-lg bg-action hover:bg-action-hover text-on-action focus-visible:ring-2 focus-visible:ring-focus`).
+
+## 2026-09-04 — Specialist comparison matrix (CandidateCompareModal) polish (Antigravity)
+
+Polished the side-by-side specialist comparison modal (`CandidateCompareModal.tsx`) to strictly adhere to design system tokens and dual-theme fidelity:
+
+- `frontend/src/components/CandidateCompareModal.tsx`:
+  - Standardized the modal shell with `bg-surface border border-border-subtle rounded-[14px] shadow-2xl` and backdrop blur (`bg-canvas/80 backdrop-blur-xs`).
+  - Replaced legacy column card borders and background colors with `rounded-[14px] bg-surface-raised/40 border-border-subtle hover:border-border-strong`.
+  - Upgraded avatars to high-contrast monogram square avatars (`rounded-[10px] bg-surface-raised border border-border-subtle`) with floating availability indicator dots.
+  - Standardized all button controls (`min-h-9 px-3 rounded-lg`, `text-on-action bg-action hover:bg-action-hover`) and focus rings (`focus-visible:ring-2 focus-visible:ring-focus`).
+  - Upgraded matrix rows with uniform `border-border-subtle` separators, `badge-accent` competency tags, and `font-mono` metrics.
+  - Aligned candidate selector dropdown with semantic border and focus states.
+
+## 2026-09-04 — High-density matrix (SpecialistTableView) modernization (Antigravity)
+
+Modernized the high-density table matrix view for specialists (`SpecialistTableView.tsx`) to strictly adhere to design system tokens and dual-theme fidelity:
+
+- `frontend/src/components/SpecialistTableView.tsx`:
+  - Replaced legacy zinc borders (`divide-zinc-800/60`) and ad-hoc color classes with semantic tokens (`divide-border-subtle/80`, `bg-surface-raised`, `border-border-strong`).
+  - Standardized action buttons with minimum 36-44px touch targets (`inline-flex min-h-9 min-w-9 rounded-lg`), accessible focus rings (`focus-visible:ring-2 focus-visible:ring-focus`), and semantic state colors.
+  - Replaced raw image avatars with high-contrast monogram square avatars (`rounded-[10px] bg-surface-raised border border-border-subtle`) with floating availability indicator dots.
+  - Upgraded table status badges to semantic tokens (`badge-accent`, `badge-positive`, `badge-neutral`).
+  - Enhanced column toggle dropdown menu with backdrop blur, semantic tokens (`bg-surface border border-border-strong rounded-[14px] shadow-2xl`), and keyboard accessibility attributes.
+
+## 2026-09-04 — Codified engineering standards across AGENTS.md guidelines (Antigravity)
+
+Codified the core engineering pillars (clean, efficient, styled, modular, maintainable, lean, and debt-resistant) and strict theme consistency into the project's agent guidance documents:
+
+- `AGENTS.md`:
+  - Added explicit engineering mandate to "Non-negotiable rules" covering Clean & Readable, Efficient & Performant, Lean & Lightweight (zero bloat, minimal bundles), Debt-Resistant (prevent technical debt, fix root causes), Styled & Consistent (zero tolerance for inconsistency across buttons, windows/surfaces, typography/fonts, modals, and dual-theme symmetry), Modular & Decoupled, and Maintainable & Type-Safe.
+- `frontend/AGENTS.md`:
+  - Added strict theme and design consistency specifications across buttons (token hierarchy & 44px min touch targets), windows/panels (semantic surfaces & uniform `rounded-[14px]`), typography (`font-sans`/`font-mono` role hierarchy), and modal architecture (backdrop, shell, focus trap).
+  - Enforced dual-theme fidelity across both dark and light modes.
+- `backend/AGENTS.md`:
+  - Updated "Backend rules" to enforce Pythonic clean code, async I/O efficiency, minimal resource overhead, active technical debt mitigation, strict Ruff styling and domain vocabulary, layer separation, and complete type safety.
+
+## 2026-09-04 — Split-pane resize drag handle & responsive ergonomics (Antigravity)
+
+Implemented interactive draggable divider between candidate list and dossier pane in split view:
+
+- `frontend/src/App.tsx`:
+  - Transformed split view container into a responsive flex layout with dynamic `splitRatio` percentage on desktop breakpoints (`md:`).
+  - Built interactive draggable gutter (`role="separator"`, `aria-orientation="vertical"`, `aria-valuenow`, `aria-valuemin="25"`, `aria-valuemax="60"`).
+  - Added smooth mouse/pointer dragging with global window listeners, body cursor styling, and text selection safety.
+  - Implemented double-click preset cycling snapping between 35% (default balanced) -> 50% (wide list) -> 28% (compact list) -> 35%.
+  - Added keyboard accessibility: ArrowLeft / ArrowRight to adjust ratio by 2%, Home / End to snap to bounds, and Enter / Space to cycle presets.
+  - Persisted user's chosen ratio in `localStorage` (`hydenlyne_split_pane_ratio`).
+- `frontend/src/components/ShortcutsModal.tsx`:
+  - Added divider resize shortcut documentation (`← / → (divider)`) to the cheatsheet.
+
+## 2026-09-04 — Linear-feel keyboard mastery & micro-interactions (Antigravity)
+
+Implemented tactile power-user keyboard navigation and micro-interactions across the workspace for rapid, mouse-free candidate appraisal:
+
+- `frontend/src/hooks/useKeyboardNavigation.ts`:
+  - Upgraded candidate list navigation (`J`/`K`, `ArrowDown`/`ArrowUp`, `Home`/`End`) to smoothly auto-scroll focused rows into view (`behavior: 'smooth'`).
+  - Added layout view hotkeys: <kbd>1</kbd> for Split view, <kbd>2</kbd> for Cards grid, <kbd>3</kbd> for Matrix spreadsheet, with instant toast feedback.
+  - Added contractor quick comparison toggle hotkey <kbd>X</kbd> to rapidly compare up to 4 contractors on the fly without clicking.
+- `frontend/src/App.tsx`:
+  - Connected `viewMode`, `setViewMode`, and `onToggleCompare` into the keyboard navigation pipeline.
+  - Added subtle keyboard hints (<kbd>J</kbd>/<kbd>K</kbd>) directly in the sticky Results list header.
+  - Added selected contractor focus indicators and subtle <kbd>↵</kbd> action hints.
+  - Added a floating, high-utility keyboard command bar hint at the bottom right during active searches with a 1-click trigger to the full shortcuts modal.
+- `frontend/src/components/ShortcutsModal.tsx`:
+  - Expanded shortcuts cheatsheet with <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> view switching, <kbd>F</kbd> focus mode toggle, <kbd>X</kbd> comparison toggle, and <kbd>M</kbd> mobilization inquiry.
+- `frontend/src/types.ts`:
+  - Added exported `DossierTab` type definition for modular tab handling.
+
+## 2026-09-04 — Overhaul contractor card & expanded dossier UI/UX (Antigravity)
+
+Redesigned contractor cards across both the non-expanded list view and expanded dossier pane to resolve visual clutter, cramped proportions, and lack of visual hierarchy.
+
+- `frontend/src/App.tsx`:
+  - Elevated non-expanded contractor card: added crisp active indicator accent strip, redesigned avatar presentation with floating status dot, clean 2-tier typography, day rate pill badge, distinct department & availability status pills, and clean metadata strip with dot separators.
+  - Eliminated micro-badge crowding and restored breathing room while preserving compact scanability.
+  - Expanded split-pane workspace container to dynamic viewport height `md:h-[calc(100vh-145px)] md:min-h-[660px]`, eliminating cramped vertical pinch.
+- `frontend/src/components/SpecialistDossierPane.tsx`:
+  - Compacted the pinned upper area from ~300px down to ~110px: consolidated day rate, department, exp, rating, and location directly alongside the header title strip.
+  - Relocated the "Why this contractor" insight block into the Overview tab body so fixed chrome leaves maximum vertical room for actual content.
+  - Rendered slim, flush segmented navigation tabs and streamlined action button paddings.
+  - Redesigned "At a glance" cards (Deployment, Strengths, Track Record) with clean border treatment, subtle hover elevation, and status indicators.
+  - Refined systems, training, geo, and client tag groupings with consistent spacing and modern pill styling.
+- `frontend/src/components/ModernHeroSearch.tsx`:
+  - Added interactive Recent Searches dropdown with localStorage persistence and 1-click jump/clear.
+  - Smoothed search container transitions between calm and active states without jarring layout jumps.
+
 ## 2026-09-04 — Standardize authorization gating against the whole bug class (Claude Code)
 
 Follow-up to "Gate shared search links behind sign-in" below: that patch

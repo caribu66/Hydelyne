@@ -15,6 +15,9 @@ interface UseKeyboardNavigationOptions {
   handleNextProfile: () => void
   setIsShortcutsOpen: Dispatch<SetStateAction<boolean>>
   showToast: (msg: string) => void
+  viewMode?: 'split' | 'grid' | 'table'
+  setViewMode?: (mode: 'split' | 'grid' | 'table') => void
+  onToggleCompare?: (profile: UserProfile) => void
 }
 
 export function useKeyboardNavigation({
@@ -31,6 +34,9 @@ export function useKeyboardNavigation({
   handleNextProfile,
   setIsShortcutsOpen,
   showToast,
+  viewMode,
+  setViewMode,
+  onToggleCompare,
 }: UseKeyboardNavigationOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -52,6 +58,28 @@ export function useKeyboardNavigation({
         e.preventDefault()
         handleToggleTheme()
         return
+      }
+
+      // View Layout Mode Switching: 1 for Split, 2 for Grid/Cards, 3 for Table/Matrix
+      if (!isFocusMode && setViewMode) {
+        if (e.key === '1') {
+          e.preventDefault()
+          setViewMode('split')
+          showToast('View: Split Workspace')
+          return
+        }
+        if (e.key === '2') {
+          e.preventDefault()
+          setViewMode('grid')
+          showToast('View: Cards Grid')
+          return
+        }
+        if (e.key === '3') {
+          e.preventDefault()
+          setViewMode('table')
+          showToast('View: Matrix Spreadsheet')
+          return
+        }
       }
 
       if (e.key.toLowerCase() === 'f' && activeSelectedProfile) {
@@ -76,7 +104,7 @@ export function useKeyboardNavigation({
         requestAnimationFrame(() => {
           const row = document.getElementById(`specialist-result-${profile.id}`)
           row?.focus()
-          row?.scrollIntoView({ block: 'nearest' })
+          row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
         })
       }
 
@@ -103,6 +131,9 @@ export function useKeyboardNavigation({
       } else if (e.key.toLowerCase() === 's' && activeSelectedProfile) {
         e.preventDefault()
         toggleBookmark(activeSelectedProfile.id)
+      } else if (e.key.toLowerCase() === 'x' && activeSelectedProfile && onToggleCompare) {
+        e.preventDefault()
+        onToggleCompare(activeSelectedProfile)
       } else if (e.key.toLowerCase() === 'c' && activeSelectedProfile) {
         e.preventDefault()
         navigator.clipboard?.writeText(activeSelectedProfile.email)
@@ -119,6 +150,6 @@ export function useKeyboardNavigation({
     results, selectedProfileId, activeSelectedProfile, toggleBookmark,
     showToast, handleRequestMobilization, isFocusMode, handlePrevProfile,
     handleNextProfile, setIsShortcutsOpen, setIsFocusMode,
-    handleToggleTheme, setSelectedProfileId,
+    handleToggleTheme, setSelectedProfileId, viewMode, setViewMode, onToggleCompare,
   ])
 }

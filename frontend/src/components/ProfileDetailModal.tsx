@@ -126,12 +126,23 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
   return (
     <div
-      className="ui-overlay-enter fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
     >
-      <div
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        className="fixed inset-0 bg-canvas/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
         ref={dialogRef}
-        className="ui-surface-enter flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[14px] border border-border-subtle bg-surface text-primary shadow-2xl sm:max-h-[94vh]"
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[14px] border border-border-subtle bg-surface text-primary shadow-2xl sm:max-h-[94vh] z-10"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -555,7 +566,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
       <ConfirmDialog
         open={isDeleteConfirmOpen}
         title={`Delete ${profile.name}?`}

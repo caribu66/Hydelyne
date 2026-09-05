@@ -1,4 +1,5 @@
 import { FC } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { FilterState } from '../types';
 import { X, RotateCcw, Filter } from 'lucide-react';
 
@@ -130,30 +131,37 @@ export const ActiveFilterChips: FC<ActiveFilterChipsProps> = ({
 
   return (
     <div id="active-filter-chips-bar" className="flex flex-wrap items-center gap-2 py-3" aria-label="Active contractor filters">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-secondary uppercase tracking-wider mr-1">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-secondary uppercase tracking-wider mr-1">
         <Filter className="w-3.5 h-3.5 text-accent" />
         <span>Active Filters ({chips.length}):</span>
       </div>
 
-      {chips.map((chip) => (
-        <span
-          key={chip.id}
-          id={chip.id}
-          className="inline-flex min-h-11 items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-lg text-xs font-medium bg-surface border border-border-subtle text-primary shadow-xs group hover:border-border-strong transition-colors"
-        >
-          <span className="text-accent text-xs font-mono font-medium uppercase">{chip.category}:</span>
-          <span className="font-medium text-primary">{chip.label}</span>
-          <button
-            type="button"
-            onClick={chip.onRemove}
-            className="inline-flex min-h-9 min-w-9 items-center justify-center text-muted hover:text-primary hover:bg-surface-raised rounded-md transition-colors cursor-pointer"
-            title={`Remove ${chip.label}`}
-            aria-label={`Remove ${chip.category} filter: ${chip.label}`}
+      <AnimatePresence>
+        {chips.map((chip) => (
+          <motion.span
+            layout
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            key={chip.id}
+            id={chip.id}
+            className="inline-flex min-h-11 items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-lg text-xs font-medium bg-surface border border-border-subtle text-primary shadow-xs group hover:border-border-strong transition-colors"
           >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </span>
-      ))}
+            <span className="text-accent text-xs font-mono font-medium uppercase">{chip.category}:</span>
+            <span className="font-medium text-primary">{chip.label}</span>
+            <button
+              type="button"
+              onClick={chip.onRemove}
+              className="inline-flex min-h-9 min-w-9 items-center justify-center text-muted hover:text-primary hover:bg-surface-raised rounded-md transition-colors cursor-pointer"
+              title={`Remove ${chip.label}`}
+              aria-label={`Remove ${chip.category} filter: ${chip.label}`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.span>
+        ))}
+      </AnimatePresence>
 
       <button
         id="clear-all-filters-chip-btn"

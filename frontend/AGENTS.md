@@ -9,6 +9,13 @@ history, shared with the backend.
 
 ## Frontend architecture
 
+- Code must always be **clean, efficient, styled, modular, and maintainable**:
+  - **Clean**: Clear semantic JSX, well-named hooks and helpers, self-explanatory props, and zero unused code.
+  - **Efficient & Lightweight**: Stay light. Zero bloat, no oversized dependencies, lean bundle sizes, and minimal DOM depth. Profile re-renders, use memoization deliberately where beneficial, avoid layout shift, and clean up listeners/timers.
+  - **Debt-Resistant**: Actively prevent technical debt. Avoid quick hacks, speculative abstractions, duplicated styling, or unmanaged component state. Fix root causes rather than masking symptoms.
+  - **Styled**: 100% adherence to design system tokens (`bg-surface`, `border-border-subtle`, `text-primary`, etc.); avoid arbitrary colors and inconsistent spacing.
+  - **Modular**: Break complex views into single-purpose components and reusable hooks (e.g. state management, keyboard navigation, dialogs).
+  - **Maintainable**: Strict typing, zero unchecked assumptions, clear prop interfaces, and tests for business utilities and critical flows.
 - `src/components/` owns presentational and composed UI surfaces. Extract a
   focused component or hook when a file mixes several workflows.
 - `src/hooks/` owns reusable interaction and server-state orchestration.
@@ -41,6 +48,12 @@ history, shared with the backend.
 
 ## Product UI contract
 
+- **Strict Theme & Design Consistency (Buttons, Windows, Fonts, Modals)**:
+  - **Buttons**: Every button must follow the design token hierarchy: primary (`bg-action text-on-action hover:bg-action-hover`), secondary (`bg-surface border border-border-subtle hover:bg-surface-raised text-secondary hover:text-primary`), or accent (`bg-accent-soft text-accent hover:border-border-strong`). Radii must be standard (`rounded-lg` or `rounded-full`), touch heights minimum 44px for click targets, with visible ring focus states (`focus-visible:ring-2 focus-visible:ring-focus`).
+  - **Windows & Panels**: Workspace windows, sidebars, panes, and cards must strictly use surface tokens (`bg-canvas`, `bg-surface`, `bg-surface-raised`), standardized border contrast (`border-border-subtle`, `border-border-strong`), and uniform rounded corners (`rounded-[14px]`). No mismatched dropshadows or ad-hoc background colors.
+  - **Fonts & Typography**: Strict typographic scale and font families (`font-sans` for labels/body text, `font-mono` for metadata/codes/metrics/rates/shortcuts). Maintain hierarchy: Primary headers (`text-primary font-semibold`), subtext/labels (`text-secondary`), supporting metadata (`text-muted`).
+  - **Modals & Dialogs**: All modals must share the same architectural shell: backdrop blur (`bg-canvas/80 backdrop-blur-xs`), card surface (`bg-surface border border-border-subtle rounded-[14px] shadow-2xl p-5 sm:p-6`), header with icon container + title + close `X` button, scrollable body, and action footer.
+  - **Dual-Theme Fidelity**: Never test or ship a surface in one theme only. Every button, input, badge, border, modal, and window must look deliberate, crisp, and high-contrast in BOTH dark and light themes.
 - Visual harmony is an acceptance criterion, not cosmetic polish. Before
   shipping a UI change, compare the edited surface with its adjacent reading
   surfaces and reuse the same hierarchy: semantic tokens, spacing rhythm,

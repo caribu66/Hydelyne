@@ -1,4 +1,5 @@
 import { FC, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { X, UserPlus, Loader2, Upload, FileText, CheckCircle } from 'lucide-react';
 import { useMutation } from '@apollo/client';
 import { CREATE_CREW_MEMBER } from '../lib/queries';
@@ -134,33 +135,45 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6" onClick={handleClose}>
-      <div
-        className="ui-surface-enter max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-[14px] border border-border-subtle bg-surface p-4 shadow-2xl sm:max-h-[92vh] sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-specialist-title"
-      >
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-raised border border-border-strong">
-              <UserPlus className="h-5 w-5 text-secondary" />
-            </div>
-            <h2 id="add-specialist-title" className="text-lg font-semibold text-primary">Add contractor</h2>
-          </div>
-          <button
-            type="button"
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 bg-canvas/80 backdrop-blur-sm"
             onClick={handleClose}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors cursor-pointer"
-            aria-label="Close"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-[14px] border border-border-subtle bg-surface p-4 shadow-2xl sm:max-h-[92vh] sm:p-6 z-10"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-specialist-title"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-surface-raised border border-border-strong">
+                  <UserPlus className="h-5 w-5 text-secondary" />
+                </div>
+                <h2 id="add-specialist-title" className="text-lg font-semibold text-primary">Add contractor</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-raised transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
         {step === 'done' ? (
           <div className="space-y-4">
@@ -347,7 +360,9 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             </div>
           </form>
         )}
+        </motion.div>
       </div>
-    </div>
+    )}
+  </AnimatePresence>
   );
 };

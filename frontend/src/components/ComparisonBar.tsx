@@ -16,16 +16,16 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
   onClearCompare,
   onRemoveProfile,
 }) => {
-  if (compareProfiles.length === 0) return null;
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ y: 80, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 80, opacity: 0 }}
-        className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 max-w-xl w-[92%] sm:w-auto"
-      >
+      {compareProfiles.length > 0 && (
+        <motion.div
+          initial={{ y: 80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 80, opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 max-w-xl w-[92%] sm:w-auto"
+        >
         <div className="flex items-center justify-between gap-3 sm:gap-5 px-4 py-2.5 rounded-[14px] bg-surface/95 border border-border-strong shadow-2xl backdrop-blur-lg">
           {/* Avatar stack & Count */}
           <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
             <button
               type="button"
               onClick={onClearCompare}
-              className="min-h-10 px-2.5 py-1.5 text-xs text-secondary hover:text-primary transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center min-h-9 px-3 rounded-lg text-xs font-medium text-secondary hover:text-primary hover:bg-surface-raised transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
               Clear
             </button>
@@ -73,16 +73,17 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
             <button
               type="button"
               onClick={onOpenCompareModal}
-              disabled={compareProfiles.length < 2}
-              className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-1.5 rounded-[10px] bg-action hover:bg-action-hover disabled:bg-surface-raised disabled:text-muted disabled:border-border-strong disabled:opacity-100 text-on-action font-medium text-xs transition-all shadow-xs cursor-pointer"
+              className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-action hover:bg-action-hover text-on-action font-semibold text-xs transition-all shadow-xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              title={compareProfiles.length < 2 ? 'Open comparison matrix to add another specialist' : 'Compare specialists side by side'}
             >
-              <Scale className="w-3.5 h-3.5" />
-              <span>{compareProfiles.length < 2 ? 'Select one more' : 'Compare Matrix'}</span>
-              {compareProfiles.length >= 2 && <ArrowRight className="w-3 h-3 ml-0.5" />}
+              <Scale className="w-3.5 h-3.5 shrink-0" />
+              <span>{compareProfiles.length < 2 ? 'Compare (1) · Add more' : `Compare Matrix (${compareProfiles.length})`}</span>
+              <ArrowRight className="w-3 h-3 ml-0.5 shrink-0" />
             </button>
           </div>
         </div>
       </motion.div>
-    </AnimatePresence>
+    )}
+  </AnimatePresence>
   );
 };

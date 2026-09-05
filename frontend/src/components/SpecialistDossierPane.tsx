@@ -239,9 +239,9 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   const latestProject = [...(profile.workHistory ?? [])]
     .sort((left, right) => (right.startDate ?? '').localeCompare(left.startDate ?? ''))[0];
   const highlightedSkills = profileSkills.slice(0, 3);
-  const sectionButtonClass = (isActive: boolean) => `min-h-11 px-3.5 py-1.5 rounded-[10px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+  const sectionButtonClass = (isActive: boolean) => `min-h-10 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
     isFocusMode ? 'text-xs sm:text-sm' : 'text-xs'
-  } ${isActive ? 'bg-surface-raised text-primary shadow-xs' : 'text-secondary hover:bg-surface hover:text-primary'}`;
+  } ${isActive ? 'bg-surface-raised text-primary shadow-xs ring-1 ring-border-strong font-semibold' : 'text-secondary hover:text-primary hover:bg-surface-raised/50'}`;
 
   const selectSecondarySection = (section: 'systems') => {
     setActiveTab(section);
@@ -321,24 +321,22 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
         </div>
       )}
 
-      {/* Header Profile Section */}
-      <div className={`border-b border-border-subtle bg-canvas/70 ${isFocusMode ? 'p-3 sm:p-4' : 'p-4 sm:p-5'}`}>
-        <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-4">
-          <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+      {/* Compact High-Efficiency Header Profile Section */}
+      <div className={`border-b border-border-subtle bg-canvas/70 shrink-0 ${isFocusMode ? 'p-3' : 'p-3.5'}`}>
+        <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
               <img
                 src={profile.avatar}
                 alt={profile.name}
                 referrerPolicy="no-referrer"
-                className={`rounded-[14px] object-cover border border-border-strong/80 shadow-lg transition-all ${
-                  isFocusMode ? 'w-18 h-18 sm:w-22 sm:h-22' : 'w-14 h-14'
+                className={`rounded-xl object-cover border border-border-strong/80 shadow-sm transition-all ${
+                  isFocusMode ? 'w-14 h-14 sm:w-16 sm:h-16' : 'w-12 h-12'
                 }`}
               />
               {isAvailableNow && (
                 <span
-                  className={`absolute -bottom-1 -right-1 rounded-full bg-positive border-2 border-border-subtle shadow-xs ${
-                    isFocusMode ? 'w-4 h-4' : 'w-3.5 h-3.5'
-                  }`}
+                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-positive border-2 border-border-subtle shadow-xs"
                   title="Ready for deployment immediately"
                 />
               )}
@@ -346,40 +344,49 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
 
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className={`font-bold text-primary tracking-tight ${isFocusMode ? 'text-xl sm:text-2xl' : 'text-base'}`}>
+                <h2 className={`font-bold text-primary tracking-tight ${isFocusMode ? 'text-lg sm:text-xl' : 'text-base'}`}>
                   <HighlightText text={profile.name} query={searchQuery} />
                 </h2>
                 {profile.isHighlyRecommended && (
-                  <span className="badge-accent inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium">
+                  <span className="badge-accent inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium">
                     <BadgeCheck className="w-3.5 h-3.5 text-accent" />
-                    <span>Verified Contractor</span>
+                    <span>Verified</span>
+                  </span>
+                )}
+                {profile.dayRate && (
+                  <span className="font-mono text-xs font-semibold text-positive bg-surface-raised px-2 py-0.5 rounded-md border border-border-subtle">
+                    £{profile.dayRate}/d
                   </span>
                 )}
               </div>
 
-              <p className={`text-secondary font-medium truncate ${isFocusMode ? 'text-sm sm:text-base' : 'text-xs'}`}>
-                <HighlightText text={profile.title} query={searchQuery} />
-              </p>
-
-              <div className="flex items-center gap-2 text-xs text-secondary pt-0.5 flex-wrap">
+              <div className="flex items-center gap-2 text-xs text-secondary flex-wrap">
+                <span className="font-medium text-primary">{profile.title}</span>
+                <span>•</span>
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-secondary" />
-                  <HighlightText text={profile.location} query={searchQuery} />
+                  <MapPin className="w-3 h-3 text-secondary" />
+                  <HighlightText text={profile.location.split(',')[0] ?? profile.location} query={searchQuery} />
                 </span>
                 <span>•</span>
                 <span className="text-accent font-medium">{profile.department}</span>
                 <span>•</span>
-                <span className="font-mono text-secondary">{profile.yearsOfExperience}y offshore exp</span>
+                <span className="font-mono text-secondary">{profile.yearsOfExperience}y exp</span>
+                {profile.rating && (
+                  <>
+                    <span>•</span>
+                    <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="flex w-full flex-wrap items-center justify-end gap-2 lg:w-auto lg:shrink-0">
+          <div className="flex items-center justify-end gap-2 shrink-0">
             {onToggleFocusMode && (
               <button
                 type="button"
                 onClick={onToggleFocusMode}
-                className={`min-h-11 min-w-11 p-2 rounded-[10px] border transition-colors cursor-pointer inline-flex items-center justify-center ${
+                className={`min-h-9 min-w-9 p-2 rounded-lg border transition-colors cursor-pointer inline-flex items-center justify-center ${
                   isFocusMode
                     ? 'bg-action border-border-strong text-on-action shadow-xs'
                     : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
@@ -387,7 +394,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 title={isFocusMode ? 'Exit focus mode (Split View)' : 'Open focused contractor view (Press F)'}
                 aria-label={isFocusMode ? 'Exit focused contractor view' : 'Open focused contractor view'}
               >
-                {isFocusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
               </button>
             )}
 
@@ -395,7 +402,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               type="button"
               onClick={() => onToggleBookmark(profile.id)}
               aria-label={isBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
-              className={`min-h-11 min-w-11 p-2 rounded-[10px] border transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`min-h-9 min-w-9 p-2 rounded-lg border transition-colors cursor-pointer inline-flex items-center justify-center ${
                 isBookmarked
                   ? 'bg-action text-on-action border-border-strong'
                   : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
@@ -403,9 +410,9 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               title={isBookmarked ? 'Saved in shortlist (Press S)' : 'Save to shortlist (Press S)'}
             >
               {isBookmarked ? (
-                <BookmarkCheck className="w-4 h-4 fill-on-action" />
+                <BookmarkCheck className="w-3.5 h-3.5 fill-on-action" />
               ) : (
-                <Bookmark className="w-4 h-4" />
+                <Bookmark className="w-3.5 h-3.5" />
               )}
             </button>
 
@@ -418,25 +425,25 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                   aria-haspopup="menu"
                   aria-expanded={isHeaderActionsOpen}
                   onClick={() => setIsHeaderActionsOpen((open) => !open)}
-                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border transition-colors ${isHeaderActionsOpen ? 'border-border-strong bg-surface-raised text-primary' : 'border-border-strong bg-surface-raised/80 text-secondary hover:text-primary'}`}
+                  className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border transition-colors ${isHeaderActionsOpen ? 'border-border-strong bg-surface-raised text-primary' : 'border-border-strong bg-surface-raised/80 text-secondary hover:text-primary'}`}
                 >
-                  <Ellipsis className="h-4 w-4" aria-hidden="true" />
+                  <Ellipsis className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
                 {isHeaderActionsOpen && (
-                  <div role="menu" aria-label={`Dossier actions for ${profile.name}`} className="absolute right-0 top-12 z-30 w-56 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                  <div role="menu" aria-label={`Dossier actions for ${profile.name}`} className="absolute right-0 top-11 z-30 w-56 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
                     {onToggleCompare && (
-                      <button type="button" role="menuitem" onClick={() => runHeaderAction(() => onToggleCompare(profile))} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
+                      <button type="button" role="menuitem" onClick={() => runHeaderAction(() => onToggleCompare(profile))} className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
                         <Scale className={`h-4 w-4 ${isCompared ? 'text-accent' : ''}`} />
                         {isCompared ? 'Remove from compare' : 'Add to compare'}
                       </button>
                     )}
                     {onPrintDossier && (
-                      <button type="button" role="menuitem" onClick={() => runHeaderAction(() => onPrintDossier(profile))} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
+                      <button type="button" role="menuitem" onClick={() => runHeaderAction(() => onPrintDossier(profile))} className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
                         <Printer className="h-4 w-4" /> Print dossier
                       </button>
                     )}
                     {canDeleteCrew && onDeleteCrew && (
-                      <button type="button" role="menuitem" onClick={() => runHeaderAction(() => setIsDeleteConfirmOpen(true))} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-danger hover:bg-danger-soft/70 hover:text-danger">
+                      <button type="button" role="menuitem" onClick={() => runHeaderAction(() => setIsDeleteConfirmOpen(true))} className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-danger hover:bg-danger-soft/70 hover:text-danger">
                         <Trash2 className="h-4 w-4" /> Delete contractor
                       </button>
                     )}
@@ -447,133 +454,89 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
           </div>
         </div>
 
-        {/* Quick Spec Strip */}
-        <div className={`grid grid-cols-2 sm:grid-cols-4 border-y border-border-subtle/70 ${isFocusMode ? 'mt-4 py-3 text-xs' : 'mt-5 py-3 text-xs'}`}>
-          <div className="px-3 py-1 sm:border-r sm:border-border-subtle/70 first:pl-0">
-            <span className="text-xs text-secondary block uppercase font-mono font-medium">Mobilization</span>
-            <span className={`font-semibold truncate flex items-center gap-1.5 mt-1 ${isAvailableNow ? 'text-positive' : 'text-secondary'} ${isFocusMode ? 'text-sm' : 'text-xs'}`}>
-              <span className={`w-2 h-2 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
-              {profile.availability}
-            </span>
-          </div>
-
-          <div className="border-l border-border-subtle/70 px-3 py-1 sm:border-l-0 sm:border-r">
-            <span className="text-xs text-secondary block uppercase font-mono font-medium">Day Rate</span>
-            <span className={`font-semibold text-positive block mt-1 font-mono ${isFocusMode ? 'text-sm' : 'text-xs'}`}>
-              {profile.dayRate ? `£${profile.dayRate}/day` : 'Negotiable'}
-            </span>
-          </div>
-
-          <div className="mt-3 border-t border-border-subtle/70 px-3 pt-3 pb-1 sm:mt-0 sm:border-t-0 sm:border-r sm:py-1">
-            <span className="text-xs text-secondary block uppercase font-mono font-medium">Experience</span>
-            <span className={`font-semibold text-primary block mt-1 font-mono ${isFocusMode ? 'text-sm' : 'text-xs'}`}>
-              {profile.yearsOfExperience} yrs offshore
-            </span>
-          </div>
-
-          <div className="mt-3 border-l border-t border-border-subtle/70 px-3 pt-3 pb-1 sm:mt-0 sm:border-t-0 sm:py-1 sm:pr-0">
-            <span className="text-xs text-secondary block uppercase font-mono font-medium">Rating</span>
-            <span className={`font-semibold text-warning block mt-1 font-mono ${isFocusMode ? 'text-sm' : 'text-xs'}`}>
-              ★ {profile.rating ? profile.rating.toFixed(1) : '—'}
-              {profile.reviewCount ? <span className="ml-1 text-muted font-normal">({profile.reviewCount})</span> : null}
-            </span>
-          </div>
-        </div>
-
-        {/* Decision summary: orient the reader before the detailed dossier. */}
-        <div className="fit-summary mt-4 flex items-start gap-3 rounded-[10px] px-3 py-3">
-          <Sparkles className="fit-summary-label mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="fit-summary-label text-xs font-semibold uppercase tracking-wider font-mono">
-              Why this contractor
-            </p>
-            <p className="mt-1 text-xs leading-5">
-              {profile.name} brings <strong className="font-semibold text-primary">{profile.yearsOfExperience} years</strong> of offshore experience in {profile.department.toLowerCase()} and is {isAvailableNow ? 'available for immediate mobilization' : profile.availability.toLowerCase()}.
-            </p>
-          </div>
-        </div>
-
-        {/* Primary sections remain visible; contractor detail is progressively disclosed. */}
-        <div role="group" aria-label={`${profile.name} dossier sections`} className="flex items-center gap-2 mt-3 pt-2 border-t border-border-subtle/80 flex-wrap">
-          <button
-            type="button"
-            aria-pressed={activeTab === 'dossier'}
-            onClick={() => setActiveTab('dossier')}
-            className={sectionButtonClass(activeTab === 'dossier')}
-          >
-            <Layers className="w-3.5 h-3.5 text-secondary" />
-            <span>Overview</span>
-          </button>
-
-          <button
-            type="button"
-            aria-pressed={activeTab === 'experience'}
-            onClick={() => setActiveTab('experience')}
-            className={sectionButtonClass(activeTab === 'experience')}
-          >
-            <BriefcaseBusiness className="w-3.5 h-3.5 text-secondary" />
-            <span>Experience</span>
-          </button>
-
-          <button
-            type="button"
-            aria-pressed={activeTab === 'credentials'}
-            onClick={() => setActiveTab('credentials')}
-            className={sectionButtonClass(activeTab === 'credentials')}
-          >
-            <GraduationCap className="w-3.5 h-3.5 text-secondary" />
-            <span>Credentials</span>
-          </button>
-
-          <button
-            type="button"
-            aria-pressed={activeTab === 'expertise'}
-            onClick={() => setActiveTab('expertise')}
-            className={sectionButtonClass(activeTab === 'expertise')}
-          >
-            <Activity className="w-3.5 h-3.5 text-secondary" />
-            <span>Skills</span>
-            <span className="px-2 py-0.5 rounded-full bg-surface-raised text-secondary font-mono text-xs">
-              {profileSkills.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            aria-pressed={activeTab === 'vault'}
-            onClick={() => setActiveTab('vault')}
-            className={sectionButtonClass(activeTab === 'vault')}
-          >
-            <FileCheck className="w-3.5 h-3.5 text-secondary" />
-            <span>Documents</span>
-            <span className="px-2 py-0.5 rounded-full bg-surface-raised text-secondary font-mono text-xs">
-              {documents.length}
-            </span>
-          </button>
-
-          <div ref={sectionMenuRef} className="relative">
+        {/* Navigation Tabs Bar - Slim & Flush */}
+        <div className="mt-2.5 pt-2 border-t border-border-subtle/50">
+          <div role="group" aria-label={`${profile.name} dossier sections`} className="flex items-center gap-1 flex-wrap">
             <button
-              ref={sectionMenuTriggerRef}
               type="button"
-              aria-haspopup="menu"
-              aria-expanded={isMoreSectionsOpen}
-              aria-pressed={isSecondarySection || isRadarModalOpen}
-              onClick={() => setIsMoreSectionsOpen((open) => !open)}
-              className={sectionButtonClass(isSecondarySection || isRadarModalOpen)}
+              aria-pressed={activeTab === 'dossier'}
+              onClick={() => setActiveTab('dossier')}
+              className={sectionButtonClass(activeTab === 'dossier')}
             >
-              <Ellipsis className="h-4 w-4" aria-hidden="true" />
-              <span>{secondarySectionLabel}</span>
+              <Layers className="w-3.5 h-3.5 text-secondary" />
+              <span>Overview</span>
             </button>
-            {isMoreSectionsOpen && (
-              <div role="menu" aria-label="More dossier sections" className="absolute right-0 top-12 z-30 w-52 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
-                <button type="button" role="menuitem" onClick={() => selectSecondarySection('systems')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
-                  <Layers className="h-4 w-4" /> Systems experience
-                </button>
-                <button type="button" role="menuitem" onClick={() => setIsRadarModalOpen(true)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
-                  <Activity className="h-4 w-4" /> Competency radar
-                </button>
-              </div>
-            )}
+
+            <button
+              type="button"
+              aria-pressed={activeTab === 'experience'}
+              onClick={() => setActiveTab('experience')}
+              className={sectionButtonClass(activeTab === 'experience')}
+            >
+              <BriefcaseBusiness className="w-3.5 h-3.5 text-secondary" />
+              <span>Experience</span>
+            </button>
+
+            <button
+              type="button"
+              aria-pressed={activeTab === 'credentials'}
+              onClick={() => setActiveTab('credentials')}
+              className={sectionButtonClass(activeTab === 'credentials')}
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-secondary" />
+              <span>Credentials</span>
+            </button>
+
+            <button
+              type="button"
+              aria-pressed={activeTab === 'expertise'}
+              onClick={() => setActiveTab('expertise')}
+              className={sectionButtonClass(activeTab === 'expertise')}
+            >
+              <Activity className="w-3.5 h-3.5 text-secondary" />
+              <span>Skills</span>
+              <span className="px-1.5 py-0.2 rounded-md bg-surface border border-border-subtle text-secondary font-mono text-xs">
+                {profileSkills.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              aria-pressed={activeTab === 'vault'}
+              onClick={() => setActiveTab('vault')}
+              className={sectionButtonClass(activeTab === 'vault')}
+            >
+              <FileCheck className="w-3.5 h-3.5 text-secondary" />
+              <span>Documents</span>
+              <span className="px-1.5 py-0.2 rounded-md bg-surface border border-border-subtle text-secondary font-mono text-xs">
+                {documents.length}
+              </span>
+            </button>
+
+            <div ref={sectionMenuRef} className="relative ml-auto">
+              <button
+                ref={sectionMenuTriggerRef}
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={isMoreSectionsOpen}
+                aria-pressed={isSecondarySection || isRadarModalOpen}
+                onClick={() => setIsMoreSectionsOpen((open) => !open)}
+                className={sectionButtonClass(isSecondarySection || isRadarModalOpen)}
+              >
+                <Ellipsis className="h-4 w-4" aria-hidden="true" />
+                <span>{secondarySectionLabel}</span>
+              </button>
+              {isMoreSectionsOpen && (
+                <div role="menu" aria-label="More dossier sections" className="absolute right-0 top-12 z-30 w-52 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                  <button type="button" role="menuitem" onClick={() => selectSecondarySection('systems')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
+                    <Layers className="h-4 w-4" /> Systems experience
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => setIsRadarModalOpen(true)} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary">
+                    <Activity className="h-4 w-4" /> Competency radar
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -710,7 +673,22 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             {profile.education && <section><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">Education</h3><p className="mt-1 text-secondary">{profile.education}</p></section>}
           </div>
         ) : (
-          <div className={isFocusMode ? 'grid grid-cols-1 lg:grid-cols-2 gap-2' : 'space-y-3'}>
+          <div className={isFocusMode ? 'grid grid-cols-1 lg:grid-cols-2 gap-2.5' : 'space-y-3'}>
+            {/* Quick Context Strip */}
+            <div className={`fit-summary flex items-start gap-3 rounded-[12px] p-3 border border-border-subtle/80 bg-surface-raised/30 ${isFocusMode ? 'lg:col-span-2' : ''}`}>
+              <div className="p-1.5 rounded-lg bg-surface-raised text-primary shrink-0 mt-0.5">
+                <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wider font-mono text-secondary">
+                  Why this contractor
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-secondary">
+                  {profile.name} brings <strong className="font-semibold text-primary">{profile.yearsOfExperience} years</strong> of offshore experience in {profile.department.toLowerCase()} and is {isAvailableNow ? 'available for immediate mobilization' : profile.availability.toLowerCase()}.
+                </p>
+              </div>
+            </div>
+
             {/* AI Summary — generated on first profile view, cached after
                 that (see backend/docs/cv-ingestion-pipeline.md). Distinct
                 from "Overview & Track Record" below: this is a synthesized,
@@ -744,50 +722,59 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               </p>
             </div>
 
-            <section aria-label="At a glance" className={`grid grid-cols-1 gap-2 sm:grid-cols-3 ${isFocusMode ? 'lg:col-span-2' : ''}`}>
+            <section aria-label="At a glance" className={`grid grid-cols-1 gap-2.5 sm:grid-cols-3 ${isFocusMode ? 'lg:col-span-2' : ''}`}>
               <button
                 type="button"
                 onClick={() => setActiveTab('credentials')}
-                className="min-h-28 rounded-[10px] border border-border-subtle bg-surface-raised/70 p-3 text-left transition-colors hover:bg-surface-selected focus:outline-hidden focus:ring-2 focus:ring-focus"
+                className="group rounded-[12px] border border-border-subtle bg-surface-raised/40 p-3.5 text-left transition-all duration-200 hover:bg-surface-raised/80 hover:border-border-strong focus:outline-hidden focus:ring-2 focus:ring-focus cursor-pointer"
               >
-                <span className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Deployment readiness</span>
-                <span className={`mt-2 block text-sm font-semibold ${isAvailableNow ? 'text-positive' : 'text-primary'}`}>{profile.availability}</span>
-                <span className="mt-1 block text-xs text-secondary">{credentialCount} credentials · {documents.length} documents{indexedDocumentCount > 0 ? ` · ${indexedDocumentCount} indexed` : ''}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted font-mono">Deployment</span>
+                  <span className={`w-2 h-2 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
+                </div>
+                <span className={`mt-2 block text-sm font-semibold tracking-tight ${isAvailableNow ? 'text-positive' : 'text-primary'}`}>{profile.availability}</span>
+                <span className="mt-1 block text-xs text-secondary">{credentialCount} credentials · {documents.length} docs{indexedDocumentCount > 0 ? ` · ${indexedDocumentCount} verified` : ''}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('expertise')}
-                className="min-h-28 rounded-[10px] border border-border-subtle bg-surface-raised/70 p-3 text-left transition-colors hover:bg-surface-selected focus:outline-hidden focus:ring-2 focus:ring-focus"
+                className="group rounded-[12px] border border-border-subtle bg-surface-raised/40 p-3.5 text-left transition-all duration-200 hover:bg-surface-raised/80 hover:border-border-strong focus:outline-hidden focus:ring-2 focus:ring-focus cursor-pointer"
               >
-                <span className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Best-fit strengths</span>
-                <span className="mt-2 block text-sm font-semibold text-primary">{profileSkills.length} recorded skills</span>
-                <span className="mt-1 line-clamp-2 block text-xs leading-5 text-secondary">{highlightedSkills.length > 0 ? highlightedSkills.join(' · ') : 'No skills extracted yet'}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted font-mono">Strengths</span>
+                  <span className="text-xs font-mono text-muted">{profileSkills.length}</span>
+                </div>
+                <span className="mt-2 block text-sm font-semibold tracking-tight text-primary">{profileSkills.length} Core Skills</span>
+                <span className="mt-1 line-clamp-2 block text-xs leading-relaxed text-secondary">{highlightedSkills.length > 0 ? highlightedSkills.join(' · ') : 'No skills extracted yet'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('experience')}
-                className="min-h-28 rounded-[10px] border border-border-subtle bg-surface-raised/70 p-3 text-left transition-colors hover:bg-surface-selected focus:outline-hidden focus:ring-2 focus:ring-focus"
+                className="group rounded-[12px] border border-border-subtle bg-surface-raised/40 p-3.5 text-left transition-all duration-200 hover:bg-surface-raised/80 hover:border-border-strong focus:outline-hidden focus:ring-2 focus:ring-focus cursor-pointer"
               >
-                <span className="text-xs font-semibold uppercase tracking-wider text-secondary font-mono">Track record</span>
-                <span className="mt-2 block text-sm font-semibold text-primary">{profile.workHistory?.length ?? 0} projects · {profile.geographicalExperience?.length ?? 0} regions</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted font-mono">Track Record</span>
+                  <span className="text-xs font-mono text-muted">{profile.workHistory?.length ?? 0}</span>
+                </div>
+                <span className="mt-2 block text-sm font-semibold tracking-tight text-primary">{profile.workHistory?.length ?? 0} Projects · {profile.geographicalExperience?.length ?? 0} Regions</span>
                 <span className="mt-1 block truncate text-xs text-secondary">{latestProject ? `${latestProject.clientName ?? 'Recent project'} · ${latestProject.role ?? latestProject.projectType ?? 'Role recorded'}` : 'No project history extracted yet'}</span>
               </button>
             </section>
 
             {/* Survey Disciplines */}
             {profile.surveyTypes && profile.surveyTypes.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <Compass className="w-3.5 h-3.5 text-secondary" />
                   <span>Survey Focus</span>
                 </h4>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {profile.surveyTypes.map((type) => (
                     <span
                       key={type}
-                      className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs"
+                      className="px-2.5 py-1 rounded-md bg-surface-raised/60 border border-border-subtle text-secondary font-medium text-xs hover:border-border-strong transition-colors"
                     >
                       <HighlightText text={type} query={searchQuery} />
                     </span>
@@ -798,7 +785,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
 
             {/* Offshore Safety Certifications with Tooltips */}
             {!isFocusMode && profile.certifications && profile.certifications.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
                   <span>Certifications</span>
@@ -812,14 +799,14 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             )}
 
             {!isFocusMode && profile.geographicalExperience && profile.geographicalExperience.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <MapPin className="w-3.5 h-3.5 text-secondary" />
                   <span>Geographical Experience</span>
                 </h4>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {profile.geographicalExperience.map((place) => (
-                    <span key={place} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">
+                    <span key={place} className="px-2.5 py-1 rounded-md bg-surface-raised/60 border border-border-subtle text-secondary font-medium text-xs hover:border-border-strong transition-colors">
                       <HighlightText text={place} query={searchQuery} />
                     </span>
                   ))}
@@ -828,14 +815,14 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             )}
 
             {!isFocusMode && profile.systemsExperience && profile.systemsExperience.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <Layers className="w-3.5 h-3.5 text-secondary" />
                   <span>Systems Experience</span>
                 </h4>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {profile.systemsExperience.map((system) => (
-                    <span key={system} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">
+                    <span key={system} className="px-2.5 py-1 rounded-md bg-surface-raised/60 border border-border-subtle text-secondary font-medium text-xs hover:border-border-strong transition-colors">
                       <HighlightText text={system} query={searchQuery} />
                     </span>
                   ))}
@@ -844,14 +831,14 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             )}
 
             {!isFocusMode && profile.trainingQualifications && profile.trainingQualifications.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <GraduationCap className="w-3.5 h-3.5 text-secondary" />
                   <span>Training / Qualifications</span>
                 </h4>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {profile.trainingQualifications.map((item) => (
-                    <span key={item} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">
+                    <span key={item} className="px-2.5 py-1 rounded-md bg-surface-raised/60 border border-border-subtle text-secondary font-medium text-xs hover:border-border-strong transition-colors">
                       <HighlightText text={item} query={searchQuery} />
                     </span>
                   ))}
@@ -861,7 +848,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
 
             {/* Past Operators / Clients */}
             {!isFocusMode && profile.pastCompanies && profile.pastCompanies.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <Building className="w-3.5 h-3.5 text-secondary" />
                   <span>Clients</span>
@@ -870,7 +857,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                   {profile.pastCompanies.map((comp) => (
                     <span
                       key={comp}
-                      className="px-2.5 py-1 rounded-lg bg-canvas text-secondary text-xs border border-border-subtle"
+                      className="px-2.5 py-1 rounded-md bg-surface-raised/60 border border-border-subtle text-secondary text-xs hover:border-border-strong transition-colors"
                     >
                       <HighlightText text={comp} query={searchQuery} />
                     </span>

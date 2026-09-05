@@ -48,3 +48,7 @@ data/documents/
 
 # Timestamped .env backups
 .env.bak.*
+
+# Lighthouse audit reports (generated locally, not a build artifact to ship)
+lighthouse-*.report.html
+lighthouse-*.report.json

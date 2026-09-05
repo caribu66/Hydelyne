@@ -1,6 +1,8 @@
 import { FC, useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Search, ArrowUp, X, Bookmark, Send, Loader2, SlidersHorizontal } from 'lucide-react';
+import { Search, ArrowUp, X, Bookmark, Send, Loader2, SlidersHorizontal, History } from 'lucide-react';
 import { useCrewQuery, CrewQueryResult } from '../hooks/useCrewQuery';
+
+const RECENT_SEARCHES_KEY = 'hydenlyne_recent_searches';
 
 interface ModernHeroSearchProps {
   query: string;
@@ -31,7 +33,42 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
   onAIResults,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  // Load recent searches from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
+      if (saved) {
+        setRecentSearches(JSON.parse(saved).slice(0, 5));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const saveRecentSearch = (term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed || trimmed.length < 2) return;
+    try {
+      const updated = [trimmed, ...recentSearches.filter((s) => s.toLowerCase() !== trimmed.toLowerCase())].slice(0, 5);
+      setRecentSearches(updated);
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    try {
+      localStorage.removeItem(RECENT_SEARCHES_KEY);
+    } catch {
+      // ignore
+    }
+  };
 
   const { data: aiData, loading: aiLoading, isAIQuery, showSummary } = useCrewQuery(query, isAuthenticated);
 
@@ -70,15 +107,27 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (query.trim()) {
+        saveRecentSearch(query);
         onSearch(query.trim());
+        setIsFocused(false);
       }
+    } else if (e.key === 'Escape') {
+      setIsFocused(false);
     }
+  };
+
+  const handleSelectRecent = (term: string) => {
+    onChange(term);
+    saveRecentSearch(term);
+    onSearch(term);
+    setIsFocused(false);
   };
 
   return (
     <div
-      className={`w-full flex flex-col items-center justify-center transition-all duration-500 ease-out ${
-        isCalmState ? `${isAuthenticated ? 'min-h-[48vh]' : 'min-h-[calc(100dvh-4rem)]'} py-10 sm:py-14` : 'py-3'
+      ref={containerRef}
+      className={`w-full flex flex-col items-center justify-center transition-all duration-300 ease-out ${
+        isCalmState ? `${isAuthenticated ? 'min-h-[44vh]' : 'min-h-[calc(100dvh-4rem)]'} py-8 sm:py-12` : 'py-1'
       }`}
     >
       <div className="w-full max-w-2xl px-4 flex flex-col items-center">
@@ -149,7 +198,13 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
 
             <button
               type="button"
-              onClick={() => onSearch(query)}
+              onClick={() => {
+                if (query.trim()) {
+                  saveRecentSearch(query);
+                  onSearch(query.trim());
+                  setIsFocused(false);
+                }
+              }}
               disabled={isAuthenticated && !query.trim()}
               className={`min-h-11 min-w-11 p-2 rounded-[10px] transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
                 query.trim() || !isAuthenticated
@@ -162,6 +217,42 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               <ArrowUp className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
+
+          {/* Interactive Recent Searches Dropdown Menu */}
+          {isFocused && recentSearches.length > 0 && (
+            <div
+              onMouseDown={(e) => e.preventDefault()}
+              className="absolute left-0 right-0 top-full mt-2 z-50 rounded-[14px] border border-border-strong/80 bg-surface/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+            >
+              <div className="flex items-center justify-between px-2.5 py-1 text-xs text-muted font-medium border-b border-border-subtle/60 pb-1.5 mb-1">
+                <span className="flex items-center gap-1.5 font-mono uppercase tracking-wider text-xs">
+                  <History className="w-3 h-3 text-secondary" />
+                  Recent Searches
+                </span>
+                <button
+                  type="button"
+                  onClick={clearRecentSearches}
+                  className="text-xs text-muted hover:text-secondary transition-colors cursor-pointer"
+                >
+                  Clear history
+                </button>
+              </div>
+              <div className="space-y-0.5">
+                {recentSearches.map((term) => (
+                  <button
+                    key={term}
+                    type="button"
+                    onClick={() => handleSelectRecent(term)}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs text-secondary hover:bg-surface-raised hover:text-primary transition-colors cursor-pointer group"
+                  >
+                    <Search className="w-3.5 h-3.5 text-muted group-hover:text-primary transition-colors shrink-0" />
+                    <span className="truncate flex-1 font-medium">{term}</span>
+                    <span className="text-xs font-mono text-muted opacity-0 group-hover:opacity-100 transition-opacity">↵ Jump</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 flex min-h-6 items-center justify-center px-1 text-xs text-secondary">
             <span className={isAuthenticated ? 'hidden sm:inline' : 'inline'}>

@@ -33,6 +33,19 @@ extraction is deterministic by design; do not add an LLM call there.
 
 ## Non-negotiable rules
 
+- **Clean, efficient, styled, modular, maintainable code**:
+  - **Clean & Readable**: Single-responsibility functions, self-documenting naming, zero dead code, and clear intent without cognitive clutter.
+  - **Efficient & Performant**: Minimal re-renders, fast bundle footprints, zero unneeded network requests or duplicate queries, clean memory and listener disposal.
+  - **Lean & Lightweight**: Avoid bloat. Question every abstraction and external package. Prefer standard browser APIs and language built-ins over heavy utility libraries. Keep assets, bundle size, and memory usage minimal.
+  - **Debt-Resistant**: Treat technical debt prevention as an active discipline. Never take shortcuts, create temporary workarounds, copy legacy exceptions, or leave TODOs without owner and issue. Fix root causes rather than patching symptoms.
+  - **Styled & Consistent (Zero Tolerance for Inconsistency)**:
+    - **Buttons & Controls**: Use standard rounded corners (`rounded-lg` or `rounded-full`), height scale (`min-h-9`/`min-h-11`), uniform hover/active state transitions, and accessible focus rings (`focus-visible:ring-2 focus-visible:ring-focus`).
+    - **Windows, Panes & Surfaces**: Always build surfaces with semantic background tokens (`bg-canvas`, `bg-surface`, `bg-surface-raised`), standardized border strokes (`border-border-subtle`, `border-border-strong`), and uniform radii (`rounded-[14px]`). Never hardcode raw hex, RGB, or arbitrary Tailwind colors (e.g. `bg-gray-*`, `text-blue-*`).
+    - **Typography & Fonts**: Use font stack tokens (`font-sans` for interface, `font-mono` for metrics/dates/codes/rates). Follow consistent hierarchy: title (`text-sm font-semibold text-primary`), subtitle/body (`text-xs text-secondary`), and caption (`text-xs text-muted`).
+    - **Modals & Dialogs**: Standardize backdrop overlays (`bg-canvas/80 backdrop-blur-xs`), modal wrapper styling (`bg-surface border border-border-subtle rounded-[14px] shadow-2xl p-5 sm:p-6`), header with icon badge + title + close button (`X`), and keyboard focus trap.
+    - **Theme Symmetry**: Every component, button, window, and modal MUST look balanced, purposeful, and fully legible in BOTH dark and light themes.
+  - **Modular & Decoupled**: Clear separation of concerns between UI components, custom hooks, business logic, domain models, and transport layers. Reusable patterns belong in dedicated modules.
+  - **Maintainable & Type-Safe**: Strict TypeScript/Python type safety, zero unexplained casts or suppressions, well-bounded interfaces, and comprehensive test coverage so changes are durable.
 - Make the smallest coherent change that satisfies explicit acceptance
   criteria. Do not combine feature work, broad refactoring, dependency
   upgrades, and formatting churn.

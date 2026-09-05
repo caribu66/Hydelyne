@@ -1,7 +1,7 @@
 import { FC, useState, useEffect, useRef, FormEvent } from 'react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { UserProfile } from '../types';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   X,
   Send,
@@ -88,18 +88,26 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
   };
 
   return (
-    <div className="ui-overlay-enter fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-canvas/80 backdrop-blur-md">
-      <motion.div
-        ref={dialogRef}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-2xl bg-surface border border-border-subtle rounded-[14px] shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="mobilization-modal-title"
-      >
+    <AnimatePresence>
+      {isOpen && profile && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-canvas/80 backdrop-blur-md"
+        >
+          <motion.div
+            ref={dialogRef}
+            initial={{ opacity: 0, scale: 0.95, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="w-full max-w-2xl bg-surface border border-border-subtle rounded-[14px] shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobilization-modal-title"
+          >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle bg-surface/90 shrink-0">
           <div className="flex items-center gap-3">
@@ -405,6 +413,8 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
           )}
         </div>
       </motion.div>
-    </div>
+    </motion.div>
+    )}
+  </AnimatePresence>
   );
 };

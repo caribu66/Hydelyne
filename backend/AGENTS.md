@@ -25,6 +25,13 @@ to reproduce.
 
 ## Backend rules
 
+- Code must always be **clean, efficient, styled, modular, and maintainable**:
+  - **Clean**: Clear functional separation, Pythonic idiom, self-describing variable and function names, zero dead code.
+  - **Efficient & Lightweight**: Asynchronous I/O across request and service paths, optimal database queries (no N+1), lightweight task payloads, bounded timeouts, minimal resource overhead.
+  - **Debt-Resistant**: Treat technical debt as an active risk. Avoid shortcuts, ad-hoc tables/schemas, untyped dictionaries across layers, or band-aids over architectural issues. Address root causes directly.
+  - **Styled**: Strict formatting and linting via Ruff, consistent domain terminology, explicit error classes.
+  - **Modular**: Strict boundary separation across `domain`, `services`, `api/graphql`, `models`, and `tasks`.
+  - **Maintainable**: Strict mypy types, robust regression and integration tests, predictable error contracts, clear migrations.
 - Target Python 3.11. Use explicit types for public functions and meaningful
   domain types instead of unstructured dictionaries when crossing layers.
 - Use async SQLAlchemy for request and service paths. Do not introduce another
