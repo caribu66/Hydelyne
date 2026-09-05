@@ -1,15 +1,13 @@
-import { FC, useEffect, useRef, useState } from 'react';
+import { FC, useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useMutation } from '@apollo/client';
 import { UserProfile, SpecialistDocument } from '../types';
 import { CREW_MEMBERS_QUERY, VERIFY_CERTIFICATION } from '../lib/queries';
 import { DocumentVault } from './DocumentVault';
-import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { ConfirmDialog } from './ConfirmDialog';
 import {
   DossierHeader,
   DossierTabType,
   DossierBottomBar,
-  DossierRadarModal,
   DossierOverviewTab,
   DossierExperienceTab,
   DossierCredentialsTab,
@@ -18,6 +16,13 @@ import {
   DossierRadarTab,
 } from './dossier';
 import { Compass } from 'lucide-react';
+
+const DocumentPreviewModal = lazy(() =>
+  import('./DocumentPreviewModal').then((module) => ({ default: module.DocumentPreviewModal })),
+);
+const DossierRadarModal = lazy(() =>
+  import('./dossier/DossierRadarModal').then((module) => ({ default: module.DossierRadarModal })),
+);
 
 interface SpecialistDossierPaneProps {
   profile: UserProfile | null;
@@ -266,11 +271,13 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
         />
       </div>
 
-      <DossierRadarModal
-        isOpen={isRadarModalOpen}
-        onClose={() => setIsRadarModalOpen(false)}
-        profile={profile}
-      />
+      <Suspense fallback={null}>
+        <DossierRadarModal
+          isOpen={isRadarModalOpen}
+          onClose={() => setIsRadarModalOpen(false)}
+          profile={profile}
+        />
+      </Suspense>
 
       <ConfirmDialog
         open={isDeleteConfirmOpen}
@@ -281,16 +288,18 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
         onCancel={() => !isDeleting && setIsDeleteConfirmOpen(false)}
       />
 
-      <DocumentPreviewModal
-        isOpen={Boolean(previewDoc)}
-        onClose={() => setPreviewDoc(null)}
-        document={previewDoc}
-        profile={profile}
-        onShowToast={onShowToast}
-        onDelete={canManageDocuments ? onRemoveDocument : undefined}
-        onReviewAction={canManageDocuments ? onReviewDocument : undefined}
-        canReview={canManageDocuments}
-      />
+      <Suspense fallback={null}>
+        <DocumentPreviewModal
+          isOpen={Boolean(previewDoc)}
+          onClose={() => setPreviewDoc(null)}
+          document={previewDoc}
+          profile={profile}
+          onShowToast={onShowToast}
+          onDelete={canManageDocuments ? onRemoveDocument : undefined}
+          onReviewAction={canManageDocuments ? onReviewDocument : undefined}
+          canReview={canManageDocuments}
+        />
+      </Suspense>
     </>
   );
 };

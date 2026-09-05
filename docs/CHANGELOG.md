@@ -10,6 +10,22 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Route & modal dynamic code-splitting and bundle payload optimization (Antigravity)
+
+Optimized the initial frontend bundle delivery and eliminated monolithic route coupling:
+- **Top-Level Route Splitting (`src/main.tsx`)**:
+  - Dynamically split `App.tsx` (the recruiter workspace) and `ContractorDocumentUploadPage.tsx` (the external contractor upload portal) via `React.lazy()` and `Suspense`.
+  - External contractors uploading compliance documents now load only the 4.64 kB entry chunk and their 17.33 kB portal chunk, completely skipping the 136 kB main recruiter dashboard and mock datasets.
+  - Reduced the initial entry bundle `index-*.js` from **162.94 kB (44.66 kB gzip)** down to **4.64 kB (2.27 kB gzip)** — a **97% reduction** in initial JavaScript payload.
+- **Heavy Modal Lazy-Loading (`SpecialistDossierPane.tsx`)**:
+  - Dynamically imported `DocumentPreviewModal` and `DossierRadarModal` on demand when requested by user interaction, deferring document previewing and SVG radar dependencies from the main pane mount.
+- **Verification**:
+  - `npm run lint` (`tsc --noEmit && eslint .`) clean with 0 errors.
+  - `npm test` (58/58 unit tests passed).
+  - `npm run ui:audit:strict` passed across 84 source files.
+  - `npx playwright test search-bar-natural-language.spec.ts` (20/20 E2E tests passed).
+  - Production `vite build` completed in 6.62s.
+
 ## 2026-09-05 — Specialist dossier modular decomposition & UI architecture hardening (Antigravity)
 
 Decomposed monolithic `SpecialistDossierPane.tsx` (previously 1,238 lines) into clean, decoupled sub-tab components located in `frontend/src/components/dossier/`:
