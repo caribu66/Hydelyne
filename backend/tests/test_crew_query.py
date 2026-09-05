@@ -235,3 +235,16 @@ async def test_search_falls_back_when_local_ai_service_is_unavailable(db_session
 
     assert [candidate["id"] for candidate in result["results"]] == [approved.id]
     assert result["criteria"]["skills"] == ["offshore", "medic"]
+
+
+def test_current_offshore_medical_query_rule():
+    result = apply_deterministic_query_rules(
+        "Who has a current offshore medical?",
+        {"intent": "general", "entities": {}},
+    )
+
+    assert result["intent"] == "search"
+    assert result["entities"]["medical_required"] is True
+    assert result["entities"]["medical_valid"] is True
+    assert "OGUK Medical" in result["entities"]["certifications"]
+    assert "skills" not in result["entities"] or "offshore" not in result["entities"]["skills"]

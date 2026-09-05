@@ -131,7 +131,10 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
             certifications.append("OGUK Medical")
         entities["certifications"] = certifications
 
-        if any(
+        if re.search(
+            r"\b(current|valid|in-?date|up-?to-?date)\s+(?:offshore\s+)?medicals?\b|\bmedical ready\b",
+            lower_query,
+        ) or any(
             term in lower_query
             for term in (
                 "current medical",
@@ -158,7 +161,10 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
 
     # Retain useful matching even if the language model is offline. These
     # terms match tags, work history, responsibilities and credentials.
+    # Note: "offshore medical" denotes the medical certificate family, not
+    # an independent offshore project/skill requirement.
     detected_terms = list(entities.get("skills") or [])
+    lower_query_non_medical = re.sub(r"\boffshore\s+medicals?\b", "", lower_query)
     for term in (
         "offshore",
         "hydrograph",
@@ -173,7 +179,8 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
         "pam",
         "mmo",
     ):
-        if term in lower_query and term not in detected_terms:
+        query_to_check = lower_query_non_medical if term == "offshore" else lower_query
+        if term in query_to_check and term not in detected_terms:
             detected_terms.append(term)
     if detected_terms:
         entities["skills"] = detected_terms
