@@ -10,6 +10,20 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Contractor document upload links and review queue (Codex)
+
+Added provider-free, 14-day contractor document-upload links so operations can
+replace WhatsApp downloads with direct, validated submissions. Uploaded files
+reuse the existing storage/extraction pipeline and create durable staff review
+queue entries; raw tokens are never stored. Added migration 015, public upload
+page, staff link creation from the document vault, regression coverage, and ADR
+0004. Follow-up: expose the review queue as a dedicated staff workspace panel
+and add email delivery once a provider is available.
+
+## 2026-09-05 — Animated Hydenlyne Logo & Clean Minimal Search Hero (Antigravity)
+
+Moved the pulse line animation off the search bar and placed it directly inside the official Hydenlyne logo (`HydenlyneAnimatedLogo`) centered above the search input. The signature orange waveform draws across the company mark from left to right (spike up, plunge down, and horizontal underline under "HYDENLYNE") with smooth `motion/react` stroke easing upon calm view mount, then settles into the authentic brand mark. Restored the search bar container to a pristine, minimalist rounded input free of extraneous border shapes. Verified via strict UI token audits, unit tests, and production build.
+
 ## 2026-09-05 — Live migration and search projection rebuild (Codex)
 
 Applied Alembic revisions 013 and 014 to the configured live PostgreSQL

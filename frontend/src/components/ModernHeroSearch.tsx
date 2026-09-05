@@ -1,6 +1,7 @@
 import { FC, useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Search, ArrowUp, X, Bookmark, Send, Loader2, SlidersHorizontal, History } from 'lucide-react';
 import { useCrewQuery, CrewQueryResult } from '../hooks/useCrewQuery';
+import { HydenlyneAnimatedLogo } from './HydenlyneAnimatedLogo';
 
 const RECENT_SEARCHES_KEY = 'hydenlyne_recent_searches';
 
@@ -132,22 +133,15 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
       }`}
     >
       <div className="w-full max-w-2xl px-4 flex flex-col items-center">
-        {/* Refined Enterprise Editorial Header & Status (Visible in Calm/Initial State) */}
+        {/* Company Brand with Animated Logo Waveform (Calm/Initial State) */}
         {isCalmState && (
-          <div className="text-center space-y-3 mb-9 w-full animate-in fade-in slide-in-from-bottom-3 duration-500">
-            {/* Editorial Title */}
-            <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.65rem] lg:leading-[1.12] font-semibold tracking-[-0.03em] text-primary font-sans">
-              Find the right contractor for the next campaign.
-            </h1>
-
-            {/* Enterprise Subtitle */}
-            <p className="text-sm text-secondary font-normal max-w-md mx-auto leading-relaxed">
-              Search the private network by discipline, certification, region, or availability.
-            </p>
+          <div className="text-center mb-8 w-full flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <HydenlyneAnimatedLogo isFocused={isFocused} />
+            <h1 className="sr-only">Hydenlyne</h1>
           </div>
         )}
 
-        {/* Search Bar */}
+        {/* Search Bar - Pristine and Clean */}
         <div className="relative w-full">
           {/* Search Box */}
           <div

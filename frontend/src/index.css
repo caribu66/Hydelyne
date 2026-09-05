@@ -27,6 +27,9 @@
   --color-danger: var(--ui-danger);
   --color-danger-soft: var(--ui-danger-soft);
   --color-danger-border: var(--ui-danger-border);
+  --color-brand-pulse: var(--ui-brand-pulse);
+  --color-brand-pulse-subtle: var(--ui-brand-pulse-subtle);
+  --color-brand-pulse-glow: var(--ui-brand-pulse-glow);
 }
 
 :root {
@@ -72,6 +75,9 @@
   --fit-summary-border: #52525b;
   --fit-summary-label: #d4d4d8;
   --fit-summary-text: #f4f4f5;
+  --ui-brand-pulse: #f48f0d;
+  --ui-brand-pulse-subtle: rgba(244, 143, 13, 0.22);
+  --ui-brand-pulse-glow: rgba(244, 143, 13, 0.45);
   --motion-ui-duration: 180ms;
   --motion-drawer-duration: 220ms;
   --motion-ui-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -118,6 +124,9 @@
   --fit-summary-border: #a1a1aa;
   --fit-summary-label: #3f3f46;
   --fit-summary-text: #18181b;
+  --ui-brand-pulse: #ea580c;
+  --ui-brand-pulse-subtle: rgba(234, 88, 12, 0.2);
+  --ui-brand-pulse-glow: rgba(234, 88, 12, 0.4);
 }
 
 @layer components {
