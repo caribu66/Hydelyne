@@ -64,6 +64,20 @@ class DocumentService:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def reprocess_document(self, document_id: str) -> DocumentModel:
+        """Reset a document's extraction status so it's picked up again."""
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(DocumentModel).where(DocumentModel.id == document_id)
+            result = await session.execute(stmt)
+            doc = result.scalar_one_or_none()
+            if not doc:
+                raise ValueError(f"Document {document_id} not found")
+            doc.extraction_status = "pending"
+            await session.commit()
+            await session.refresh(doc)
+            return doc
+
     async def get_pending_documents(self) -> list[DocumentModel]:
         """Get all documents pending extraction."""
         factory = get_session_factory()

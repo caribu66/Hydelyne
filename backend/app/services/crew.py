@@ -370,6 +370,37 @@ class CertificationService:
 
             return cert
 
+    async def update_certification(
+        self, cert_id: str, status: Optional[str] = None
+    ) -> Certification:
+        """Update a certification's status."""
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(Certification).where(Certification.id == cert_id)
+            result = await session.execute(stmt)
+            cert = result.scalar_one_or_none()
+            if not cert:
+                raise ValueError(f"Certification {cert_id} not found")
+            if status is not None:
+                cert.status = status
+            await session.commit()
+            await session.refresh(cert)
+            return cert
+
+    async def verify_certification(self, cert_id: str, status: str) -> Certification:
+        """Set a certification's verification status."""
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(Certification).where(Certification.id == cert_id)
+            result = await session.execute(stmt)
+            cert = result.scalar_one_or_none()
+            if not cert:
+                raise ValueError(f"Certification {cert_id} not found")
+            cert.verification_status = status
+            await session.commit()
+            await session.refresh(cert)
+            return cert
+
     async def get_expiring_certifications(self, days: int = 30) -> list[Certification]:
         """Get certifications expiring within the specified number of days."""
         factory = get_session_factory()

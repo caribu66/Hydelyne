@@ -10,6 +10,55 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Extract remaining document/cert/project mutations out of graphql/schema.py (slice 3) — closes the "direct DB orchestration" debt item (Claude Code)
+
+Third and final slice targeting `docs/AUDIT_2026-09-02.md`'s "GraphQL
+schema ... contain[s] direct database orchestration" finding. Extracted
+the six resolvers still doing inline `select()`/session work:
+`reprocessDocument` → `DocumentService.reprocess_document`;
+`updateCertification`/`verifyCertification` →
+`CertificationService.update_certification`/`.verify_certification`
+(`app/services/crew.py`); `createProject`/`updateProject`/
+`assignCrewToProject` → new methods on `ProjectService`
+(`app/services/project.py`, previously read-only from slice 1).
+
+All six had only negative-authorization (FORBIDDEN) test coverage in
+`test_auth.py` — zero prior test verified their actual success-path
+behavior. Wrote 7 characterization tests
+(`backend/tests/test_project_and_certification_mutations.py`), ran them
+against the unrefactored resolvers first, then extracted, then confirmed
+unchanged.
+
+**Checked what's left rather than assuming this is "close enough"**: grepped
+every remaining `get_session_factory()` call site in `schema.py` (4 left:
+`crewSummary`, `queryCrew`, `generateReport`, the retired
+`uploadCvAndExtract`). All four open a session purely to hand it to a
+service method (`consultant_knowledge_service.summarize/search`,
+`report_service.build_report_data`) — the pattern `backend/AGENTS.md`
+explicitly recommends ("receive sessions/clients through explicit
+parameters"), not raw inline queries. **Zero resolvers with direct database
+orchestration remain in `schema.py`** — this closes that audit finding
+completely, not just reduces it.
+
+Result: `app/graphql/schema.py` **843 → 793 lines** this slice (**1040 →
+793, ~24%, across all three slices**). Verified: `ruff format --check`/
+`ruff check` (clean), `mypy app` (0 issues, 48 files), `bandit -r app -q`
+(exit 0), `pytest tests -q` (**127 passed**, up from 120 — 7 new, 0
+removed, every pre-existing test unchanged), `alembic heads` (single head).
+No API/contract change.
+
+**Follow-up for the next session**: with the GraphQL-orchestration debt
+item closed, the large-file backlog is now: `App.tsx` (1597 lines, still
+growing from concurrent UI work), `SpecialistDossierPane.tsx` (1078),
+`crew_query.py` (846, untouched, no direct-orchestration issue — it's large
+because of genuinely complex natural-language query parsing, a different
+kind of debt than schema.py's was). `schema.py` itself, at 793 lines, is
+still over the 400-line threshold but no longer has a clear next extraction
+target the same way it did — further reduction there would mean
+decomposing the file by GraphQL concern (e.g. separate `queries.py`/
+`mutations.py` modules), not moving more logic out, since the logic that
+belonged elsewhere is now elsewhere.
+
 ## 2026-09-05 — Extract crew-member mutations out of graphql/schema.py (slice 2) (Claude Code)
 
 Second slice of the large-file decomposition, picking up exactly where

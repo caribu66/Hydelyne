@@ -572,17 +572,8 @@ class Mutation:
     @strawberry.mutation
     @require_admin
     async def reprocess_document(self, info: Info, document_id: str) -> DocumentType:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(DocumentModel).where(DocumentModel.id == document_id)
-            result = await session.execute(stmt)
-            doc = result.scalar_one_or_none()
-            if not doc:
-                raise ValueError(f"Document {document_id} not found")
-            doc.extraction_status = "pending"
-            await session.commit()
-            await session.refresh(doc)
-            return _model_to_graphql_document(doc)
+        doc = await document_service.reprocess_document(document_id)
+        return _model_to_graphql_document(doc)
 
     @strawberry.mutation
     @require_admin
@@ -635,18 +626,10 @@ class Mutation:
         id: str,
         status: Optional[CertStatus] = None,
     ) -> Certification:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(CertificationModel).where(CertificationModel.id == id)
-            result = await session.execute(stmt)
-            cert = result.scalar_one_or_none()
-            if not cert:
-                raise ValueError(f"Certification {id} not found")
-            if status is not None:
-                cert.status = status.value
-            await session.commit()
-            await session.refresh(cert)
-            return _model_to_graphql_certification(cert)
+        cert = await certification_service.update_certification(
+            id, status.value if status else None
+        )
+        return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
     @require_admin
@@ -656,17 +639,8 @@ class Mutation:
         id: str,
         status: VerificationStatus,
     ) -> Certification:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(CertificationModel).where(CertificationModel.id == id)
-            result = await session.execute(stmt)
-            cert = result.scalar_one_or_none()
-            if not cert:
-                raise ValueError(f"Certification {id} not found")
-            cert.verification_status = status.value
-            await session.commit()
-            await session.refresh(cert)
-            return _model_to_graphql_certification(cert)
+        cert = await certification_service.verify_certification(id, status.value)
+        return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
     @require_admin
@@ -682,13 +656,8 @@ class Mutation:
             project_name=project_name,
             project_type=project_type.value,
         )
-        factory = get_session_factory()
-        async with factory() as session:
-            project = dto_to_project_model(dto)
-            session.add(project)
-            await session.commit()
-            await session.refresh(project)
-            return _model_to_graphql_project(project)
+        project = await project_service.create_project(dto_to_project_model(dto))
+        return _model_to_graphql_project(project)
 
     @strawberry.mutation
     @require_admin
@@ -698,18 +667,8 @@ class Mutation:
         id: str,
         status: Optional[ProjectStatus] = None,
     ) -> Project:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(ProjectModel).where(ProjectModel.id == id)
-            result = await session.execute(stmt)
-            project = result.scalar_one_or_none()
-            if not project:
-                raise ValueError(f"Project {id} not found")
-            if status is not None:
-                project.status = status.value
-            await session.commit()
-            await session.refresh(project)
-            return _model_to_graphql_project(project)
+        project = await project_service.update_project(id, status.value if status else None)
+        return _model_to_graphql_project(project)
 
     @strawberry.mutation
     @require_admin
@@ -719,17 +678,8 @@ class Mutation:
         project_id: str,
         crew_ids: list[str],
     ) -> Project:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(ProjectModel).where(ProjectModel.id == project_id)
-            result = await session.execute(stmt)
-            project = result.scalar_one_or_none()
-            if not project:
-                raise ValueError(f"Project {project_id} not found")
-            project.crew_assigned = crew_ids
-            await session.commit()
-            await session.refresh(project)
-            return _model_to_graphql_project(project)
+        project = await project_service.assign_crew(project_id, crew_ids)
+        return _model_to_graphql_project(project)
 
     @strawberry.mutation
     @require_admin
