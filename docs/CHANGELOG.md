@@ -10,6 +10,27 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Fix `pip install -e .` on backend flat layout (Claude Code)
+
+Closed a real, previously-flagged CI-breaking bug (noted as out-of-scope in
+the 2026-09-02 "Authorization matrix" session): `backend/pyproject.toml` had
+no `[tool.setuptools]` package config, and the flat layout (`app/`, `tests/`,
+`alembic/`, `data/`, plus loose scripts like `seed_100.py` all top-level,
+with both `app/` and `tests/` carrying `__init__.py`) gave setuptools two
+plausible top-level packages to choose between. Automatic discovery refuses
+to guess in that case and `pip install -e .` — the exact command
+`.github/workflows/ci.yml`'s backend job runs — failed outright.
+
+- Added `[build-system]` (`setuptools>=68`) and
+  `[tool.setuptools.packages.find] include = ["app*"]` so only `app` and its
+  subpackages install; `tests/`, `alembic/`, `data/`, and the loose root
+  scripts are correctly left alone (they were never meant to be an
+  installed package).
+- Verified: built a clean venv and ran `pip install -e . --no-deps`, then
+  confirmed `import app` resolves to the workspace source — the CI failure
+  mode is actually gone, not just plausible-looking. `ruff check`,
+  `pytest tests -q` (109/109), and `alembic heads` (single head) still clean.
+
 ## 2026-09-05 — Fix Meilisearch filter-injection in /api/search/* (Claude Code)
 
 Closed a real, previously-flagged-but-unfixed security bug (noted in the

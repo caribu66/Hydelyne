@@ -4,6 +4,17 @@ version = "1.0.0"
 description = "Hydenlyne Crew Document Management Platform - Backend"
 requires-python = ">=3.11"
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Flat layout with several top-level directories (app/, tests/, alembic/,
+# data/) plus loose scripts (seed_100.py, dropbox_authorize.py, ...).
+# setuptools' automatic discovery refuses to guess among them; the only
+# thing that actually needs installing as an importable package is `app`.
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
