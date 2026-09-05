@@ -1,6 +1,7 @@
 import { FC, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
+import { useMenuKeyboardNav } from '../hooks/useMenuKeyboardNav';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SpecialistDocument } from '../types';
 import { HighlightText } from './HighlightText';
@@ -117,76 +118,20 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
     setSkillsQuery('');
   }, [profile?.id]);
 
-  useEffect(() => {
-    if (!isMoreSectionsOpen || isRadarModalOpen) return;
+  useMenuKeyboardNav(
+    isMoreSectionsOpen && !isRadarModalOpen,
+    sectionMenuRef,
+    sectionMenuTriggerRef,
+    () => setIsMoreSectionsOpen(false),
+  );
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!sectionMenuRef.current?.contains(event.target as Node)) setIsMoreSectionsOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsMoreSectionsOpen(false);
-        sectionMenuTriggerRef.current?.focus();
-        return;
-      }
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-      const items = Array.from(sectionMenuRef.current?.querySelectorAll('[role="menuitem"]') ?? []) as HTMLButtonElement[];
-      if (items.length === 0) return;
-      event.preventDefault();
-      const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-      const nextIndex = event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? items.length - 1
-          : event.key === 'ArrowDown'
-            ? (currentIndex + 1) % items.length
-            : (currentIndex - 1 + items.length) % items.length;
-      items[nextIndex]?.focus();
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isMoreSectionsOpen, isRadarModalOpen]);
-
-  useEffect(() => {
-    if (!isHeaderActionsOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!headerActionsRef.current?.contains(event.target as Node)) setIsHeaderActionsOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsHeaderActionsOpen(false);
-        headerActionsTriggerRef.current?.focus();
-        return;
-      }
-      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-      const items = Array.from(headerActionsRef.current?.querySelectorAll('[role="menuitem"]') ?? []) as HTMLButtonElement[];
-      if (items.length === 0) return;
-      event.preventDefault();
-      const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-      const nextIndex = event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? items.length - 1
-          : event.key === 'ArrowDown'
-            ? (currentIndex + 1) % items.length
-            : (currentIndex - 1 + items.length) % items.length;
-      items[nextIndex]?.focus();
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    requestAnimationFrame(() => headerActionsRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus());
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isHeaderActionsOpen]);
+  useMenuKeyboardNav(
+    isHeaderActionsOpen,
+    headerActionsRef,
+    headerActionsTriggerRef,
+    () => setIsHeaderActionsOpen(false),
+    true,
+  );
 
   useAccessibleDialog(isRadarModalOpen, radarDialogRef, () => setIsRadarModalOpen(false));
 

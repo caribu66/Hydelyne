@@ -10,6 +10,64 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Extract duplicated menu keyboard-nav from SpecialistDossierPane into a hook (Claude Code)
+
+First frontend slice of the large-file backlog — `App.tsx` and
+`SpecialistDossierPane.tsx` were skipped in earlier rounds because a
+concurrent session was actively editing them; picked back up once that
+settled.
+
+Found the same kind of thing the backend slices kept finding: not
+arbitrary bulk, but a specific, extractable piece. `SpecialistDossierPane.tsx`
+had two nearly byte-for-byte identical ~35-line `useEffect` blocks — one for
+the "more sections" overflow menu, one for the "header actions" menu — each
+wiring up click-outside-to-close, Escape-to-close-and-refocus-trigger, and
+arrow/Home/End roving focus among `[role="menuitem"]` children. Two
+independent, real use cases of the exact same interaction contract is
+precisely the bar `AGENTS.md` sets for justified abstraction ("do not
+generalize until at least two real use cases demonstrate the shared
+behavior") — this already had two, just not yet named as one thing.
+
+- New `frontend/src/hooks/useMenuKeyboardNav.ts`, matching the existing
+  `useAccessibleDialog.ts` hook's exact shape and conventions (`open`,
+  `RefObject`, `onClose`, included in the effect's dependency array rather
+  than fighting React over referential stability). Takes an
+  `autoFocusFirstItem` flag since the header-actions menu autofocuses on
+  open and the section menu doesn't — the one real behavioral difference
+  between the two blocks, preserved rather than papered over.
+- `SpecialistDossierPane.tsx`'s two effects replaced with two hook calls;
+  the "more sections" menu's combined guard
+  (`!isMoreSectionsOpen || isRadarModalOpen`) became the single boolean
+  `isMoreSectionsOpen && !isRadarModalOpen` passed as `open`.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run
+build` (134.76 kB entry chunk, unchanged), `npm run ui:audit:strict` (67
+files now, 0 findings), and — the real test, since this is interactive
+keyboard-navigation behavior — `npm run test:e2e:ci` **90 passed, 0
+failed**, including the tests that specifically assert keyboard
+accessibility of these exact menus
+("keeps secondary result actions keyboard accessible without visual
+clutter", "progressively discloses specialist dossier sections"). No
+manual browser click-through beyond that: reaching an authenticated dossier
+view in this environment hits the same CORS/port artifact documented in an
+earlier entry, and the e2e suite already exercises the modified code path
+with real assertions, which is stronger evidence than an unscripted manual
+click.
+
+Result: `SpecialistDossierPane.tsx` **1078 → 1023 lines** (55 lines, a
+real but modest win — the actual duplication removed was ~70 lines,
+partly offset by the new 57-line hook file, which is the honest
+accounting for extracting shared behavior rather than deleting code).
+
+**Follow-up for the next session**: `SpecialistDossierPane.tsx` is still
+1023 lines and mostly one large component body with several tab-content
+sections (`overview`/`experience`/`expertise`/`systems`/`credentials`/
+`vault`) that could become child components — a bigger, more careful slice
+than this one since it means threading many props/callbacks, not just
+deduplicating an already-self-contained effect. `App.tsx` (1597 lines,
+frontend AGENTS.md's app shell) remains untouched and is the largest file
+left in the whole backlog.
+
 ## 2026-09-05 — Extract deterministic query rules from crew_query.py into app/domain (Claude Code)
 
 Next item on the large-file backlog after `schema.py` (`App.tsx` and
