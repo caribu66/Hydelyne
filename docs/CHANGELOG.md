@@ -85,6 +85,72 @@ untouched; they're a differently-shaped problem (UI state coupling, not
 transaction ordering) and still actively growing from concurrent UI work,
 so they're better scoped as their own session once that work settles.
 
+## 2026-09-05 — Fix flaky/failing Playwright visual & a11y tests: wire prefers-reduced-motion into Framer Motion (Claude Code)
+
+Closed the 12 failing e2e visual-regression tests flagged by the last audit
+run — but the real bug was one level deeper than "stale snapshots."
+
+Inspected every diff image before touching anything (per `frontend/AGENTS.md`:
+"Do not update visual snapshots until the rendered change has been inspected
+and confirmed intentional"). Cropped and compared the "Refine filters"
+button, the result-card action icons, and the dossier header's shortlist
+button pixel-for-pixel against the recent UI-polish commits' own changelog
+entries — all matched exactly (button pill treatment, inline bookmark/compare
+icons, expanded shortlist label), confirming these were deliberate, symmetric
+(dark+light) design changes, not regressions. Ran `npm run test:e2e:update`
+to accept them.
+
+That still left 6 tests failing, non-reproducibly at first glance — but two
+consecutive full `test:e2e:ci` runs against the freshly-written baselines
+failed the exact same 6 tests both times, with diff images showing the
+dossier pane's content doubled/ghosted vertically. That ruled out simple
+staleness (a stale baseline doesn't reproduce *identically* against a
+just-regenerated one) and pointed at a real timing bug: **Framer Motion
+animations were still in flight when Playwright captured the screenshot**.
+
+Root cause: `expect.toHaveScreenshot`'s `animations: 'disabled'` (already
+configured) and the `@media (prefers-reduced-motion: reduce)` block in
+`index.css` both only affect native CSS animations/transitions. This app's
+extensive recent Framer Motion work (`AnimatePresence`, `motion.div` on
+nearly every modal, card, and panel) drives animation via its own JS engine,
+which neither mechanism touches — so screenshots were structurally capturing
+non-deterministic mid-animation frames, and (very likely) so was an axe-core
+accessibility scan that hit one transient low-contrast frame in one earlier
+run (a color-contrast violation on the filter dialog that never recurred
+once this fix landed — same root cause, different symptom).
+
+Fix, applied at the source rather than papered over with a sleep in the
+tests:
+- `frontend/src/main.tsx`: wrapped the app in `<MotionConfig
+  reducedMotion="user">` (re-exported from `framer-motion` via the `motion`
+  package) — this is what actually makes Framer Motion check
+  `prefers-reduced-motion` at runtime; the app previously had zero code path
+  that did this despite `frontend/AGENTS.md` explicitly requiring it.
+- `frontend/playwright.config.ts`: added `contextOptions: { reducedMotion:
+  'reduce' }` so every test browser context requests it deterministically
+  (`reducedMotion` isn't a top-level `use` option in this Playwright
+  version's types — it nests under `contextOptions`).
+- Regenerated all 12 snapshot baselines with motion now actually settled.
+
+Verified motion is genuinely fixed, not lucky: ran `npm run test:e2e:ci`
+**three consecutive times** after the fix — **90 passed, 2 skipped, 0
+failed, every time** (previously: different-looking failures depending on
+which run). Also verified in a live dev server that the app still renders
+and the menu drawer still opens/animates correctly with `MotionConfig` in
+place — wrapping the whole tree in a context provider is exactly the kind of
+change that's easy to get subtly wrong. `npm run lint` (0 errors — Playwright
+config typing required the `contextOptions` nesting fix above), `npm run
+test` (54 passed), `npm run build` (134.76 kB entry chunk, no warning —
+bundle fix from two sessions ago still holding), `npm run ui:audit:strict`
+(0 findings), `npm audit` (0 vulnerabilities).
+
+No API/contract change. This is a test-infrastructure and accessibility-
+implementation fix, not a product behavior change — the app looks and
+behaves identically to a user with no motion-reduction preference; it's
+Playwright's synthetic browser context, and any real user with
+`prefers-reduced-motion` set, that now actually gets what
+`frontend/AGENTS.md` already promised.
+
 ## 2026-09-05 — Extract direct DB orchestration out of graphql/schema.py (slice 1) (Claude Code)
 
 First slice of the large-file decomposition flagged since

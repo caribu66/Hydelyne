@@ -13,6 +13,13 @@ export default defineConfig({
     baseURL: playwrightBaseURL,
     trace: 'on-first-retry',
     colorScheme: 'dark',
+    // Framer Motion drives most animations via transform/opacity outside
+    // CSS, so `expect.toHaveScreenshot`'s `animations: 'disabled'` (which
+    // only freezes CSS animations/transitions) doesn't stop them — screenshot
+    // tests were capturing mid-animation, non-deterministic frames.
+    // MotionConfig reducedMotion="user" (src/main.tsx) makes the app honor
+    // this the same way it already honors prefers-reduced-motion in CSS.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   webServer: {
     command: `npm run dev -- --host 127.0.0.1 --port ${playwrightPort}`,
