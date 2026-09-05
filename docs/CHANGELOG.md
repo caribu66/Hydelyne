@@ -10,6 +10,72 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Extract split-pane resize from App.tsx; fixes a real keyboard-focus-theft bug it exposed (Claude Code)
+
+`App.tsx` (1597 lines, the largest file in the whole decomposition backlog)
+had a fully self-contained ~100-line resizable-split-pane feature
+(drag/keyboard/double-click, clamped, persisted to localStorage) with zero
+existing test coverage — no unit test (this codebase's Vitest runs in a
+`node` environment with no jsdom/testing-library, so DOM/hook tests aren't
+this project's convention; interactive behavior is verified via Playwright)
+and no e2e test either. Wrote one first
+(`resizes the split pane with the keyboard, clamps it, and persists the
+ratio` in `authenticated-flow.spec.ts`), confirmed it passes against the
+unrefactored code, then extracted into `frontend/src/hooks/
+useSplitPaneResize.ts`.
+
+**The extraction surfaced a real, pre-existing bug — not something this
+change introduced.** The new test passed every time run in isolation but
+failed consistently (same assertion, same value, every run) inside the full
+`npm run test:e2e:ci` suite. Isolation-passes-but-full-suite-fails pointed
+at a race, not a flake, and the trace confirmed it: `Home` press received
+`"60"` instead of `"25"` — the separator's own handler never ran.
+
+Root cause: `useKeyboardNavigation.ts` has a `window`-level keydown listener
+for result-list shortcuts (Home/End/arrows/j/k) whose guard excludes
+`INPUT`/`TEXTAREA`/`SELECT`/`BUTTON`/`A` — but not a custom
+`role="separator"` `<div>`. The separator's own `onKeyDown` never called
+`stopPropagation()`, so every Home/End/arrow press on it *also* fired the
+global handler, which calls `selectResultAt(...)` and moves DOM focus to a
+result row via `requestAnimationFrame` a frame later. Under light load
+(an isolated test run) that rAF callback consistently lost the race against
+the test's next keypress; under real parallel load (the full suite, or —
+critically — a real user's system doing anything else) it consistently won,
+silently yanking keyboard focus off the resize handle onto the results list
+mid-interaction. This is a genuine accessibility bug for real keyboard
+users, exposed by a test that happened to chain multiple key presses the
+way an actual user holding/repeating keys would.
+
+Fix: `handleSplitterKeyDown` now calls `e.stopPropagation()` alongside the
+existing `e.preventDefault()` for every key it handles, so the event never
+reaches the global window listener. Verified via **two consecutive full
+`npm run test:e2e:ci` runs** (the same repeat-until-confident bar used for
+the earlier Framer Motion timing fix): **93 passed, 0 failed, both times**
+(up from 90 — the 3 new passes are this test across
+tablet/desktop/wide; mobile skips it, split view starts at tablet width).
+
+- New `frontend/src/hooks/useSplitPaneResize.ts`: state, localStorage
+  persistence, and all three interaction handlers (pointer-drag,
+  double-click-to-cycle-presets, keyboard), returning `minRatio`/`maxRatio`
+  alongside the ratio itself so `App.tsx`'s `aria-valuemin`/`aria-valuemax`
+  JSX didn't need its own duplicate copy of those constants.
+- `App.tsx`: removed the five now-fully-unused module-level constants and
+  the `useRef`/`KeyboardEvent` imports that had no remaining use once the
+  hook took over.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run
+build` (135.18 kB entry chunk, stable), `npm run ui:audit:strict` (68 files,
+0 findings). Result: `App.tsx` **1597 → 1505 lines** (92 lines).
+
+**Follow-up for the next session**: `App.tsx` is still 1505 lines and still
+the largest file in the backlog — the remaining bulk is mostly JSX (view
+mode rendering, modals wiring, result cards) rather than more extractable
+hooks like this one; the next slice there is a bigger, more careful job
+(component decomposition, not hook extraction). Worth a second look at
+`useKeyboardNavigation.ts`'s guard itself, independent of this fix — any
+other custom-role interactive element added later without an explicit
+`stopPropagation()` will hit the same class of bug.
+
 ## 2026-09-05 — Extract duplicated menu keyboard-nav from SpecialistDossierPane into a hook (Claude Code)
 
 First frontend slice of the large-file backlog — `App.tsx` and

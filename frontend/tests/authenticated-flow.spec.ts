@@ -142,6 +142,43 @@ test.describe('authenticated specialist workspace', () => {
     }
   });
 
+  test('resizes the split pane with the keyboard, clamps it, and persists the ratio', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) < 768, 'Split view begins at tablet width.');
+    await authenticate(page);
+    await mockCrewApi(page);
+    await page.goto('/?q=hydrography');
+    const splitter = page.getByRole('separator', { name: /Resize results and dossier panes/ });
+    await expect(splitter).toBeVisible();
+
+    await splitter.focus();
+    const initial = Number(await splitter.getAttribute('aria-valuenow'));
+
+    await page.keyboard.press('ArrowRight');
+    await expect(splitter).toHaveAttribute('aria-valuenow', String(initial + 2));
+
+    await page.keyboard.press('End');
+    await expect(splitter).toHaveAttribute('aria-valuenow', '60'); // MAX_SPLIT_RATIO
+    await page.keyboard.press('ArrowRight'); // clamps, does not exceed the max
+    await expect(splitter).toHaveAttribute('aria-valuenow', '60');
+
+    await page.keyboard.press('Home');
+    await expect(splitter).toHaveAttribute('aria-valuenow', '25'); // MIN_SPLIT_RATIO
+
+    await splitter.dblclick();
+    const afterCycle = await splitter.getAttribute('aria-valuenow');
+    expect(afterCycle).not.toBe('25');
+
+    await expect.poll(() =>
+      page.evaluate(() => localStorage.getItem('hydenlyne_split_pane_ratio')),
+    ).toBe(afterCycle);
+
+    await page.reload();
+    await expect(page.getByRole('separator', { name: /Resize results and dossier panes/ })).toHaveAttribute(
+      'aria-valuenow',
+      afterCycle ?? '',
+    );
+  });
+
   test('remains horizontally usable at simulated 200% zoom', async ({ page }) => {
     await authenticate(page);
     await mockCrewApi(page);

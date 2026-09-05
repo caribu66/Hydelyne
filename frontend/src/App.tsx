@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useState, useMemo, useEffect, useCallback, useRef, MouseEvent, KeyboardEvent } from 'react';
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback, MouseEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SortOption } from './types';
@@ -18,6 +18,7 @@ import { useAuth } from './hooks/useAuth';
 import { useRequireAuth } from './hooks/useRequireAuth';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useSearchWorkspace } from './hooks/useSearchWorkspace';
+import { useSplitPaneResize } from './hooks/useSplitPaneResize';
 import { DELETE_CREW_MEMBER } from './lib/queries';
 import { CrewQueryResult } from './hooks/useCrewQuery';
 import { ModernHeroSearch } from './components/ModernHeroSearch';
@@ -93,12 +94,6 @@ function queryFromCriteria(criteria: Record<string, unknown>): string {
   if (Array.isArray(criteria.skills)) criteria.skills.forEach((value) => parts.push(`with ${String(value)} experience`));
   return parts.join(' ');
 }
-
-const SPLIT_RATIO_STORAGE_KEY = 'hydenlyne_split_pane_ratio';
-const DEFAULT_SPLIT_RATIO = 35;
-const MIN_SPLIT_RATIO = 25;
-const MAX_SPLIT_RATIO = 60;
-const SNAP_RATIOS = [35, 50, 28];
 
 export default function App() {
   const { isDark, toggleTheme } = useTheme();
@@ -235,103 +230,16 @@ export default function App() {
   // Focused Workspace mode for working comfortably on a contractor
   const [isFocusMode, setIsFocusMode] = useState(false);
 
-  // Split-pane layout ratio (percentage of left list pane on desktop)
-  const [splitRatio, setSplitRatio] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem(SPLIT_RATIO_STORAGE_KEY);
-      if (saved) {
-        const parsed = parseFloat(saved);
-        if (!Number.isNaN(parsed) && parsed >= MIN_SPLIT_RATIO && parsed <= MAX_SPLIT_RATIO) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Ignore localStorage availability issues
-    }
-    return DEFAULT_SPLIT_RATIO;
-  });
-
-  const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
-  const splitContainerRef = useRef<HTMLDivElement>(null);
-
-  const updateSplitRatio = useCallback((newRatio: number) => {
-    const clamped = Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, Math.round(newRatio * 10) / 10));
-    setSplitRatio(clamped);
-    try {
-      localStorage.setItem(SPLIT_RATIO_STORAGE_KEY, clamped.toString());
-    } catch {
-      // Ignore storage write errors
-    }
-  }, []);
-
-  const handleSplitterPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    setIsDraggingSplitter(true);
-
-    const container = splitContainerRef.current;
-    if (!container) return;
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      const rect = container.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      const relativeX = moveEvent.clientX - rect.left;
-      const percentage = (relativeX / rect.width) * 100;
-      const clamped = Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, Math.round(percentage * 10) / 10));
-      setSplitRatio(clamped);
-    };
-
-    const handlePointerUp = (upEvent: PointerEvent) => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-      document.body.style.removeProperty('cursor');
-      document.body.style.removeProperty('user-select');
-      setIsDraggingSplitter(false);
-
-      const rect = container.getBoundingClientRect();
-      if (rect.width > 0) {
-        const relativeX = upEvent.clientX - rect.left;
-        const percentage = (relativeX / rect.width) * 100;
-        updateSplitRatio(percentage);
-      }
-    };
-
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-  }, [updateSplitRatio]);
-
-  const handleSplitterDoubleClick = useCallback(() => {
-    // Cycle between snap presets: 35% -> 50% -> 28% -> 35%
-    const currentRounded = Math.round(splitRatio);
-    const currentIndex = SNAP_RATIOS.findIndex((ratio) => Math.abs(ratio - currentRounded) <= 2);
-    const nextRatio = (currentIndex >= 0 && SNAP_RATIOS[(currentIndex + 1) % SNAP_RATIOS.length] !== undefined)
-      ? (SNAP_RATIOS[(currentIndex + 1) % SNAP_RATIOS.length] ?? DEFAULT_SPLIT_RATIO)
-      : DEFAULT_SPLIT_RATIO;
-    updateSplitRatio(nextRatio);
-  }, [splitRatio, updateSplitRatio]);
-
-  const handleSplitterKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      updateSplitRatio(splitRatio - 2);
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      updateSplitRatio(splitRatio + 2);
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      updateSplitRatio(MIN_SPLIT_RATIO);
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      updateSplitRatio(MAX_SPLIT_RATIO);
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleSplitterDoubleClick();
-    }
-  }, [splitRatio, updateSplitRatio, handleSplitterDoubleClick]);
+  const {
+    splitRatio,
+    minRatio: MIN_SPLIT_RATIO,
+    maxRatio: MAX_SPLIT_RATIO,
+    isDraggingSplitter,
+    splitContainerRef,
+    handleSplitterPointerDown,
+    handleSplitterDoubleClick,
+    handleSplitterKeyDown,
+  } = useSplitPaneResize();
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
