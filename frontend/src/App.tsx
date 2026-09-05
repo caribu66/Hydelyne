@@ -1013,6 +1013,24 @@ export default function App() {
                                 <div className="flex items-center gap-1 shrink-0 self-start mt-0.5" onClick={(event) => event.stopPropagation()}>
                                   <button
                                     type="button"
+                                    onClick={() => handleToggleCompare(profile)}
+                                    aria-label={isCompared ? `Remove ${profile.name} from comparison` : `Add ${profile.name} to comparison`}
+                                    title={isCompared ? 'In comparison' : 'Compare'}
+                                    className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] transition-colors cursor-pointer ${
+                                      isCompared
+                                        ? 'text-primary bg-surface-raised border border-border-strong shadow-xs ring-1 ring-border-strong/40'
+                                        : 'text-muted hover:text-primary hover:bg-surface-raised/70'
+                                    }`}
+                                  >
+                                    <Scale
+                                      className={`h-4 w-4 transition-transform active:scale-90 ${
+                                        isCompared ? 'stroke-[2.5]' : ''
+                                      }`}
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => toggleBookmark(profile.id)}
                                     aria-label={isProfileBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
                                     title={isProfileBookmarked ? 'Shortlisted' : 'Save to shortlist'}
@@ -1193,7 +1211,11 @@ export default function App() {
                             ease: [0.16, 1, 0.3, 1],
                           }}
                           key={profile.id}
-                          className="group bg-surface hover:bg-surface-raised/40 border border-border-subtle hover:border-border-strong rounded-[14px] p-5 transition-all duration-200 flex flex-col justify-between space-y-4 shadow-xs hover:shadow-md"
+                          className={`group rounded-[14px] p-5 transition-all duration-200 flex flex-col justify-between space-y-4 ${
+                            isCompared
+                              ? 'bg-surface-raised/40 border-2 border-border-strong shadow-md ring-1 ring-border-strong/50'
+                              : 'bg-surface hover:bg-surface-raised/40 border border-border-subtle hover:border-border-strong shadow-xs hover:shadow-md'
+                          }`}
                         >
                           {/* Header Row */}
                           <div className="flex items-start justify-between gap-3">
@@ -1214,12 +1236,17 @@ export default function App() {
                               </div>
 
                               <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <h3 className="font-semibold text-sm text-primary group-hover:text-primary transition-colors truncate">
                                     <HighlightText text={profile.name} query={committedQuery} />
                                   </h3>
                                   {profile.isHighlyRecommended && (
                                     <span title="Verified Contractor"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
+                                  )}
+                                  {isCompared && (
+                                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-xs font-semibold bg-surface-raised border border-border-strong text-primary shrink-0">
+                                      <Scale className="w-3 h-3 text-secondary" /> Comparing
+                                    </span>
                                   )}
                                 </div>
                                 <p className="text-xs text-secondary truncate font-normal">
@@ -1235,6 +1262,24 @@ export default function App() {
                             </div>
 
                             <div className="flex items-center gap-1 shrink-0" onClick={(event) => event.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCompare(profile)}
+                                aria-label={isCompared ? `Remove ${profile.name} from comparison` : `Add ${profile.name} to comparison`}
+                                title={isCompared ? 'In comparison' : 'Compare'}
+                                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] transition-colors cursor-pointer ${
+                                  isCompared
+                                    ? 'text-primary bg-surface-raised border border-border-strong shadow-xs ring-1 ring-border-strong/40'
+                                    : 'text-muted hover:text-primary hover:bg-surface-raised/70'
+                                }`}
+                              >
+                                <Scale
+                                  className={`h-4 w-4 transition-transform active:scale-90 ${
+                                    isCompared ? 'stroke-[2.5]' : ''
+                                  }`}
+                                  aria-hidden="true"
+                                />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => toggleBookmark(profile.id)}

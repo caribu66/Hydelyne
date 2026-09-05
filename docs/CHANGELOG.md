@@ -10,6 +10,72 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Extract direct DB orchestration out of graphql/schema.py (slice 1) (Claude Code)
+
+First slice of the large-file decomposition flagged since
+`docs/AUDIT_2026-09-02.md` (P2 #9, 1006 lines at the time; P2 #10 — "GraphQL
+schema ... contain[s] direct database orchestration", listed as a known
+legacy exception in `docs/ARCHITECTURE.md`). Treated as a genuine multi-slice
+project rather than one pass: `docs/ARCHITECTURE.md` explicitly calls for
+"extract cohesive use cases/components gradually, with characterization
+tests and no behavior-changing big-bang rewrite," so this covers exactly the
+`project`/`projects`/`documentsByCrew`/`generateReport` resolvers — the ones
+doing raw `select()` calls directly in the GraphQL layer instead of calling a
+service — and stops there. `App.tsx`, `SpecialistDossierPane.tsx`, and
+`crew_query.py` are unchanged; still open for future slices.
+
+None of these four resolvers had any prior test coverage (`generateReport`
+especially — a ~100-line branch with an LLM-success path and a
+deterministic-fallback path, both completely unverified). Wrote
+characterization tests first, ran them against the *unrefactored* code to
+confirm they genuinely capture current behavior, then extracted, then
+confirmed the same tests still pass unchanged — the standard "prove it's a
+move, not a rewrite" sequence, not skipped for expediency:
+
+- `backend/tests/test_project_and_document_queries.py` (new, 4 tests):
+  `project`, `projects` (including status filtering), `documentsByCrew`
+  (including that it doesn't leak another crew member's documents).
+- `backend/tests/test_generate_report.py` (new, 5 tests): all four
+  `ReportType` variants' deterministic data-building, plus the LLM-enriched
+  success path overriding the fallback summary/data.
+- `app/services/project.py` (new): `ProjectService.get_project` /
+  `.list_projects`, matching the existing `CrewService`/`DocumentService`
+  pattern exactly (plain class, `get_session_factory()` per method, no
+  constructor state).
+- `app/services/document_service.py`: added `get_documents_by_crew`
+  alongside the existing `get_document`/`get_pending_documents`.
+- `app/services/reports.py`: added `build_report_data` (the deterministic
+  data-gathering per report type) and `build_fallback_summary` (the
+  LLM-failure fallback text), both taking an explicit `AsyncSession`
+  parameter rather than opening a hidden connection — `ReportService` didn't
+  previously touch the database at all, only LLM formatting.
+- `app/graphql/schema.py`: the four resolvers now call these services and
+  map the result; removed the `Select`/`Any` imports that became unused once
+  the multi-branch `stmt` reassignment (previously typed `Select[Any]` to
+  let mypy accept different row types across branches) moved into
+  `build_report_data`, where each branch returns immediately and needs no
+  shared variable.
+
+Result: `app/graphql/schema.py` **1040 → 963 lines** (still well over the
+400-line threshold — this is one slice, not the fix). Verified:
+`ruff format --check`/`ruff check` (clean), `mypy app` (0 issues, 48 files),
+`bandit -r app -q` (exit 0), `pytest tests -q` (**118 passed**, up from 109 —
+9 new, 0 removed, all pre-existing tests unchanged), `alembic heads` (single
+head). No API/contract/schema change — every GraphQL field, argument, and
+response shape is identical; this is purely which Python function executes
+the query.
+
+**Follow-up for the next session**: the highest-value next slice is
+probably the crew-member mutations (`createCrewMember`/`updateCrewMember`/
+`deleteCrewMember`) — they carry real transaction/cache-invalidation/
+Dropbox-cascade ordering that's currently correct but embedded in the
+resolver, and moving it needs the same characterization-tests-first
+discipline given the higher stakes (cache invalidation only after commit,
+Dropbox-delete-before-DB-delete ordering in `deleteCrewMember`). Frontend
+`App.tsx`/`SpecialistDossierPane.tsx` decomposition is a separate, larger
+effort with different risk shape (tightly-coupled local state, not
+transaction ordering) — better scoped on its own.
+
 ## 2026-09-05 — Remove unused `@google/genai` dependency; review mockProfiles bundle cost (Claude Code)
 
 Closed one of the two small cleanup items flagged during the bundle-size fix
@@ -45,6 +111,15 @@ Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run
 build` (byte-identical chunk sizes to the prior build), `npm run
 ui:audit:strict` (0 findings), `npm audit` (0 vulnerabilities). No app code
 changed. No migration, no API/contract change.
+
+## 2026-09-05 — Elevate candidate comparison selection and floating dock (Antigravity)
+
+Substantially improved the candidate comparison experience across `App.tsx` and `ComparisonBar.tsx`:
+- **Direct 1-click comparison controls**: Added dedicated `Scale` icon action buttons in both Grid Cards and Split View list items, eliminating the need to drill into the 3-dots menu to compare candidates.
+- **Active card highlight & comparing badge**: Cards added to comparison now gain an immediate elevated border and soft surface tint (`border-2 border-border-strong shadow-md ring-1 ring-border-strong/50`), plus a subtle `Comparing` badge in the header.
+- **Slot-based floating comparison dock**: Replaced the generic overlapping avatar circles in `ComparisonBar.tsx` with dedicated comparison slots displaying avatar, name, and rate, plus an open slot prompt (`+ Select 1 more to compare`), 44px min-height action targets, and mobile-friendly removal controls.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run build` (all chunks clean), `npm run ui:audit:strict` (66 files, 0 findings), deployed to container.
 
 ## 2026-09-05 — Refine Hero search and discovery cards for executive showcase (Antigravity)
 
