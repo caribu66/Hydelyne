@@ -5,12 +5,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.domain.crew_query_rules import apply_deterministic_query_rules
 from app.models import Certification, CrewMember, WorkHistory
 from app.services.crew_query import CrewQueryService
 
 
 def test_medical_query_rule_is_a_candidate_search():
-    result = CrewQueryService._apply_deterministic_query_rules(
+    result = apply_deterministic_query_rules(
         "Who has medical experience?",
         {"intent": "general", "entities": {}},
     )
@@ -21,7 +22,7 @@ def test_medical_query_rule_is_a_candidate_search():
 
 
 def test_multi_criteria_query_extracts_nationality_medical_and_imca_family():
-    result = CrewQueryService._apply_deterministic_query_rules(
+    result = apply_deterministic_query_rules(
         "Find Spanish crew with a current medical and IMCA certification",
         {"intent": "search", "entities": {}},
     )
@@ -33,7 +34,7 @@ def test_multi_criteria_query_extracts_nationality_medical_and_imca_family():
 
 
 def test_experience_query_extracts_a_minimum_years_requirement():
-    result = CrewQueryService._apply_deterministic_query_rules(
+    result = apply_deterministic_query_rules(
         "Find Spanish crew with 3 years of experience and a medical certificate",
         {"intent": "search", "entities": {}},
     )
@@ -43,7 +44,7 @@ def test_experience_query_extracts_a_minimum_years_requirement():
 
 
 def test_polish_pam_mmo_query_keeps_nationality_and_skill_constraints():
-    result = CrewQueryService._apply_deterministic_query_rules(
+    result = apply_deterministic_query_rules(
         "PAM MMO Poland show me the top contractor",
         {"intent": "matching", "entities": {}},
     )
@@ -53,7 +54,7 @@ def test_polish_pam_mmo_query_keeps_nationality_and_skill_constraints():
 
 
 def test_controlled_typo_correction_is_visible_and_searchable():
-    result = CrewQueryService._apply_deterministic_query_rules(
+    result = apply_deterministic_query_rules(
         "Find Spanih crew with a medicl and IMCA servey QC experience",
         {"intent": "search", "entities": {}},
     )

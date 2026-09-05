@@ -10,6 +10,67 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Extract deterministic query rules from crew_query.py into app/domain (Claude Code)
+
+Next item on the large-file backlog after `schema.py` (`App.tsx` and
+`SpecialistDossierPane.tsx` were skipped this round — both are being
+actively edited by a concurrent session, making them risky moving targets;
+`crew_query.py` was the one file on the list nobody else was touching).
+
+This wasn't the same kind of debt schema.py had (misplaced layer
+responsibility spread across many resolvers) — `crew_query.py` is one
+846-line service with a few very large methods. Rather than splitting it
+arbitrarily, looked for a piece that's a genuine architectural mismatch:
+`_apply_deterministic_query_rules` (118 lines) and its helper
+`normalize_search_typos` (plus the `NATIONALITY_ALIASES`/`TYPO_VOCABULARY`
+constants they use) are a `@staticmethod` and a pure function — no
+database, no LLM client, no framework dependency, operating only on
+strings and dicts. That's exactly `app/domain/`'s charter ("pure
+vocabulary, normalization, invariants... must not import from
+api/auth/graphql/models/services/tasks" — `docs/ARCHITECTURE.md`), and the
+file already imports `CERT_ALIASES`/`CERT_FAMILIES` from
+`app/domain/certifications.py`, an established sibling for exactly this
+kind of content.
+
+- New `app/domain/crew_query_rules.py`: `NATIONALITY_ALIASES`,
+  `TYPO_VOCABULARY`, `normalize_search_typos()`, and
+  `apply_deterministic_query_rules()` (renamed from the private
+  `CrewQueryService._apply_deterministic_query_rules` static method to a
+  plain module function, since it's no longer tied to the service class at
+  all).
+- `crew_query.py`'s one call site (`_classify_intent`) now imports and
+  calls the module function directly. Removed `re`, `get_close_matches`,
+  and the `CERT_ALIASES`/`CERT_FAMILIES` imports — all three became fully
+  unused once their only call sites moved.
+- Existing test coverage was already strong here (5 of 7 tests in
+  `test_crew_query.py` exercise this exact logic directly), so this was
+  verified as a pure move rather than needing new characterization tests
+  first: updated those 5 call sites from
+  `CrewQueryService._apply_deterministic_query_rules(...)` to
+  `apply_deterministic_query_rules(...)` and confirmed identical pass/fail
+  behavior.
+
+Result: `app/services/crew_query.py` **846 → 651 lines** (23%). Verified:
+`ruff format --check`/`ruff check` (clean), `mypy app` (0 issues, 49 source
+files), `bandit -r app -q` (exit 0), `pytest tests -q` (**127 passed** —
+same count as before, 0 new, 0 removed, confirming this really was a pure
+move), `alembic heads` (single head). No behavior change, no API/contract
+change.
+
+**Follow-up for the next session**: `crew_query.py` is still 651 lines,
+mostly from `_handle_search` (236 lines) and `CREW_QUERY_PROMPTS` (a
+~95-line block of LLM prompt template strings) — the prompts are pure data
+and a safe, purely mechanical move to their own module
+(`crew_query_prompts.py`, alongside the service rather than in
+`app/domain/`, matching how `app/services/reports.py`'s
+`REPORT_TEMPLATES` is already scoped) whenever that file is picked up
+again. `_handle_search` is a bigger question: it's not pure like the rules
+extraction was (it needs `db_session`), so splitting it would mean
+multiple focused query-building helper methods, not a layer move — a
+different, more careful slice than this one. `App.tsx` and
+`SpecialistDossierPane.tsx` remain untouched, still better scoped once the
+concurrent frontend work settles.
+
 ## 2026-09-05 — Extract remaining document/cert/project mutations out of graphql/schema.py (slice 3) — closes the "direct DB orchestration" debt item (Claude Code)
 
 Third and final slice targeting `docs/AUDIT_2026-09-02.md`'s "GraphQL
