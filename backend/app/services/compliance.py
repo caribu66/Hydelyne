@@ -94,7 +94,10 @@ def _get_sync_redis_client() -> redis.Redis:
     from app.config import get_settings
 
     settings = get_settings()
-    return redis.from_url(
+    # redis-py ships py.typed, but `from_url` itself has no parameter/return
+    # annotations in its own source (same finding as cache.py's async
+    # equivalent) — genuinely unclassifiable by mypy, not a stub gap.
+    return redis.from_url(  # type: ignore[no-untyped-call, no-any-return]
         settings.REDIS_URL,
         encoding="utf-8",
         decode_responses=True,
