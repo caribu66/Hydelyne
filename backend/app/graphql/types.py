@@ -45,6 +45,7 @@ class Certification:
     expiry_date: Optional[str] = None
     renewal_date: Optional[str] = None
     status: str = "pending_verification"
+    document_ref: Optional[str] = None
     extracted_confidence: Optional[float] = None
     verification_status: str = "unverified"
 

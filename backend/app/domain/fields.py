@@ -30,3 +30,23 @@ DOCUMENT_CLASSIFICATIONS: tuple[str, ...] = (
     "compliance",
     "other",
 )
+
+CLASSIFICATION_ALIASES: dict[str, str] = {
+    "cert": "certificate",
+    "certification": "certificate",
+    "certificates": "certificate",
+    "resume": "cv",
+    "medical": "compliance",
+    "seamans_book": "compliance",
+    "survey_report": "project",
+}
+
+
+def normalize_classification(value: str | None) -> str:
+    """Normalize user/client classification strings to canonical values."""
+    if not value:
+        return "other"
+    cleaned = value.strip().lower()
+    return CLASSIFICATION_ALIASES.get(
+        cleaned, cleaned if cleaned in DOCUMENT_CLASSIFICATIONS else "other"
+    )

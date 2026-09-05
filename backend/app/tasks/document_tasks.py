@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from celery import Task
-from sqlalchemy import and_, select
+from sqlalchemy import select
 
 from app.config import get_settings
 from app.services.sync_processor import sync_processor
@@ -71,40 +71,15 @@ def process_dropbox_document(self: Task, document_id: str) -> dict[str, Any]:
 
 @celery_app.task
 def check_expiring_certifications() -> dict:
-    """Check for certifications expiring soon and notify staff."""
-    logger.info("Checking expiring certifications")
+    """Check for certifications expiring soon, update statuses, and emit alerts."""
+    logger.info("Checking expiring certifications and evaluating compliance alerts")
     try:
-        from datetime import date, timedelta
-
-        from app.models import Certification
+        from app.services.compliance import compliance_service
         from app.services.sync_processor import get_sync_session
 
         session = get_sync_session()
         try:
-            today = date.today()
-            threshold = today + timedelta(days=30)
-
-            stmt = select(Certification).where(
-                and_(
-                    Certification.expiry_date < threshold,
-                    Certification.status == "valid",
-                )
-            )
-            result = session.execute(stmt)
-            certs = result.scalars().all()
-
-            updated = 0
-            for cert in certs:
-                if cert.expiry_date is None:
-                    continue
-                if cert.expiry_date < today:
-                    cert.status = "expired"
-                else:
-                    cert.status = "expiring_soon"
-                updated += 1
-
-            session.commit()
-            return {"status": "completed", "updated": updated}
+            return compliance_service.evaluate_and_update_compliance_sync(session)
         finally:
             session.close()
     except Exception as e:

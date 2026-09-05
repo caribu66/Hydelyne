@@ -192,9 +192,9 @@ async def test_non_admin_blocked_from_admin_mutation(client, monkeypatch, mutati
     response = await client.post("/graphql", json={"query": query})
     body = response.json()
     assert "errors" in body, f"{mutation_name} did not error for a non-admin caller: {body}"
-    assert any(
-        e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"]
-    ), f"{mutation_name} did not return FORBIDDEN for a non-admin caller: {body}"
+    assert any(e.get("extensions", {}).get("code") == "FORBIDDEN" for e in body["errors"]), (
+        f"{mutation_name} did not return FORBIDDEN for a non-admin caller: {body}"
+    )
 
 
 @pytest.mark.asyncio

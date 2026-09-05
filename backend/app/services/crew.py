@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import and_, or_, select
@@ -16,6 +16,7 @@ from app.auth.session import (
     verify_session_token,
 )
 from app.database import get_session_factory
+from app.domain.certifications import normalize_cert_name
 from app.models import Certification, CrewMember, Document
 from app.services.cache import cache_service
 from app.services.consultant_knowledge import consultant_knowledge_service
@@ -388,7 +389,7 @@ class CertificationService:
             return cert
 
     async def verify_certification(self, cert_id: str, status: str) -> Certification:
-        """Set a certification's verification status."""
+        """Set a certification's verification status and update lifecycle status."""
         factory = get_session_factory()
         async with factory() as session:
             stmt = select(Certification).where(Certification.id == cert_id)
@@ -397,8 +398,24 @@ class CertificationService:
             if not cert:
                 raise ValueError(f"Certification {cert_id} not found")
             cert.verification_status = status
+            today = date.today()
+            if status == "verified":
+                if cert.expiry_date and cert.expiry_date < today:
+                    cert.status = "expired"
+                elif cert.expiry_date and cert.expiry_date <= today + timedelta(days=30):
+                    cert.status = "expiring_soon"
+                else:
+                    cert.status = "valid"
+            elif status == "rejected":
+                cert.status = "pending_verification"
+
             await session.commit()
             await session.refresh(cert)
+
+            cache_key = cache_service._make_key("compliance", cert.crew_member_id)
+            await cache_service.delete(cache_key)
+            await cache_service.invalidate_pattern("hydenlyne:compliance:*")
+
             return cert
 
     async def get_expiring_certifications(self, days: int = 30) -> list[Certification]:
@@ -424,13 +441,11 @@ class CertificationService:
         factory = get_session_factory()
         async with factory() as session:
             today = date.today()
-            threshold = today + timedelta(days=30)
 
-            stmt = select(Certification).where(
-                and_(
-                    Certification.expiry_date < threshold,
-                    Certification.status == "valid",
-                )
+            stmt = (
+                select(Certification)
+                .where(Certification.expiry_date.isnot(None))
+                .options(selectinload(Certification.crew_member))
             )
             result = await session.execute(stmt)
             certs = result.scalars().all()
@@ -439,11 +454,20 @@ class CertificationService:
             for cert in certs:
                 if cert.expiry_date is None:
                     continue
+                old_status = cert.status
+                new_status: Optional[str] = None
                 if cert.expiry_date < today:
-                    cert.status = "expired"
-                else:
-                    cert.status = "expiring_soon"
-                updated += 1
+                    if cert.status != "expired":
+                        new_status = "expired"
+                elif cert.expiry_date <= today + timedelta(days=30):
+                    if cert.status == "valid":
+                        new_status = "expiring_soon"
+
+                if new_status and new_status != old_status:
+                    cert.status = new_status
+                    if "medical" in cert.cert_type.lower() and cert.crew_member:
+                        cert.crew_member.medical_status = new_status
+                    updated += 1
 
             await session.commit()
 
@@ -451,6 +475,174 @@ class CertificationService:
                 await cache_service.invalidate_pattern("hydenlyne:compliance:*")
 
             return updated
+
+    @staticmethod
+    def _parse_date(date_val: Any) -> Optional[date]:
+        """Safely parse date strings or objects into a datetime.date."""
+        if not date_val:
+            return None
+        if isinstance(date_val, date):
+            return date_val
+        val_str = str(date_val).strip()
+        if "T" in val_str:
+            val_str = val_str.split("T")[0]
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y"):
+            try:
+                return datetime.strptime(val_str, fmt).date()
+            except (ValueError, TypeError):
+                continue
+        return None
+
+    async def link_extracted_certificate(
+        self,
+        crew_id: str,
+        document_id: str,
+        extracted_data: dict[str, Any],
+        *,
+        confidence: Optional[dict[str, Any]] = None,
+    ) -> Optional[Certification]:
+        """Auto-create or update a Certification row from extracted certificate document data.
+
+        Links the Certification record to the backing Document via document_ref.
+        If a matching unlinked certification already exists (e.g. from CV ingestion),
+        it updates it with the verified document reference and new date/number evidence.
+        """
+        raw_cert_type = (
+            extracted_data.get("certificate_type")
+            or extracted_data.get("cert_type")
+            or extracted_data.get("title")
+            or extracted_data.get("name")
+        )
+        if not raw_cert_type:
+            logger.info(f"No certificate type identified in document {document_id}")
+            return None
+
+        cert_type = normalize_cert_name(str(raw_cert_type))
+
+        cert_number = extracted_data.get("certificate_number") or extracted_data.get("cert_number")
+        if isinstance(cert_number, str):
+            cert_number = cert_number.strip() or None
+        elif cert_number is not None:
+            cert_number = str(cert_number).strip() or None
+
+        issuing_body = extracted_data.get("issuing_body") or extracted_data.get("training_provider")
+        if isinstance(issuing_body, str):
+            issuing_body = issuing_body.strip() or None
+        elif issuing_body is not None:
+            issuing_body = str(issuing_body).strip() or None
+
+        issue_date = self._parse_date(extracted_data.get("issue_date"))
+        expiry_date = self._parse_date(extracted_data.get("expiry_date"))
+        renewal_date = self._parse_date(extracted_data.get("renewal_date"))
+
+        raw_confidence = confidence or extracted_data.get("confidence")
+        extracted_confidence: Optional[float] = None
+        if isinstance(raw_confidence, dict):
+            numeric_scores = [v for v in raw_confidence.values() if isinstance(v, (int, float))]
+            if numeric_scores:
+                extracted_confidence = round(sum(numeric_scores) / len(numeric_scores), 2)
+        elif isinstance(raw_confidence, (int, float)):
+            extracted_confidence = round(float(raw_confidence), 2)
+
+        today = date.today()
+        if expiry_date:
+            if expiry_date < today:
+                status = "expired"
+            elif expiry_date <= today + timedelta(days=30):
+                status = "expiring_soon"
+            else:
+                status = "pending_verification"
+        else:
+            status = "pending_verification"
+
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = (
+                select(CrewMember)
+                .options(selectinload(CrewMember.certifications))
+                .where(CrewMember.id == crew_id)
+            )
+            result = await session.execute(stmt)
+            crew_member = result.scalar_one_or_none()
+            if not crew_member:
+                logger.warning(
+                    f"Crew member {crew_id} not found when linking certificate {document_id}"
+                )
+                return None
+
+            # Look for existing matching certification:
+            # 1. Backed by this exact document (reprocessing)
+            # 2. Or matching cert_type where document_ref is either None, empty, or already this doc
+            target_cert: Optional[Certification] = None
+            for c in crew_member.certifications:
+                if c.document_ref == document_id:
+                    target_cert = c
+                    break
+
+            if not target_cert:
+                for c in crew_member.certifications:
+                    if c.cert_type == cert_type and (
+                        not c.document_ref or c.document_ref == document_id
+                    ):
+                        target_cert = c
+                        break
+
+            if target_cert:
+                target_cert.document_ref = document_id
+                target_cert.cert_type = cert_type
+                if cert_number:
+                    target_cert.cert_number = cert_number
+                if issuing_body:
+                    target_cert.issuing_body = issuing_body
+                if issue_date:
+                    target_cert.issue_date = issue_date
+                if expiry_date:
+                    target_cert.expiry_date = expiry_date
+                if renewal_date:
+                    target_cert.renewal_date = renewal_date
+                if target_cert.status in (
+                    "pending_verification",
+                    "valid",
+                    "expiring_soon",
+                    "expired",
+                ):
+                    target_cert.status = status
+                if extracted_confidence is not None:
+                    target_cert.extracted_confidence = extracted_confidence
+            else:
+                target_cert = Certification(
+                    id=str(uuid.uuid4()),
+                    crew_member_id=crew_id,
+                    cert_type=cert_type,
+                    cert_number=cert_number,
+                    issuing_body=issuing_body,
+                    issue_date=issue_date,
+                    expiry_date=expiry_date,
+                    renewal_date=renewal_date,
+                    document_ref=document_id,
+                    status=status,
+                    verification_status="unverified",
+                    extracted_confidence=extracted_confidence,
+                )
+                session.add(target_cert)
+
+            # Keep CrewMember root medical fields in sync if this is a medical cert
+            if "medical" in cert_type.lower():
+                if expiry_date:
+                    if not crew_member.medical_expiry or expiry_date >= crew_member.medical_expiry:
+                        crew_member.medical_expiry = expiry_date
+                        crew_member.medical_status = "fit" if expiry_date >= today else "expired"
+                if issuing_body and not crew_member.medical_provider:
+                    crew_member.medical_provider = issuing_body
+
+            await session.commit()
+            await session.refresh(target_cert)
+
+            cache_key = cache_service._make_key("compliance", crew_id)
+            await cache_service.delete(cache_key)
+            await cache_service.invalidate_pattern("hydenlyne:compliance:*")
+
+            return target_cert
 
 
 auth_service = AuthService()

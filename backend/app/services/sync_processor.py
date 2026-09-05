@@ -6,6 +6,7 @@ from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
+from app.domain.fields import normalize_classification
 from app.services.extraction import extraction_service
 
 settings = get_settings()
@@ -93,7 +94,8 @@ class SyncDocumentProcessor:
 
                 if is_image:
                     extraction_result = extraction_service.extract_from_image_sync(
-                        extraction_path, doc.classification or "certificate"
+                        extraction_path,
+                        normalize_classification(doc.classification or "certificate"),
                     )
                 else:
                     text = text_extraction_service.extract_text_sync(extraction_path, doc.file_type)
@@ -103,11 +105,10 @@ class SyncDocumentProcessor:
                         doc.classification = classification_result.get("classification", "other")
                         session.commit()
 
-                    # doc.classification is a nullable ORM attribute; mypy can't
-                    # narrow it across the assignment above, and the `or` also
-                    # guards a caller that skips the not-classified branch above
-                    # while classification is still somehow empty.
-                    classification: str = doc.classification or "other"
+                    classification: str = normalize_classification(doc.classification)
+                    if doc.classification != classification:
+                        doc.classification = classification
+                        session.commit()
 
                     from app.services.cv_processing import CVProcessingService
 
@@ -132,8 +133,10 @@ class SyncDocumentProcessor:
                     raw_confidence if isinstance(raw_confidence, dict) else {}
                 )
 
+                classification = normalize_classification(doc.classification)
+
                 # If this is a CV, process the extracted data into crew member profile
-                if doc.classification == "cv" and doc.crew_member_id:
+                if classification == "cv" and doc.crew_member_id:
                     import asyncio
 
                     from app.database import dispose_engine
@@ -161,6 +164,27 @@ class SyncDocumentProcessor:
                             await dispose_engine()
 
                     asyncio.run(_enrich_profile_and_release_engine())
+
+                elif classification == "certificate" and doc.crew_member_id:
+                    import asyncio
+
+                    from app.database import dispose_engine
+                    from app.services.crew import certification_service
+
+                    crew_member_id = doc.crew_member_id
+
+                    async def _link_cert_and_release_engine() -> None:
+                        try:
+                            await certification_service.link_extracted_certificate(
+                                crew_id=crew_member_id,
+                                document_id=document_id,
+                                extracted_data=extraction_result,
+                                confidence=doc.extraction_confidence,
+                            )
+                        finally:
+                            await dispose_engine()
+
+                    asyncio.run(_link_cert_and_release_engine())
 
                 # Do not expose a terminal document status until any CV fields
                 # have been committed.  The UI uses this state to refresh the
