@@ -56,6 +56,14 @@ class DocumentService:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_documents_by_crew(self, crew_id: str) -> list[DocumentModel]:
+        """Get all documents belonging to a crew member."""
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(DocumentModel).where(DocumentModel.crew_member_id == crew_id)
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
     async def get_pending_documents(self) -> list[DocumentModel]:
         """Get all documents pending extraction."""
         factory = get_session_factory()

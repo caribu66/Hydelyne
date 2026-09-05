@@ -4,8 +4,12 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Certification, CrewMember, Document, Project
 from app.services.ollama import ollama_client
 
 logger = logging.getLogger(__name__)
@@ -71,6 +75,80 @@ Format the report as JSON:
 
 class ReportService:
     """Service for generating formatted reports using LLM."""
+
+    async def build_report_data(self, report_type: str, session: AsyncSession) -> dict[str, Any]:
+        """Deterministically gather the raw data a report is built from.
+
+        Runs before any LLM enrichment so a report always has a factual
+        basis, and so build_fallback_summary has something to summarize if
+        the LLM is unavailable.
+        """
+        if report_type == "availability":
+            crew_stmt = select(CrewMember).where(CrewMember.availability_status == "available")
+            crew_result = await session.execute(crew_stmt)
+            crew_list = crew_result.scalars().all()
+            return {
+                "available_count": len(crew_list),
+                "crew": [{"id": c.id, "name": c.full_name} for c in crew_list],
+            }
+        if report_type == "compliance":
+            cert_stmt = select(Certification).where(
+                Certification.status.in_(["expired", "expiring_soon"])
+            )
+            cert_result = await session.execute(cert_stmt)
+            certs = cert_result.scalars().all()
+            return {
+                "non_compliant_count": len(certs),
+                "certifications": [
+                    {
+                        "id": c.id,
+                        "type": c.cert_type,
+                        "status": c.status,
+                        "expiry": str(c.expiry_date) if c.expiry_date else None,
+                    }
+                    for c in certs
+                ],
+            }
+        if report_type == "project_readiness":
+            project_stmt = select(Project)
+            project_result = await session.execute(project_stmt)
+            projects = project_result.scalars().all()
+            return {
+                "project_count": len(projects),
+                "projects": [
+                    {
+                        "id": p.id,
+                        "name": p.project_name,
+                        "client": p.client_name,
+                        "status": p.status,
+                        "crew_assigned": (p.crew_assigned or []),
+                    }
+                    for p in projects
+                ],
+            }
+        # performance: performance data lives in document extracted_data; summarize what we have
+        doc_stmt = select(Document).where(Document.classification == "performance")
+        doc_result = await session.execute(doc_stmt)
+        perf_docs = doc_result.scalars().all()
+        return {
+            "performance_document_count": len(perf_docs),
+            "documents": [
+                {
+                    "id": d.id,
+                    "file_name": d.file_name,
+                    "extraction_status": d.extraction_status,
+                }
+                for d in perf_docs
+            ],
+        }
+
+    def build_fallback_summary(self, report_type: str, data: dict[str, Any]) -> str:
+        """Deterministic summary used when the LLM enrichment call fails."""
+        if report_type == "availability":
+            return f"{data.get('available_count', 0)} crew members currently available."
+        if report_type == "compliance":
+            return f"{data.get('non_compliant_count', 0)} certifications require attention."
+        return f"{report_type.title()} report generated successfully."
 
     async def generate_report(
         self,

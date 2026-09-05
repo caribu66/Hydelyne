@@ -5,10 +5,10 @@ import logging
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import strawberry
-from sqlalchemy import Select, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from strawberry import Info
@@ -56,6 +56,7 @@ from app.models import Project as ProjectModel
 from app.models import WorkHistory as WorkHistoryModel
 from app.services.crew import auth_service, certification_service, crew_service
 from app.services.document_service import document_service
+from app.services.project import project_service
 from app.services.reports import report_service
 from app.services.upload import document_upload_service
 
@@ -289,11 +290,8 @@ class Query:
     @strawberry.field
     @require_auth
     async def documents_by_crew(self, info: Info, crew_id: str) -> list[DocumentType]:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(DocumentModel).where(DocumentModel.crew_member_id == crew_id)
-            result = await session.execute(stmt)
-            return [_model_to_graphql_document(d) for d in result.scalars().all()]
+        docs = await document_service.get_documents_by_crew(crew_id)
+        return [_model_to_graphql_document(d) for d in docs]
 
     @strawberry.field
     @require_auth
@@ -327,12 +325,8 @@ class Query:
     @strawberry.field
     @require_auth
     async def project(self, info: Info, id: str) -> Optional[Project]:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(ProjectModel).where(ProjectModel.id == id)
-            result = await session.execute(stmt)
-            model = result.scalar_one_or_none()
-            return _model_to_graphql_project(model) if model else None
+        model = await project_service.get_project(id)
+        return _model_to_graphql_project(model) if model else None
 
     @strawberry.field
     @require_auth
@@ -341,13 +335,8 @@ class Query:
         info: Info,
         status: Optional[ProjectStatus] = None,
     ) -> list[Project]:
-        factory = get_session_factory()
-        async with factory() as session:
-            stmt = select(ProjectModel)
-            if status:
-                stmt = stmt.where(ProjectModel.status == status.value)
-            result = await session.execute(stmt)
-            return [_model_to_graphql_project(m) for m in result.scalars().all()]
+        models = await project_service.list_projects(status.value if status else None)
+        return [_model_to_graphql_project(m) for m in models]
 
     @strawberry.field
     @require_auth
@@ -361,68 +350,7 @@ class Query:
 
         factory = get_session_factory()
         async with factory() as session:
-            # Build report data deterministically first
-            if report_type == ReportType.AVAILABILITY:
-                stmt: Select[Any] = select(CrewMemberModel).where(
-                    CrewMemberModel.availability_status == "available"
-                )
-                result = await session.execute(stmt)
-                crew_list = result.scalars().all()
-                data = {
-                    "available_count": len(crew_list),
-                    "crew": [{"id": c.id, "name": c.full_name} for c in crew_list],
-                }
-            elif report_type == ReportType.COMPLIANCE:
-                stmt = select(CertificationModel).where(
-                    CertificationModel.status.in_(["expired", "expiring_soon"])
-                )
-                result = await session.execute(stmt)
-                certs = result.scalars().all()
-                data = {
-                    "non_compliant_count": len(certs),
-                    "certifications": [
-                        {
-                            "id": c.id,
-                            "type": c.cert_type,
-                            "status": c.status,
-                            "expiry": str(c.expiry_date) if c.expiry_date else None,
-                        }
-                        for c in certs
-                    ],
-                }
-            elif report_type == ReportType.PROJECT_READINESS:
-                stmt = select(ProjectModel)
-                result = await session.execute(stmt)
-                projects = result.scalars().all()
-                data = {
-                    "project_count": len(projects),
-                    "projects": [
-                        {
-                            "id": p.id,
-                            "name": p.project_name,
-                            "client": p.client_name,
-                            "status": p.status,
-                            "crew_assigned": (p.crew_assigned or []),
-                        }
-                        for p in projects
-                    ],
-                }
-            else:  # PERFORMANCE
-                # Note: performance data lives in document extracted_data; summarize what we have
-                stmt = select(DocumentModel).where(DocumentModel.classification == "performance")
-                result = await session.execute(stmt)
-                perf_docs = result.scalars().all()
-                data = {
-                    "performance_document_count": len(perf_docs),
-                    "documents": [
-                        {
-                            "id": d.id,
-                            "file_name": d.file_name,
-                            "extraction_status": d.extraction_status,
-                        }
-                        for d in perf_docs
-                    ],
-                }
+            data = await report_service.build_report_data(report_type.value, session)
 
         # Optionally enrich with LLM via report_service; fall back to deterministic summary
         try:
@@ -440,12 +368,7 @@ class Query:
             )
         except Exception:
             # Deterministic fallback if LLM unavailable
-            if report_type == ReportType.AVAILABILITY:
-                summary = f"{data.get('available_count', 0)} crew members currently available."
-            elif report_type == ReportType.COMPLIANCE:
-                summary = f"{data.get('non_compliant_count', 0)} certifications require attention."
-            else:
-                summary = f"{report_type.value.title()} report generated successfully."
+            summary = report_service.build_fallback_summary(report_type.value, data)
             return Report(
                 id=str(uuid.uuid4()),
                 report_type=report_type.value,
