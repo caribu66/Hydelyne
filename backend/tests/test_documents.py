@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.models import CrewMember, Document
+from app.models import CrewMember, Document, IncomingDocumentReview
 from app.services.upload import document_upload_service
 
 
@@ -569,3 +569,193 @@ def test_dropbox_cache_uses_crew_id_not_classification():
     assert (
         cache_path == document_upload_service.cache_path / "crew-123" / "document-123_candidate.pdf"
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_incoming_document_review_approve(client, db_session):
+    """Staff approving an incoming document sets review resolved and document approved."""
+    from app.services.document_requests import document_request_service
+
+    crew_id = str(uuid.uuid4())
+    doc_id = str(uuid.uuid4())
+    db_session.add(
+        CrewMember(id=crew_id, full_name="Approve Test Specialist", publication_status="approved")
+    )
+    doc = Document(
+        id=doc_id,
+        crew_member_id=crew_id,
+        file_name="cert.pdf",
+        file_type="pdf",
+        file_size=123,
+        storage_type="local",
+        storage_path="/tmp/cert.pdf",
+        extraction_status="pending",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    req = await document_request_service.create(
+        crew_id=crew_id, actor_id=crew_id, actor_role="staff", expires_in_days=14
+    )
+    await document_request_service.create_review(request_id=req.request_id, document_id=doc_id)
+
+    queue = await client.get("/api/documents/review-queue")
+    assert queue.status_code == 200
+    assert len(queue.json()) >= 1
+    review_id = queue.json()[0]["id"]
+
+    res = await client.post(
+        f"/api/documents/review-queue/{review_id}/action",
+        data={"action": "approve", "note": "Valid OPITO certificate"},
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "resolved"
+    assert res.json()["document_id"] == doc_id
+
+    # Verify document extraction_status is now approved
+    await db_session.refresh(doc)
+    assert doc.extraction_status == "approved"
+
+    # Verify review queue is now empty of this resolved item
+    queue_after = await client.get("/api/documents/review-queue")
+    assert not any(item["id"] == review_id for item in queue_after.json())
+
+
+@pytest.mark.asyncio
+async def test_resolve_incoming_document_review_reject(client, db_session):
+    """Staff rejecting an incoming document sets review rejected and document rejected."""
+    from app.services.document_requests import document_request_service
+
+    crew_id = str(uuid.uuid4())
+    doc_id = str(uuid.uuid4())
+    db_session.add(
+        CrewMember(id=crew_id, full_name="Reject Test Specialist", publication_status="approved")
+    )
+    doc = Document(
+        id=doc_id,
+        crew_member_id=crew_id,
+        file_name="expired_cert.pdf",
+        file_type="pdf",
+        file_size=123,
+        storage_type="local",
+        storage_path="/tmp/expired_cert.pdf",
+        extraction_status="pending",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    req = await document_request_service.create(
+        crew_id=crew_id, actor_id=crew_id, actor_role="staff", expires_in_days=14
+    )
+    await document_request_service.create_review(request_id=req.request_id, document_id=doc_id)
+
+    queue = await client.get("/api/documents/review-queue")
+    review_id = queue.json()[0]["id"]
+
+    res = await client.post(
+        f"/api/documents/review-queue/{review_id}/action",
+        data={"action": "reject", "note": "Expired document"},
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "rejected"
+
+    await db_session.refresh(doc)
+    assert doc.extraction_status == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_staff_cannot_resolve_other_staff_draft_reviews(client, db_session, monkeypatch):
+    """Staff cannot approve/reject reviews belonging to another staff member's draft."""
+    from app.services.crew import auth_service
+    from app.services.document_requests import document_request_service
+
+    owner_id = str(uuid.uuid4())
+    other_staff_id = str(uuid.uuid4())
+    crew_id = str(uuid.uuid4())
+    doc_id = str(uuid.uuid4())
+
+    db_session.add(
+        CrewMember(
+            id=crew_id,
+            full_name="Private Draft Specialist",
+            publication_status="draft",
+            submitted_by=owner_id,
+        )
+    )
+    doc = Document(
+        id=doc_id,
+        crew_member_id=crew_id,
+        file_name="draft_doc.pdf",
+        file_type="pdf",
+        file_size=123,
+        storage_type="local",
+        storage_path="/tmp/draft_doc.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    req = await document_request_service.create(
+        crew_id=crew_id, actor_id=owner_id, actor_role="staff", expires_in_days=14
+    )
+    await document_request_service.create_review(request_id=req.request_id, document_id=doc_id)
+
+    review = (
+        await db_session.execute(
+            select(IncomingDocumentReview).where(IncomingDocumentReview.document_id == doc_id)
+        )
+    ).scalar_one()
+
+    # Log in as other staff
+    acting_staff = CrewMember(id=other_staff_id, full_name="Snooping Staff", role="staff")
+    monkeypatch.setattr(auth_service, "get_user_from_token", AsyncMock(return_value=acting_staff))
+
+    res = await client.post(
+        f"/api/documents/review-queue/{review.id}/action",
+        data={"action": "approve"},
+    )
+    assert res.status_code == 403
+    assert "belongs to another user" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_document_review_by_document_id(client, db_session):
+    """Reviewing directly by document ID approves document and marks any active review queue item resolved."""
+    from app.services.document_requests import document_request_service
+
+    crew_id = str(uuid.uuid4())
+    doc_id = str(uuid.uuid4())
+    db_session.add(
+        CrewMember(id=crew_id, full_name="Direct Doc Review Specialist", publication_status="approved")
+    )
+    doc = Document(
+        id=doc_id,
+        crew_member_id=crew_id,
+        file_name="direct_cert.pdf",
+        file_type="pdf",
+        file_size=123,
+        storage_type="local",
+        storage_path="/tmp/direct_cert.pdf",
+        extraction_status="pending",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    req = await document_request_service.create(
+        crew_id=crew_id, actor_id=crew_id, actor_role="staff", expires_in_days=14
+    )
+    await document_request_service.create_review(request_id=req.request_id, document_id=doc_id)
+
+    res = await client.post(
+        f"/api/documents/{doc_id}/review",
+        data={"action": "approve", "note": "Verified by operations lead"},
+    )
+    assert res.status_code == 200
+    assert res.json()["document_id"] == doc_id
+    assert res.json()["extraction_status"] == "approved"
+
+    await db_session.refresh(doc)
+    assert doc.extraction_status == "approved"
+
+    # Verify review queue item is resolved
+    queue = await client.get("/api/documents/review-queue")
+    assert not any(item["document_id"] == doc_id for item in queue.json())

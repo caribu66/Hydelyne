@@ -148,6 +148,12 @@ def create_app() -> FastAPI:
             part = part.strip().rstrip("/")
             if part and part not in cors_origins:
                 cors_origins.append(part)
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    if settings.APP_ENV == "production":
+        app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
@@ -155,12 +161,6 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-API-Key"],
     )
-
-    app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(SecurityHeadersMiddleware)
-
-    if settings.APP_ENV == "production":
-        app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
 
     schema = strawberry.Schema(
         query=Query,

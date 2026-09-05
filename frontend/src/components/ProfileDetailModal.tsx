@@ -48,6 +48,7 @@ interface ProfileDetailModalProps {
   documents?: SpecialistDocument[];
   onAddDocument?: () => void;
   onRemoveDocument?: (docId: string) => void | Promise<void>;
+  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
   canManageDocuments?: boolean;
   canRequestDocuments?: boolean;
   canDeleteCrew?: boolean;
@@ -67,6 +68,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
   documents = [],
   onAddDocument,
   onRemoveDocument,
+  onReviewDocument,
   canManageDocuments = false,
   canRequestDocuments = false,
   canDeleteCrew = false,
@@ -374,6 +376,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               documents={documents}
               onAddDocument={() => onAddDocument?.()}
               onRemoveDocument={(docId) => onRemoveDocument?.(docId)}
+              onReviewDocument={onReviewDocument}
               canManageDocuments={canManageDocuments}
               canRequestDocuments={canRequestDocuments}
               onShowToast={onShowToast || (() => {})}

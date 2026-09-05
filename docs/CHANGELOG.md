@@ -10,6 +10,50 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Contractor document upload portal redesign (Antigravity)
+
+Redesigned the contractor document upload route (`/upload/:token`) into an exceptionally crafted, fully responsive, professional maritime portal:
+- **Branding & Top Bar**: Integrated `HydenlyneAnimatedLogo` with the signature orange seismic waveform animation, 256-bit encryption session badge, and in-page dark/light `ThemeToggle`.
+- **Classification & Drag-and-Drop Dropzone**: Added segmented classification selectors for Certificates, Medical / ENG1, Seaman's Book, and Passport / ID; interactive drag-and-drop dropzone with animated hover states, format chips (`PDF`, `DOCX`, `JPG`, `PNG`, `Max 50MB`), and mobile/touch file selection.
+- **Client-Side Validation & Preview**: Instant size checks (≤ 50MB) and format validation with actionable alert feedback and selected file preview card.
+- **Multi-Upload & Completion Flow**: Confirmed submission card with receipt details and "Upload Another Document" button to allow batch uploads without page reload.
+- **Strict Theme & Design System Conformance**: Built with 100% semantic color tokens (`bg-canvas`, `bg-surface`, `bg-surface-raised`, `border-border-subtle`, `text-primary`, `text-secondary`, `text-muted`, `var(--ui-brand-pulse)`), zero raw palette colors, passing strict UI audits and gzip bundle budgets.
+- **API & Testing**: Updated `frontend/src/lib/documentsApi.ts` to return typed expiry information (`PublicDocumentRequestInfo`) and support classification payloads; added unit tests in `frontend/src/lib/documentsApi.test.ts`.
+
+## 2026-09-05 — Application containers rebuild and full stack refresh (Antigravity)
+
+Executed clean production compilation and full container stack refresh:
+- **Frontend Container Rebuild**: Validated TypeScript (`tsc --noEmit`) and ESLint, built production client assets, rebuilt multi-stage image `localhost/hydenlyne-crew-dms_frontend:latest`, and recreated `hydenlyne-crew-dms_frontend_1` on port 5173.
+- **Backend & Worker Stack Refresh**: Confirmed Alembic schema migrations at head (`015_contractor_document_requests`), restarted FastAPI backend (`hydenlyne-crew-dms_backend_1`), and restarted all Celery queues (`celery_worker`, `celery_compute_worker`, `celery_beat`, `flower`).
+- **Verification**: Verified health endpoints (`5173/health`, `8000/health/`), GraphQL schema, document review endpoints, and confirmed all 176 backend unit/integration tests pass.
+
+## 2026-09-05 — Contractor document review & compliance approval workflow (Antigravity)
+
+Implemented end-to-end admin/staff review actions for incoming contractor documents and vault documents:
+- **Domain Service (`app/services/document_requests.py`)**: Added `DocumentRequestService.resolve_review` supporting resolution by review ID or document ID. Validates actor authorization (staff scoping rules vs admin), transitions `IncomingDocumentReview.status` to `resolved` or `rejected`, sets `Document.extraction_status` to `approved` or `rejected`, and records access logs via `audit_service.log_access`.
+- **API Transport (`app/api/documents.py`)**:
+  - Added `POST /api/documents/review-queue/{review_id}/action` (actions: `approve`, `reject`).
+  - Added `POST /api/documents/{document_id}/review` (actions: `approve`, `reject`) for direct compliance review on any vault document.
+  - Enriched `GET /api/documents/review-queue` response with document metadata (`file_type`, `file_size`, `classification`, and `extraction_status`).
+- **Frontend UI & API**:
+  - `frontend/src/lib/documentsApi.ts`: Added `actionIncomingDocumentReview` and `reviewDocumentById`.
+  - `frontend/src/hooks/useSpecialistDocuments.ts`: Exposed `reviewDocument(profileId, docId, action, note)` and mapped `isVerified: doc.extractionStatus === 'approved'`.
+  - `frontend/src/components/IncomingDocumentAlert.tsx`: Added inline Approve (check) and Reject (X) buttons with loading spinners and feedback toasts.
+  - `frontend/src/components/DocumentPreviewModal.tsx`: Added compliance review status badges ("Pending Review", "Approved for Compliance", "Rejected") and Approve/Reject action buttons with confirmation.
+  - `frontend/src/components/DocumentVault.tsx`: Added status chips (`Needs Review`, `Rejected`), inline quick-review buttons for pending documents, and forwarded review actions to `DocumentPreviewModal`.
+  - `frontend/src/components/SpecialistDossierPane.tsx`, `ProfileDetailModal.tsx`, `App.tsx`: Wired review handling and auto-refresh on action resolution.
+- **Testing & Quality**: Added 4 test cases in `backend/tests/test_documents.py` covering approval, rejection, cross-staff authorization denial, and direct document ID reviews. 176 backend tests passed. TypeScript typecheck, ESLint, and Vite production build passed cleanly.
+
+## 2026-09-05 — Fix PostgreSQL naive datetime collision on document request creation (Antigravity)
+
+Resolved "Failed to fetch" network error occurring when staff clicked "Request documents":
+- Root Cause: `DocumentRequestService.create` in `app/services/document_requests.py` generated `expires_at = datetime.now(timezone.utc) + timedelta(...)` with an offset-aware timezone (`tzinfo=timezone.utc`). PostgreSQL column `document_requests.expires_at` was created as `TIMESTAMP WITHOUT TIME ZONE` in migration 015, causing `asyncpg` to throw `TypeError: can't subtract offset-naive and offset-aware datetimes` on `INSERT`.
+- Exception Handling & CORS: The resulting unhandled 500 error triggered Starlette's server error middleware outside `CORSMiddleware`, causing the browser to receive an error response missing CORS headers and report `TypeError: Failed to fetch`.
+- Fixes:
+  - `backend/app/services/document_requests.py`: Normalized `expires_at` to naive UTC before persistence into `document_requests.expires_at`, and ensured expunged requests attach timezone-aware UTC datetime.
+  - `backend/app/main.py`: Reordered middleware so `CORSMiddleware` wraps error-logging and rate-limiting middlewares, guaranteeing CORS headers accompany error responses.
+  - `frontend/src/lib/documentsApi.ts`: Parsed JSON error payload `detail` to surface actionable error messages on API failures.
+
 ## 2026-09-05 — Celery queue segregation, Thin Transport docs, and keyset reindexing backpressure (Antigravity)
 
 Tackled three key scalability and maintainability improvements:

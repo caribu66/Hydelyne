@@ -196,6 +196,7 @@ export default function App() {
   const {
     getDocumentsForProfile,
     removeDocument,
+    reviewDocument,
     refreshDocuments,
   } = useSpecialistDocuments();
 
@@ -497,7 +498,16 @@ export default function App() {
                 <span className="hidden sm:inline">Add contractor</span>
               </button>
             )}
-            {isAuthenticated && canSubmitCv && <IncomingDocumentAlert onOpenContractor={openIncomingDocumentContractor} />}
+            {isAuthenticated && canSubmitCv && (
+              <IncomingDocumentAlert
+                onOpenContractor={openIncomingDocumentContractor}
+                onShowToast={showToast}
+                onReviewResolved={() => {
+                  if (activeSelectedProfile) void refreshDocuments(activeSelectedProfile.id);
+                  if (modalProfile) void refreshDocuments(modalProfile.id);
+                }}
+              />
+            )}
             {user?.role === 'admin' && <ServiceStatus />}
             {isAuthenticated && (
               <button type="button" onClick={() => setShowSavedOnly(!showSavedOnly)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${showSavedOnly ? 'border-border-strong bg-action text-on-action' : 'border-border-subtle bg-surface text-secondary hover:border-border-strong hover:bg-surface-raised hover:text-primary'}`} aria-pressed={showSavedOnly} title={showSavedOnly ? 'Show all contractors' : 'View shortlist'}>
@@ -766,6 +776,9 @@ export default function App() {
                             onAddDocument={() => activeSelectedProfile && void refreshDocuments(activeSelectedProfile.id)}
                             onRemoveDocument={async (docId) => {
                               if (activeSelectedProfile) await removeDocument(activeSelectedProfile.id, docId);
+                            }}
+                            onReviewDocument={async (docId, action) => {
+                              if (activeSelectedProfile) await reviewDocument(activeSelectedProfile.id, docId, action);
                             }}
                             canManageDocuments={canManageDocuments}
                             canRequestDocuments={canRequestDocuments}
@@ -1063,6 +1076,9 @@ export default function App() {
                                     showToast('Failed to remove document');
                                   }
                                 }
+                              }}
+                              onReviewDocument={async (docId, action) => {
+                                if (activeSelectedProfile) await reviewDocument(activeSelectedProfile.id, docId, action);
                               }}
                               canManageDocuments={canManageDocuments}
                               canRequestDocuments={canRequestDocuments}
@@ -1453,6 +1469,9 @@ export default function App() {
               } catch {
                 showToast('Failed to remove document');
               }
+            }}
+            onReviewDocument={async (docId, action) => {
+              await reviewDocument(modalProfile.id, docId, action);
             }}
             canManageDocuments={canManageDocuments}
             canRequestDocuments={canRequestDocuments}

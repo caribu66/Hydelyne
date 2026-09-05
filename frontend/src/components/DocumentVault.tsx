@@ -31,6 +31,7 @@ interface DocumentVaultProps {
   documents: SpecialistDocument[];
   onAddDocument: () => void;
   onRemoveDocument: (docId: string) => void | Promise<void>;
+  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
   onShowToast: (msg: string) => void;
   canManageDocuments?: boolean;
   canRequestDocuments?: boolean;
@@ -42,6 +43,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   documents,
   onAddDocument,
   onRemoveDocument,
+  onReviewDocument,
   onShowToast,
   canManageDocuments = false,
   canRequestDocuments = false,
@@ -384,6 +386,16 @@ All documents have been digitally archived for offshore mobilization verificatio
                       {doc.isVerified && (
                         <span title="Verified Credential"><CheckCircle2 className="w-3.5 h-3.5 text-positive shrink-0" /></span>
                       )}
+                      {doc.extractionStatus === 'rejected' && (
+                        <span className="px-1.5 py-0.2 rounded bg-danger-soft/60 border border-danger-border text-danger font-mono text-xs font-semibold shrink-0">
+                          Rejected
+                        </span>
+                      )}
+                      {doc.extractionStatus && doc.extractionStatus !== 'approved' && doc.extractionStatus !== 'rejected' && (
+                        <span className="px-1.5 py-0.2 rounded bg-warning-soft/70 border border-warning-border text-warning font-mono text-xs font-semibold shrink-0">
+                          Needs Review
+                        </span>
+                      )}
                       {isLatest && (
                         <span className="px-1.5 py-0.2 rounded bg-surface-raised border border-border-strong text-secondary font-mono text-xs font-medium shrink-0">
                           Latest Upload
@@ -476,6 +488,8 @@ All documents have been digitally archived for offshore mobilization verificatio
         profile={profile}
         onDelete={canManageDocuments ? (docId) => onRemoveDocument(docId) : undefined}
         onShowToast={onShowToast}
+        onReviewAction={canManageDocuments ? onReviewDocument : undefined}
+        canReview={canManageDocuments}
       />
     </div>
   );

@@ -208,6 +208,10 @@ async def list_incoming_document_reviews(
                 "status": review.status,
                 "document_id": document.id,
                 "file_name": document.file_name,
+                "file_type": document.file_type,
+                "file_size": document.file_size,
+                "classification": document.classification,
+                "extraction_status": document.extraction_status,
                 "crew_member_id": crew.id,
                 "contractor_name": crew.full_name,
                 "created_at": review.created_at.isoformat(),
@@ -215,6 +219,76 @@ async def list_incoming_document_reviews(
             }
             for review, document, crew in rows.all()
         ]
+
+
+@router.post("/review-queue/{review_id}/action")
+async def review_incoming_document(
+    review_id: str,
+    action: str = Form(...),
+    note: Optional[str] = Form(None),
+    current_user: CrewMember = Depends(require_staff_rest),
+) -> dict[str, Any]:
+    """Approve or reject a contractor-uploaded document by review queue ID."""
+    try:
+        review, doc = await document_request_service.resolve_review(
+            review_id=review_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            action=action,
+            note=note,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "id": review.id if review else None,
+        "status": review.status if review else doc.extraction_status,
+        "extraction_status": doc.extraction_status,
+        "document_id": doc.id,
+        "claimed_by": review.claimed_by if review else current_user.id,
+        "resolved_at": (
+            review.resolved_at.isoformat()
+            if review and review.resolved_at
+            else None
+        ),
+    }
+
+
+@router.post("/{document_id}/review")
+async def review_document_by_id(
+    document_id: str,
+    action: str = Form(...),
+    note: Optional[str] = Form(None),
+    current_user: CrewMember = Depends(require_staff_rest),
+) -> dict[str, Any]:
+    """Approve or reject a document directly by document ID, resolving any active review queue item."""
+    try:
+        review, doc = await document_request_service.resolve_review(
+            document_id=document_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            action=action,
+            note=note,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "id": review.id if review else None,
+        "status": review.status if review else doc.extraction_status,
+        "extraction_status": doc.extraction_status,
+        "document_id": doc.id,
+        "claimed_by": review.claimed_by if review else current_user.id,
+        "resolved_at": (
+            review.resolved_at.isoformat()
+            if review and review.resolved_at
+            else None
+        ),
+    }
 
 
 @router.post("/preview-cv")

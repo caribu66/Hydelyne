@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileCheck,
+  Check,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface DocumentPreviewModalProps {
@@ -27,6 +29,8 @@ interface DocumentPreviewModalProps {
   profile: UserProfile;
   onDelete?: (docId: string) => void | Promise<void>;
   onShowToast?: (msg: string) => void;
+  onReviewAction?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
+  canReview?: boolean;
 }
 
 export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
@@ -36,11 +40,32 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   profile,
   onDelete,
   onShowToast,
+  onReviewAction,
+  canReview = false,
 }) => {
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [showRawText, setShowRawText] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   useAccessibleDialog(isOpen && Boolean(doc), dialogRef, onClose);
+
+  const handleReview = async (action: 'approve' | 'reject') => {
+    if (!doc || !onReviewAction) return;
+    setIsReviewing(true);
+    try {
+      await onReviewAction(doc.id, action);
+      onShowToast?.(
+        action === 'approve'
+          ? `Approved “${doc.title}” for compliance`
+          : `Rejected “${doc.title}”`,
+      );
+      onClose();
+    } catch (err) {
+      onShowToast?.(err instanceof Error ? err.message : `Failed to ${action} document`);
+    } finally {
+      setIsReviewing(false);
+    }
+  };
 
   const compliance = doc ? getDocumentComplianceStatus(doc) : null;
   const originalFileAvailable = doc ? hasOriginalDocumentFile(doc) : false;
@@ -210,6 +235,79 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
             {doc.fileSize && <span>Size: {doc.fileSize}</span>}
           </div>
         </div>
+
+        {/* Review Action Banner */}
+        {doc.extractionStatus === 'rejected' && (
+          <div className="px-5 py-2.5 bg-danger/10 border-b border-danger/20 flex items-center justify-between gap-3 text-xs text-danger">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span className="font-semibold">Document Rejected</span>
+              <span className="text-secondary">— This document was rejected during review and is not relied upon for compliance.</span>
+            </div>
+            {canReview && onReviewAction && (
+              <button
+                type="button"
+                disabled={isReviewing}
+                onClick={() => void handleReview('approve')}
+                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1 rounded-[8px] bg-action hover:bg-action-hover text-on-action font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Re-approve</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {doc.extractionStatus === 'approved' && (
+          <div className="px-5 py-2 bg-positive/10 border-b border-positive/20 flex items-center justify-between gap-3 text-xs text-positive">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span className="font-semibold">Review Approved</span>
+              <span className="text-secondary">— Verified and approved for contractor compliance records.</span>
+            </div>
+            {canReview && onReviewAction && (
+              <button
+                type="button"
+                disabled={isReviewing}
+                onClick={() => void handleReview('reject')}
+                className="inline-flex min-h-8 items-center gap-1.5 px-2.5 py-0.5 rounded-[8px] border border-border-strong bg-surface hover:bg-danger-soft/50 text-danger text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-3 h-3" />
+                <span>Revoke Approval</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {canReview && onReviewAction && doc.extractionStatus !== 'approved' && doc.extractionStatus !== 'rejected' && (
+          <div className="px-5 py-2.5 bg-warning/10 border-b border-warning/20 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-warning">
+              <ShieldAlert className="w-4 h-4 shrink-0" />
+              <span className="font-semibold text-primary">Pending Review</span>
+              <span className="text-secondary">— Contractor upload requires review before relying on it for compliance.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isReviewing}
+                onClick={() => void handleReview('approve')}
+                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1 rounded-[8px] bg-action hover:bg-action-hover text-on-action font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Approve Document</span>
+              </button>
+              <button
+                type="button"
+                disabled={isReviewing}
+                onClick={() => void handleReview('reject')}
+                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1 rounded-[8px] border border-border-strong bg-surface hover:bg-danger-soft/60 hover:text-danger text-secondary font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Reject</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Body / Document Preview Surface */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-canvas/90">

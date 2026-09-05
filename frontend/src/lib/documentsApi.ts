@@ -3,21 +3,36 @@ import { GRAPHQL_URL } from '../config'
 
 const apiBase = GRAPHQL_URL.replace(/\/graphql\/?$/, '')
 
-export async function publicDocumentRequest(token: string): Promise<void> {
-  const response = await fetch(`${apiBase}/api/documents/request/${encodeURIComponent(token)}`)
-  if (!response.ok) throw new Error('This upload link is invalid or has expired.')
+export interface PublicDocumentRequestInfo {
+  status: string
+  expires_at: string
 }
 
-export async function uploadRequestedDocument(token: string, file: File, idempotencyKey: string): Promise<void> {
+export async function publicDocumentRequest(token: string): Promise<PublicDocumentRequestInfo> {
+  const response = await fetch(`${apiBase}/api/documents/request/${encodeURIComponent(token)}`)
+  if (!response.ok) throw new Error('This upload link is invalid or has expired.')
+  return (await response.json()) as PublicDocumentRequestInfo
+}
+
+export async function uploadRequestedDocument(
+  token: string,
+  file: File,
+  idempotencyKey: string,
+  classification?: string,
+): Promise<{ id?: string; file_name?: string; status?: string }> {
   const form = new FormData()
   form.append('file', file)
   form.append('idempotency_key', idempotencyKey)
+  if (classification) {
+    form.append('classification', classification)
+  }
   const response = await fetch(`${apiBase}/api/documents/request/${encodeURIComponent(token)}/upload`, { method: 'POST', body: form })
   if (!response.ok) {
     const detail: unknown = await response.json().catch(() => ({}))
     const message = typeof detail === 'object' && detail !== null && 'detail' in detail && typeof detail.detail === 'string' ? detail.detail : `Upload failed (${response.status})`
     throw new Error(message)
   }
+  return (await response.json()) as { id?: string; file_name?: string; status?: string }
 }
 
 export async function createDocumentRequest(crewId: string): Promise<{ token: string }> {
@@ -28,17 +43,27 @@ export async function createDocumentRequest(crewId: string): Promise<{ token: st
   const response = await fetch(`${apiBase}/api/documents/requests`, {
     method: 'POST', credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : undefined, body: form,
   })
-  if (!response.ok) throw new Error('Could not create a secure upload link.')
+  if (!response.ok) {
+    const detail: unknown = await response.json().catch(() => ({}))
+    const message = typeof detail === 'object' && detail !== null && 'detail' in detail && typeof detail.detail === 'string' ? detail.detail : 'Could not create a secure upload link.'
+    throw new Error(message)
+  }
   return response.json() as Promise<{ token: string }>
 }
 
 export interface IncomingDocumentReview {
   id: string
+  status: string
   document_id: string
   file_name: string
+  file_type?: string | null
+  file_size?: number | null
+  classification?: string | null
+  extraction_status?: string | null
   crew_member_id: string
   contractor_name: string
   created_at: string
+  claimed_by?: string | null
 }
 
 export async function incomingDocumentReviews(): Promise<IncomingDocumentReview[]> {
@@ -48,6 +73,75 @@ export async function incomingDocumentReviews(): Promise<IncomingDocumentReview[
   })
   if (!response.ok) throw new Error('Could not load received documents.')
   return response.json() as Promise<IncomingDocumentReview[]>
+}
+
+export async function actionIncomingDocumentReview(
+  reviewId: string,
+  action: 'approve' | 'reject',
+  note?: string,
+): Promise<{ id: string; status: string; document_id: string }> {
+  const token = getAuthToken()
+  const form = new FormData()
+  form.append('action', action)
+  if (note) form.append('note', note)
+
+  const response = await fetch(
+    `${apiBase}/api/documents/review-queue/${encodeURIComponent(reviewId)}/action`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    },
+  )
+
+  if (!response.ok) {
+    const detail: unknown = await response.json().catch(() => ({}))
+    const message =
+      typeof detail === 'object' && detail !== null && 'detail' in detail && typeof detail.detail === 'string'
+        ? detail.detail
+        : `Could not ${action} document.`
+    throw new Error(message)
+  }
+
+  return response.json() as Promise<{ id: string; status: string; document_id: string }>
+}
+
+export async function reviewDocumentById(
+  documentId: string,
+  action: 'approve' | 'reject',
+  note?: string,
+): Promise<{ id: string | null; status: string; extraction_status: string; document_id: string }> {
+  const token = getAuthToken()
+  const form = new FormData()
+  form.append('action', action)
+  if (note) form.append('note', note)
+
+  const response = await fetch(
+    `${apiBase}/api/documents/${encodeURIComponent(documentId)}/review`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    },
+  )
+
+  if (!response.ok) {
+    const detail: unknown = await response.json().catch(() => ({}))
+    const message =
+      typeof detail === 'object' && detail !== null && 'detail' in detail && typeof detail.detail === 'string'
+        ? detail.detail
+        : `Could not ${action} document.`
+    throw new Error(message)
+  }
+
+  return response.json() as Promise<{
+    id: string | null
+    status: string
+    extraction_status: string
+    document_id: string
+  }>
 }
 
 export function documentDownloadUrl(documentId: string): string {

@@ -63,6 +63,7 @@ interface SpecialistDossierPaneProps {
   summaryLoading?: boolean;
   onAddDocument?: () => void;
   onRemoveDocument?: (docId: string) => void | Promise<void>;
+  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
   canManageDocuments?: boolean;
   canRequestDocuments?: boolean;
   canDeleteCrew?: boolean;
@@ -90,6 +91,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   summaryLoading = false,
   onAddDocument,
   onRemoveDocument,
+  onReviewDocument,
   canManageDocuments = false,
   canRequestDocuments = false,
   canDeleteCrew = false,
@@ -557,6 +559,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
             documents={documents}
             onAddDocument={() => onAddDocument?.()}
             onRemoveDocument={(docId) => onRemoveDocument?.(docId)}
+            onReviewDocument={onReviewDocument}
             canManageDocuments={canManageDocuments}
             canRequestDocuments={canRequestDocuments}
             onShowToast={onShowToast}
@@ -1225,7 +1228,9 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
       document={previewDoc}
       profile={profile}
       onShowToast={onShowToast}
-      onDelete={onRemoveDocument}
+      onDelete={canManageDocuments ? onRemoveDocument : undefined}
+      onReviewAction={canManageDocuments ? onReviewDocument : undefined}
+      canReview={canManageDocuments}
     />
     </>
   );

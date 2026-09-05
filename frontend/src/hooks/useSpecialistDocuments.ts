@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useLazyQuery } from '@apollo/client';
 import { SpecialistDocument, DocumentCategory } from '../types';
 import { DOCUMENTS_BY_CREW_QUERY } from '../lib/queries';
-import { deleteDocument } from '../lib/documentsApi';
+import { deleteDocument, reviewDocumentById } from '../lib/documentsApi';
 
 export function getDocumentComplianceStatus(doc: SpecialistDocument): {
   status: 'valid' | 'expiring_soon' | 'expired' | 'no_expiry';
@@ -66,8 +66,8 @@ export function useSpecialistDocuments() {
       fileName: doc.fileName,
       fileSize: formatFileSize(doc.fileSize),
       uploadedAt: doc.uploadedAt,
-      // A document is not a verified credential merely because extraction ran.
-      isVerified: false,
+      // A document is a verified credential when approved by a reviewer
+      isVerified: doc.extractionStatus === 'approved',
       notes: `Extraction status: ${doc.extractionStatus}`,
       extractionStatus: doc.extractionStatus,
       extractedText: doc.extractedText || undefined,
@@ -86,9 +86,18 @@ export function useSpecialistDocuments() {
     await refreshDocuments(profileId);
   }, [refreshDocuments]);
 
+  const reviewDocument = useCallback(
+    async (profileId: string, documentId: string, action: 'approve' | 'reject', note?: string) => {
+      await reviewDocumentById(documentId, action, note);
+      await refreshDocuments(profileId);
+    },
+    [refreshDocuments],
+  );
+
   return {
     getDocumentsForProfile,
     removeDocument,
+    reviewDocument,
     refreshDocuments,
   };
 }
