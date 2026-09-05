@@ -1010,7 +1010,25 @@ export default function App() {
                                 </button>
 
                                 {/* Secondary actions stay available without competing with dossier selection. */}
-                                <div className="shrink-0 self-start mt-0.5" onClick={(event) => event.stopPropagation()}>
+                                <div className="flex items-center gap-1 shrink-0 self-start mt-0.5" onClick={(event) => event.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleBookmark(profile.id)}
+                                    aria-label={isProfileBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
+                                    title={isProfileBookmarked ? 'Shortlisted' : 'Save to shortlist'}
+                                    className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] transition-colors cursor-pointer ${
+                                      isProfileBookmarked
+                                        ? 'text-action bg-surface-raised border border-border-strong/60 shadow-xs'
+                                        : 'text-muted hover:text-primary hover:bg-surface-raised/70'
+                                    }`}
+                                  >
+                                    <Bookmark
+                                      className={`h-4 w-4 transition-transform active:scale-90 ${
+                                        isProfileBookmarked ? 'fill-current' : ''
+                                      }`}
+                                      aria-hidden="true"
+                                    />
+                                  </button>
                                   <SpecialistActionsMenu
                                     profile={profile}
                                     isBookmarked={isProfileBookmarked}

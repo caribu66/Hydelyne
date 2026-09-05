@@ -406,17 +406,23 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               type="button"
               onClick={() => onToggleBookmark(profile.id)}
               aria-label={isBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
-              className={`min-h-9 min-w-9 p-2 rounded-lg border transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`min-h-11 px-3 py-1.5 rounded-lg border transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium shadow-xs ${
                 isBookmarked
-                  ? 'bg-action text-on-action border-border-strong'
-                  : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
+                  ? 'bg-action text-on-action border-action'
+                  : 'bg-surface-raised/80 border-border-strong text-primary hover:bg-surface-raised'
               }`}
               title={isBookmarked ? 'Saved in shortlist (Press S)' : 'Save to shortlist (Press S)'}
             >
               {isBookmarked ? (
-                <BookmarkCheck className="w-3.5 h-3.5 fill-on-action" />
+                <>
+                  <BookmarkCheck className="w-4 h-4 fill-on-action" />
+                  <span>Saved</span>
+                </>
               ) : (
-                <Bookmark className="w-3.5 h-3.5" />
+                <>
+                  <Bookmark className="w-4 h-4" />
+                  <span>Shortlist</span>
+                </>
               )}
             </button>
 

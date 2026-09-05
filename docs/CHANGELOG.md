@@ -10,12 +10,48 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Remove unused `@google/genai` dependency; review mockProfiles bundle cost (Claude Code)
+
+Closed one of the two small cleanup items flagged during the bundle-size fix
+and reviewed the other rather than forcing it in.
+
+- **Removed `@google/genai`** from `frontend/package.json`: confirmed zero
+  imports anywhere in `src/`, scripts, or tests (grepped the whole tree, not
+  just a hunch — this project's AI features run through the backend/Ollama
+  per `docs/ARCHITECTURE.md`, not a client-side Gemini SDK; `@google/genai`
+  and `GEMINI_API_KEY` in `.env` look like leftover AI-Studio-template
+  scaffolding, per the `vite.config.ts` comment referencing "AI Studio").
+  Also dropped its now-dead entry from `vite.config.ts`'s `manualChunks`
+  vendor pattern. `npm install` removed 37 packages from the dependency
+  tree; the production build output is byte-identical (same chunk names/
+  sizes) confirming it was never actually reachable in the shipped bundle —
+  this is a `package.json`/node_modules cleanliness fix, not a size fix.
+- **Reviewed, did not change, `src/data/mockProfiles.ts`**: it's a
+  362-line fabricated-profile fallback (24.9 kB source, ~7.3 kB gzip) used
+  by `useCrewProfiles.ts` only when `DEMO_MODE_ENABLED` is true, which
+  `docker-compose.yml` correctly defaults to `false` and
+  `docker-compose.prod.yml` doesn't override — so this is a deliberate,
+  correctly-gated demo/showcase feature, not the mock-data-in-production
+  violation `frontend/AGENTS.md` warns about. It does still ship in the
+  bundle unconditionally (static import), so a dynamic `import()` gated on
+  `DEMO_MODE_ENABLED` would trim a few KB gzip further. Chose not to do
+  that here: `useCrewProfiles` is core, currently-untested data-loading
+  plumbing used app-wide, and reworking it to async-load a fallback for a
+  ~4-6 kB gzip saving (out of a 37 kB entry chunk) is a worse risk/reward
+  trade than the mechanical fixes in this session — flagging for a future
+  session with a test added first, not fixing blind.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run
+build` (byte-identical chunk sizes to the prior build), `npm run
+ui:audit:strict` (0 findings), `npm audit` (0 vulnerabilities). No app code
+changed. No migration, no API/contract change.
+
 ## 2026-09-05 — Refine Specialist cards, table actions, and avatar framing for executive showcase (Antigravity)
 
-Polished the specialist presentation layer in `App.tsx` and `SpecialistTableView.tsx` for executive showcase standards with restrained precision styling and zero visual clutter:
+Polished the specialist presentation layer in `App.tsx`, `SpecialistTableView.tsx`, and `SpecialistDossierPane.tsx` for executive showcase standards with restrained precision styling and zero visual clutter:
 - **Card surface & border fidelity**: Updated grid cards from fragile `border-transparent` to permanent, subtle `border-border-subtle hover:border-border-strong bg-surface hover:bg-surface-raised/40` with smooth elevation shadows in both dark and light modes.
 - **Avatar framing & availability indicators**: Refined avatars to `h-12 w-12` (grid) and `w-9 h-9` (table) with an inset border ring (`ring-1 ring-border-subtle/80`) and clean `ring-2 ring-surface` border for immediate availability dots.
-- **Tactile bookmarking control**: Placed a direct 1-click bookmark button in the grid card header alongside the actions menu with active state styling and smooth tap feedback.
+- **Direct tactile bookmarking controls**: Placed a direct 1-click bookmark button in both grid card headers and split-view list items, plus an explicit 44px `Shortlist`/`Saved` button in `SpecialistDossierPane.tsx`.
 - **Table action targets**: Upgraded action button targets in `SpecialistTableView.tsx` to `min-h-11 min-w-11` (44px standard) with accessible labels and tooltips.
 - **Vendor bundle code-splitting**: Configured path-based `manualChunks` in `frontend/vite.config.ts` to properly split deep imports (`react-dom/client`, `@apollo/client`, `motion`, `d3`), eliminating oversized entry chunks.
 
