@@ -103,7 +103,7 @@ export const DialogSurface = forwardRef<HTMLDivElement, SurfaceProps>(function D
       ref={ref}
       role="dialog"
       aria-modal="true"
-      className={cx('ui-surface-enter shadow-2xl', className)}
+      className={cx('shadow-2xl', className)}
       {...props}
     />
   );

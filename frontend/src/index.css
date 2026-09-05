@@ -141,18 +141,6 @@
     font-weight: 600;
   }
 
-  .ui-overlay-enter {
-    animation: uiOverlayEnter var(--motion-ui-duration) ease-out both;
-  }
-
-  .ui-surface-enter {
-    animation: uiSurfaceEnter var(--motion-ui-duration) var(--motion-ui-ease) both;
-  }
-
-  .ui-drawer-enter {
-    animation: uiDrawerEnter var(--motion-drawer-duration) var(--motion-ui-ease) both;
-  }
-
   .menu-drawer-action {
     display: flex;
     min-height: 44px;
@@ -245,21 +233,6 @@
   .fit-summary-label {
     color: var(--fit-summary-label);
   }
-}
-
-@keyframes uiOverlayEnter {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes uiSurfaceEnter {
-  from { opacity: 0; transform: translateY(8px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes uiDrawerEnter {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: translateX(0); }
 }
 
 @layer base {

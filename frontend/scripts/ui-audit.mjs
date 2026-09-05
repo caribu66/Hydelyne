@@ -27,6 +27,25 @@ for (const file of files) {
   if (modalBackdrops > 0 && /Modal\.tsx$/.test(file) && !/role="dialog"/.test(source)) {
     findings.push({ severity: 'ERROR', file: name, message: 'Modal-like surface is missing role="dialog".' });
   }
+
+  // Enforce standardized motion transitions & accessibility on modal/dialog components
+  if (name !== 'src/components/ui.tsx' && (/Modal\.tsx$/.test(file) || /role="(?:dialog|alertdialog)"/.test(source))) {
+    if (!/<AnimatePresence\b/.test(source)) {
+      findings.push({ severity: 'ERROR', file: name, message: 'Modal/dialog component is missing <AnimatePresence> entrance/exit transitions.' });
+    }
+    if (!/<motion\.div\b/.test(source)) {
+      findings.push({ severity: 'ERROR', file: name, message: 'Modal/dialog component is missing <motion.div> animated surfaces.' });
+    }
+    if (!/useAccessibleDialog\(/.test(source)) {
+      findings.push({ severity: 'ERROR', file: name, message: 'Modal/dialog component is missing useAccessibleDialog for keyboard and focus trap accessibility.' });
+    }
+  }
+
+  // Ban legacy CSS keyframe overlay classes in favor of Framer Motion
+  if (/\bui-(?:overlay|surface|drawer)-enter\b/.test(source) && name !== 'src/index.css') {
+    findings.push({ severity: 'ERROR', file: name, message: 'Legacy CSS transition class detected; use Framer Motion AnimatePresence and motion.div instead.' });
+  }
+
   if (/<h[1-6]\b[^>]*\bonClick=/.test(source)) {
     findings.push({ severity: 'ERROR', file: name, message: 'Clickable heading detected; use a semantic button or link.' });
   }

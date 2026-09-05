@@ -9,9 +9,9 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-export function useAccessibleDialog(
+export function useAccessibleDialog<T extends HTMLElement = HTMLElement>(
   open: boolean,
-  dialogRef: RefObject<HTMLElement | null>,
+  dialogRef: RefObject<T | null>,
   onClose: () => void,
 ) {
   useEffect(() => {
@@ -38,10 +38,9 @@ export function useAccessibleDialog(
       const focusable: HTMLElement[] = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE),
       );
-      if (focusable.length === 0) return;
-      // Non-null: the length check above guarantees both indices exist.
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();

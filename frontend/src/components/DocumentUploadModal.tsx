@@ -1,5 +1,6 @@
 import { FC, useState, useRef, FormEvent, DragEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, DocumentCategory } from '../types';
 import {
   X,
@@ -144,20 +145,30 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
   };
 
   return createPortal(
-    (
-    <div
-      className="ui-overlay-enter fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        className="ui-surface-enter bg-surface border border-border-strong/80 rounded-[14px] w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="document-upload-title"
-        aria-describedby="document-upload-description"
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-canvas/80 backdrop-blur-xs"
+            onClick={onClose}
+          />
+          <motion.div
+            ref={dialogRef}
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="relative z-10 bg-surface border border-border-strong/80 rounded-[14px] w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] my-auto"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="document-upload-title"
+            aria-describedby="document-upload-description"
+          >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle bg-canvas/60">
           <div className="flex items-center gap-3">
@@ -349,9 +360,10 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
-    ),
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };

@@ -54,7 +54,7 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
   onLogout,
   onRequestLogin,
 }) => {
-  const drawerRef = useRef<HTMLElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   useAccessibleDialog(isOpen, drawerRef, onClose);
 
   const closeAfter = (action: () => void) => {
@@ -78,8 +78,8 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
             aria-label="Close menu"
           />
 
-          {/* Slide-over Aside Panel */}
-          <motion.aside
+          {/* Slide-over Drawer Panel */}
+          <motion.div
             ref={drawerRef}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -194,7 +194,7 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
                 </button>
               )}
             </div>
-          </motion.aside>
+          </motion.div>
         </div>
       )}
     </AnimatePresence>

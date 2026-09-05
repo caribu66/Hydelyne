@@ -1,5 +1,6 @@
 import { FC, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { SpecialistDocument, UserProfile } from '../types';
 import { getDocumentComplianceStatus } from '../hooks/useSpecialistDocuments';
@@ -41,12 +42,10 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   useAccessibleDialog(isOpen && Boolean(doc), dialogRef, onClose);
 
-  if (!isOpen || !doc) return null;
+  const compliance = doc ? getDocumentComplianceStatus(doc) : null;
+  const originalFileAvailable = doc ? hasOriginalDocumentFile(doc) : false;
 
-  const compliance = getDocumentComplianceStatus(doc);
-  const originalFileAvailable = hasOriginalDocumentFile(doc);
-
-  const extractedData = doc.extractedData;
+  const extractedData = doc?.extractedData;
   const asStringArray = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
   const extractedFullName = typeof extractedData?.full_name === 'string' ? extractedData.full_name : undefined;
@@ -62,6 +61,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   );
 
   const handleDownload = () => {
+    if (!doc) return;
     if (!originalFileAvailable) {
       onShowToast?.(`Original file unavailable for “${doc.title}”. This is a compliance record only.`);
       return;
@@ -89,6 +89,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   };
 
   const confirmDelete = async () => {
+    if (!doc) return;
     try {
       await onDelete?.(doc.id);
       onShowToast?.(`Removed ${doc.title}`);
@@ -100,21 +101,31 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   };
 
   return createPortal(
-    (
     <>
-    <div
-      className="ui-overlay-enter fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        className="ui-surface-enter bg-surface border border-border-strong/80 rounded-[14px] w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="document-preview-title"
-        aria-describedby="document-preview-description"
-      >
+      <AnimatePresence>
+        {isOpen && doc && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="fixed inset-0 bg-canvas/80 backdrop-blur-xs"
+              onClick={onClose}
+            />
+            <motion.div
+              ref={dialogRef}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="relative z-10 bg-surface border border-border-strong/80 rounded-[14px] w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="document-preview-title"
+              aria-describedby="document-preview-description"
+            >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
           <div className="flex items-center gap-3 min-w-0">
@@ -176,9 +187,11 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
         <div className="px-5 py-2.5 bg-canvas/40 border-b border-border-subtle flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-secondary font-mono">Status:</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${compliance.badgeClass}`}>
-              {compliance.label}
-            </span>
+            {compliance && (
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${compliance.badgeClass}`}>
+                {compliance.label}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-4 text-secondary text-xs font-mono">
@@ -384,18 +397,21 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
             Close Preview
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
-    <ConfirmDialog
-      open={isDeleteConfirmationOpen}
-      title="Remove compliance record?"
-      description={`This will remove “${doc.title}” from this contractor’s vault. The action cannot be undone from this screen.`}
-      confirmLabel="Remove record"
-      onConfirm={confirmDelete}
-      onCancel={() => setIsDeleteConfirmationOpen(false)}
-    />
-    </>
-    ),
-    document.body
+  )}
+</AnimatePresence>
+{doc && (
+  <ConfirmDialog
+    open={isDeleteConfirmationOpen}
+    title="Remove compliance record?"
+    description={`This will remove “${doc.title}” from this contractor’s vault. The action cannot be undone from this screen.`}
+    confirmLabel="Remove record"
+    onConfirm={confirmDelete}
+    onCancel={() => setIsDeleteConfirmationOpen(false)}
+  />
+)}
+</>,
+document.body
   );
 };

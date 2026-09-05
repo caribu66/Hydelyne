@@ -229,6 +229,10 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   const hasReadableSummary = Boolean(readableSummary && !readableSummary.startsWith('{') && !readableSummary.startsWith('['));
   const isSecondarySection = activeTab === 'systems';
   const secondarySectionLabel = activeTab === 'systems' ? 'Systems' : 'More';
+  const hasSystemsCategories = Boolean(
+    profile.systemsCategories &&
+    Object.values(profile.systemsCategories).some((items) => items.length > 0)
+  );
   const profileSkills = Array.from(new Set([...(profile.skills ?? []), ...(profile.expertise ?? [])]));
   const normalizedSkillsQuery = skillsQuery.trim().toLocaleLowerCase();
   const matchingSkills = normalizedSkillsQuery
@@ -609,7 +613,31 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
           </div>
         ) : activeTab === 'systems' ? (
           <div className="space-y-4">
-            {profile.systemsCategories ? (Object.entries(profile.systemsCategories) as [string, string[]][]).map(([category, items]) => items.length > 0 && <section key={category} className="space-y-2"><h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">{category}</h3><DossierCollection items={items} itemLabel="systems" initialItems={8} renderItems={(systems) => <div className="flex flex-wrap gap-2">{systems.map((system) => <span key={system} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">{system}</span>)}</div>} /></section>) : <p className="text-muted">No systems experience was found in the CV.</p>}
+            {hasSystemsCategories && profile.systemsCategories ? (
+              (Object.entries(profile.systemsCategories) as [string, string[]][]).map(
+                ([category, items]) => items.length > 0 && (
+                  <section key={category} className="space-y-2">
+                    <h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono capitalize">{category}</h3>
+                    <DossierCollection
+                      items={items}
+                      itemLabel="systems"
+                      initialItems={8}
+                      renderItems={(systems) => (
+                        <div className="flex flex-wrap gap-2">
+                          {systems.map((system) => (
+                            <span key={system} className="px-3 py-1.5 rounded-[10px] bg-surface border border-border-subtle text-secondary font-medium text-xs">
+                              {system}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    />
+                  </section>
+                )
+              )
+            ) : (
+              <p className="text-muted">No systems experience was found in the CV.</p>
+            )}
           </div>
         ) : activeTab === 'expertise' ? (
           <div className="space-y-4">
@@ -976,45 +1004,59 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
       </div>
     </div>
 
-    {isRadarModalOpen && createPortal(
-      <div
-        className="ui-overlay-enter fixed inset-0 z-[100] flex items-center justify-center bg-canvas p-3 sm:p-6"
-        onClick={() => setIsRadarModalOpen(false)}
-      >
-        <div
-          ref={radarDialogRef}
-          className="ui-surface-enter w-full max-w-4xl max-h-[94vh] overflow-y-auto rounded-[14px] border border-border-strong bg-surface p-4 sm:p-6 shadow-2xl"
-          onClick={(event) => event.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${profile.name} skills radar`}
-        >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-primary">Skills Radar</h3>
-              <p className="text-xs text-secondary">{profile.name} · Competency assessment</p>
-            </div>
-            <button
-              type="button"
+    {createPortal(
+      <AnimatePresence>
+        {isRadarModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="fixed inset-0 bg-canvas/80 backdrop-blur-xs"
               onClick={() => setIsRadarModalOpen(false)}
-              ref={radarCloseRef}
-              className="rounded-[10px] bg-surface-raised p-2 text-secondary transition-colors hover:bg-surface-selected hover:text-primary"
-              title="Close skills radar"
+            />
+            <motion.div
+              ref={radarDialogRef}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="relative z-10 w-full max-w-4xl max-h-[94vh] overflow-y-auto rounded-[14px] border border-border-strong bg-surface p-4 sm:p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${profile.name} skills radar`}
             >
-              <X className="h-4 w-4" />
-            </button>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-primary">Skills Radar</h3>
+                  <p className="text-xs text-secondary">{profile.name} · Competency assessment</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsRadarModalOpen(false)}
+                  ref={radarCloseRef}
+                  className="rounded-[10px] bg-surface-raised p-2 text-secondary transition-colors hover:bg-surface-selected hover:text-primary cursor-pointer"
+                  title="Close skills radar"
+                  aria-label="Close dialog"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <CandidateSkillRadarChart profile={profile} size="lg" showLegend={true} />
+              <div className="mt-4 rounded-[10px] border border-border-subtle bg-canvas/50 p-4 text-xs text-secondary">
+                <span className="mb-1 block font-mono text-xs font-semibold uppercase text-primary">
+                  Methodology & Assessment Criteria
+                </span>
+                <p>
+                  Calculated dynamically from verified offshore track records, certifications, and technical proficiencies.
+                </p>
+              </div>
+            </motion.div>
           </div>
-          <CandidateSkillRadarChart profile={profile} size="lg" showLegend={true} />
-          <div className="mt-4 rounded-[10px] border border-border-subtle bg-canvas/50 p-4 text-xs text-secondary">
-            <span className="mb-1 block font-mono text-xs font-semibold uppercase text-primary">
-              Methodology & Assessment Criteria
-            </span>
-            <p>
-              Calculated dynamically from verified offshore track records, certifications, and technical proficiencies.
-            </p>
-          </div>
-        </div>
-      </div>,
+        )}
+      </AnimatePresence>,
       document.body,
     )}
     <ConfirmDialog

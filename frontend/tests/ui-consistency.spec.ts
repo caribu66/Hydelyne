@@ -32,6 +32,7 @@ test.describe('UI consistency', () => {
     await page.getByRole('button', { name: 'Open workspace menu' }).click();
     await page.getByRole('button', { name: 'Use light theme' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.getByRole('dialog', { name: 'Menu' })).toBeHidden();
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });

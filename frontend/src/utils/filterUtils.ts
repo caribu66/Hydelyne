@@ -54,9 +54,8 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
 
   // 3. Detect Locations
   ALL_LOCATIONS.forEach((loc) => {
-    // Non-null: String.split always returns at least one element.
-    const cityName = loc.split(',')[0]!.trim().toLowerCase();
-    if (clean.includes(cityName) || clean.includes(loc.toLowerCase())) {
+    const cityName = loc.split(',')[0]?.trim().toLowerCase();
+    if (cityName && (clean.includes(cityName) || clean.includes(loc.toLowerCase()))) {
       detected.locations?.push(loc);
     }
   });
@@ -84,15 +83,13 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
 
   // Regex for "X+ years", "X yrs", "X-Y years"
   const rangeMatch = clean.match(/(\d+)\s*[-to]+\s*(\d+)\s*(?:years|yrs)/i);
-  if (rangeMatch) {
-    // Non-null: both are required (non-optional) capture groups in the regex,
-    // so a successful match guarantees both are present.
-    detected.minExperience = parseInt(rangeMatch[1]!, 10);
-    detected.maxExperience = parseInt(rangeMatch[2]!, 10);
+  if (rangeMatch && rangeMatch[1] && rangeMatch[2]) {
+    detected.minExperience = parseInt(rangeMatch[1], 10);
+    detected.maxExperience = parseInt(rangeMatch[2], 10);
   } else {
     const plusMatch = clean.match(/(\d+)\s*\+?\s*(?:years|yrs)/i);
-    if (plusMatch) {
-      detected.minExperience = parseInt(plusMatch[1]!, 10);
+    if (plusMatch && plusMatch[1]) {
+      detected.minExperience = parseInt(plusMatch[1], 10);
     }
   }
 
@@ -154,9 +151,10 @@ export function filterProfiles(profiles: UserProfile[], filters: FilterState): U
 
     // 2. Locations filter
     if (filters.locations.length > 0) {
-      const matchesLocation = filters.locations.some((loc) =>
-        profile.location.toLowerCase().includes(loc.toLowerCase().split(',')[0]!.trim())
-      );
+      const matchesLocation = filters.locations.some((loc) => {
+        const city = loc.toLowerCase().split(',')[0]?.trim();
+        return city ? profile.location.toLowerCase().includes(city) : false;
+      });
       if (!matchesLocation) return false;
     }
 

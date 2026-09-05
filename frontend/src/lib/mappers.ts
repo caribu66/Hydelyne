@@ -66,8 +66,7 @@ function avatarFor(name: string): string {
   const seed = name.trim().toLowerCase()
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0
-  // Non-null: modulo a fixed non-empty array is always in bounds.
-  return SHOWCASE_AVATARS[Math.abs(hash) % SHOWCASE_AVATARS.length]!
+  return SHOWCASE_AVATARS[Math.abs(hash) % SHOWCASE_AVATARS.length] ?? SHOWCASE_AVATARS[0] ?? ''
 }
 
 function departmentFromTags(tags: string[]): string {

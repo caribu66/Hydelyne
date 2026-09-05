@@ -247,9 +247,9 @@ test.describe('authenticated specialist workspace', () => {
 
     const moreSections = dossier.getByRole('button', { name: 'More', exact: true });
     await moreSections.click();
-    await dossier.getByRole('menuitem', { name: 'Technical expertise' }).click();
-    await expect(dossier.getByRole('button', { name: 'Expertise', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(dossier.getByText('No explicit expertise section was found in the CV.')).toBeVisible();
+    await dossier.getByRole('menuitem', { name: 'Systems experience' }).click();
+    await expect(dossier.getByRole('button', { name: 'Systems', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dossier.getByText('No systems experience was found in the CV.')).toBeVisible();
   });
 
   test('stays usable with unusually long specialist information', async ({ page }) => {

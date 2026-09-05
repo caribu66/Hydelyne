@@ -66,11 +66,6 @@ const ExportShortlistModal = lazy(() => import('./components/ExportShortlistModa
 const SpecialistDossierPane = lazy(() => import('./components/SpecialistDossierPane').then((module) => ({ default: module.SpecialistDossierPane })));
 const SpecialistTableView = lazy(() => import('./components/SpecialistTableView').then((module) => ({ default: module.SpecialistTableView })));
 
-const LazySurfaceFallback = () => (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-canvas/70" role="status" aria-live="polite">
-    <span className="rounded-[10px] border border-border-subtle bg-surface px-4 py-3 text-xs text-secondary">Loading workspace…</span>
-  </div>
-);
 
 const DossierFallback = () => (
   <div className="flex h-full min-h-80 items-center justify-center rounded-[14px] bg-surface/40" role="status" aria-live="polite">
@@ -1492,23 +1487,21 @@ export default function App() {
         totalFilteredCount={isSearchActive ? results.length : allProfiles.length}
         totalCount={allProfiles.length}
       />
+
+      {/* Sign-in Modal */}
+      <LoginPage
+        isOpen={isLoginOpen}
+        isModal
+        onCancel={() => setIsLoginOpen(false)}
+        onSuccess={() => {
+          setIsLoginOpen(false);
+          void refreshSession();
+        }}
+      />
       </Suspense>
 
       {/* Toast Feedback */}
       <Toast message={toastMessage} />
-
-      {isLoginOpen && (
-        <Suspense fallback={<LazySurfaceFallback />}>
-        <LoginPage
-          isModal
-          onCancel={() => setIsLoginOpen(false)}
-          onSuccess={() => {
-            setIsLoginOpen(false);
-            void refreshSession();
-          }}
-        />
-        </Suspense>
-      )}
     </div>
   );
 }

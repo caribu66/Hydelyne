@@ -82,6 +82,39 @@ change, no auth change.
 untouched here; only `frontend/package.json`/`package-lock.json` were
 touched on the frontend side.
 
+## 2026-09-05 — Frontend UI consistency, modal motion overhaul, strict type safety & E2E suite hardening (Antigravity)
+
+Audit, bug fixes, type-safety hardening, systematic animation harmonization, and end-to-end verification across the frontend:
+
+- **Modal & Dialog Motion Standardization**:
+  - `frontend/src/components/LoginPage.tsx`: Integrated `AnimatePresence` and Framer Motion into the modal presentation with smooth backdrop blur fade (`opacity: 0` -> `1`) and card entrance/exit scaling (`scale: 0.96, y: 8` -> `scale: 1, y: 0`), adhering to `frontend/AGENTS.md` modal surface token standards (`rounded-[14px]`, `border-border-subtle`, `bg-surface`, `shadow-2xl`). Standardized close button label to `Close dialog`.
+  - `frontend/src/App.tsx`: Moved `LoginPage` inside the primary preloaded `<Suspense>` block with controlled `isOpen={isLoginOpen}`, eliminating lazy-chunk download delays on click and enabling smooth exit transitions.
+  - `frontend/src/components/ConfirmDialog.tsx`: Upgraded to `AnimatePresence` and `motion.div` with standardized backdrop (`bg-canvas/80 backdrop-blur-xs`) and scale/slide transitions.
+  - `frontend/src/components/DocumentUploadModal.tsx`: Upgraded with `AnimatePresence` and `motion.div` modal card transitions.
+  - `frontend/src/components/DocumentPreviewModal.tsx`: Converted from legacy `bg-black/80` and CSS `ui-overlay-enter` to `AnimatePresence` + `motion.div` with semantic tokens and smooth exit animations.
+  - `frontend/src/components/SpecialistDossierPane.tsx`: Modernized the Skills Radar dialog to use `AnimatePresence` and `motion.div` with semantic `bg-canvas/80 backdrop-blur-xs`.
+  - `frontend/src/components/AddCrewMemberModal.tsx`: Replaced ad-hoc `keydown` event listener with `useAccessibleDialog` focus trap, Escape handler, and focus restoration.
+  - `frontend/src/index.css`: Removed legacy `.ui-overlay-enter`, `.ui-surface-enter`, `.ui-drawer-enter` classes and keyframes now that all dialogs use unified Framer Motion springs.
+- **Automated CI Regression Guard for UI Consistency (`scripts/ui-audit.mjs`)**:
+  - Enhanced static analyzer `npm run ui:audit:strict` with rules enforcing:
+    1. Every `*Modal.tsx` and component declaring `role="dialog"` or `role="alertdialog"` must include `<AnimatePresence>`, `<motion.div>`, and `useAccessibleDialog`.
+    2. Zero legacy CSS overlay animation classes (`ui-overlay-enter`, `ui-surface-enter`, `ui-drawer-enter`).
+    3. Zero raw color modal backdrops (`bg-black`, `bg-white`).
+  - Documented mandatory modal & dialog motion contract in `frontend/AGENTS.md`.
+- **Strict Type Safety & Non-Null Assertion Elimination (`npm run lint`)**:
+  - Replaced all 14 `@typescript-eslint/no-non-null-assertion` instances across `useAccessibleDialog.ts`, `useSearchWorkspace.ts`, `mappers.ts`, `main.tsx`, `filterUtils.ts`, and `filterUtils.test.ts` with explicit type guards, nullish coalescing fallbacks, and safe index narrowing. `npm run lint` now passes with **0 errors and 0 warnings**.
+  - Generalized `useAccessibleDialog<T extends HTMLElement>` to accept any subtype of `HTMLElement`, maintaining type safety without casts.
+- **Accessibility & ARIA Compliance**:
+  - `frontend/src/components/AppMenuDrawer.tsx`: Replaced `<motion.aside role="dialog">` with `<motion.div role="dialog">`, fixing the W3C ARIA violation where `role="dialog"` was applied to an HTML `<aside>` element.
+  - `frontend/tests/ui-consistency.spec.ts`: Added assertion to wait for the drawer dialog to complete its exit transition before executing full-page axe-core audits in light mode.
+- **Dossier Systems Experience & Empty State Rendering**:
+  - `frontend/src/components/SpecialistDossierPane.tsx`: Resolved a rendering bug where `systemsCategories` was always initialized as an object of empty arrays, causing the section to render empty tags without displaying the intentional empty-state message (`No systems experience was found in the CV.`). Added `hasSystemsCategories` validation to properly display empty states.
+  - `frontend/tests/authenticated-flow.spec.ts`: Aligned the progressive disclosure test with the unified `Systems experience` secondary section and empty state assertion.
+- **Visual Baseline Synchronization**:
+  - Updated Playwright snapshot baselines across mobile, tablet, desktop, and wide viewports to reflect the verified contractor card design and split-pane layout.
+- **Verification**:
+  - `npm run test:quality` (`lint`, `build`, `ui:audit:strict`, and `test:e2e:ci`) passed with 100% success (0 lint issues, 54 unit tests passing, 90 e2e tests passing, clean UI audit).
+
 ## 2026-09-05 — Fix `pip install -e .` on backend flat layout (Claude Code)
 
 Closed a real, previously-flagged CI-breaking bug (noted as out-of-scope in

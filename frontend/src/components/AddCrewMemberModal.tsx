@@ -1,9 +1,10 @@
-import { FC, useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
+import { FC, useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, UserPlus, Loader2, Upload, FileText, CheckCircle } from 'lucide-react';
 import { useMutation } from '@apollo/client';
 import { CREATE_CREW_MEMBER } from '../lib/queries';
 import { getDocumentStatus, previewCv, uploadDocument } from '../lib/documentsApi';
+import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 
 interface AddCrewMemberModalProps {
   isOpen: boolean;
@@ -27,17 +28,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [step, setStep] = useState<'form' | 'creating' | 'extracting' | 'done'>('form');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && step === 'form') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, step]);
-
-  const [createCrewMember] = useMutation(CREATE_CREW_MEMBER);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const resetForm = () => {
     setFullName('');
@@ -55,6 +46,10 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
     resetForm();
     onClose();
   };
+
+  useAccessibleDialog(isOpen, dialogRef, handleClose);
+
+  const [createCrewMember] = useMutation(CREATE_CREW_MEMBER);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -148,6 +143,7 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             onClick={handleClose}
           />
           <motion.div
+            ref={dialogRef}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
