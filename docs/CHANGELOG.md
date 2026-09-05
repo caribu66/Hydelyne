@@ -55,6 +55,32 @@ directly within the consultant dossier Completion & Expiry view.
 - All backend tests (136 passed) and frontend checks (`npm run lint`, `npm test`,
   `npm run ui:audit:strict`) pass cleanly.
 
+## 2026-09-04 — Fix crew list silently truncated past 100 records (Claude Code)
+
+Salvaged from `claude/strange-shannon-e680d4` — a real, confirmed-still-live
+bug on `main` before this port, unrelated to anything else in this session.
+
+Follow-up to another minor issue flagged in the prior review entry: a
+"Found 13" vs. "14 specialists meet every requirement" count mismatch was
+a symptom, not the bug. `useCrewProfiles.ts` fetched crew with a hardcoded
+`limit: 100, offset: 0` and never fetched more. With 109 real crew members,
+up to 9 were invisible everywhere in the app — browsing, filter chips, and
+AI search results all silently missing real specialists with no error or
+indication.
+
+Raising the frontend's requested limit alone would not have fixed this:
+the backend's `crew_members` resolver also clamps `limit` to <= 100
+server-side ("Enforce pagination limits to avoid abuse" —
+`app/graphql/schema.py`). Fixed with real pagination in the hook: keep the
+existing fast `cache-and-network` first-page fetch for the common case,
+and only page through additional 100-record pages via `client.query` when
+the first page comes back full — no behavior change at all when the crew
+count is under 100. Verified live: the filter panel now shows "Show 109
+specialists" (was capped at 100).
+
+Frontend: 46 tests, lint, and build all clean. No backend changes in this
+entry.
+
 ## 2026-09-05 — Standalone certificate document ingestion & Certification auto-linking (Slice 1) (Antigravity)
 
 Closed the architectural gap where standalone certificate files uploaded to the
