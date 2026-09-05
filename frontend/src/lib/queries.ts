@@ -22,7 +22,7 @@ export const CREW_MEMBERS_QUERY = gql`
       geographicalExperience
       systemsExperience
       trainingQualifications
-      certifications { id certType certNumber issuingBody issueDate expiryDate renewalDate status verificationStatus }
+      certifications { id certType certNumber issuingBody issueDate expiryDate renewalDate status verificationStatus documentRef }
       workHistory { id clientName projectName country location projectType role responsibilities startDate endDate status }
       tags
       passport {
@@ -169,5 +169,19 @@ export const CREATE_CREW_MEMBER = gql`
 export const DELETE_CREW_MEMBER = gql`
   mutation DeleteCrewMember($id: String!) {
     deleteCrewMember(id: $id)
+  }
+`
+
+export const VERIFY_CERTIFICATION = gql`
+  mutation VerifyCertification($id: String!, $status: VerificationStatus!) {
+    verifyCertification(id: $id, status: $status) {
+      id
+      certType
+      status
+      verificationStatus
+      documentRef
+      issueDate
+      expiryDate
+    }
   }
 `

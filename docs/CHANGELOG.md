@@ -10,6 +10,27 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Certification verification controls & backing document preview (Slice 2) (Antigravity)
+
+Exposed verification status, verification actions, and backing document preview
+directly within the consultant dossier Completion & Expiry view.
+
+- Exposed `documentRef` on the GraphQL `Certification` type (`app/graphql/types.py`)
+  and resolved it from the DB model in `_model_to_graphql_certification` (`app/graphql/schema.py`).
+- Enhanced `CertificationService.verify_certification` (`app/services/crew.py`) to
+  transition lifecycle `status` to `valid` (or `expiring_soon`/`expired` based on dates)
+  upon verification and invalidate the crew member's compliance status cache.
+- Frontend GraphQL: Updated `CREW_MEMBERS_QUERY` to include `documentRef` and
+  exported `VERIFY_CERTIFICATION` mutation (`frontend/src/lib/queries.ts`).
+- Frontend Dossier Pane (`frontend/src/components/SpecialistDossierPane.tsx`):
+  - Added verification badge pills (`Verified`, `Rejected`, `Pending Verification`) and
+    expiry badges (`Expired`, `Expiring Soon`).
+  - Added "View Proof" action opening `DocumentPreviewModal` when `documentRef` is linked.
+  - Added "Verify" and "Reject" mutation controls for coordinators/managers with optimistic
+    updates, loading spinner, and toast notifications.
+- All backend tests (136 passed) and frontend checks (`npm run lint`, `npm test`,
+  `npm run ui:audit:strict`) pass cleanly.
+
 ## 2026-09-05 — Standalone certificate document ingestion & Certification auto-linking (Slice 1) (Antigravity)
 
 Closed the architectural gap where standalone certificate files uploaded to the

@@ -109,6 +109,8 @@ async def test_verify_certification_status(client, db_session):
         crew_member_id=crew.id,
         cert_type="huet",
         verification_status="unverified",
+        status="pending_verification",
+        document_ref="doc-test-123",
     )
     db_session.add(cert)
     await db_session.commit()
@@ -118,7 +120,12 @@ async def test_verify_certification_status(client, db_session):
         json={
             "query": """
                 mutation($id: String!, $status: VerificationStatus!) {
-                    verifyCertification(id: $id, status: $status) { id verificationStatus }
+                    verifyCertification(id: $id, status: $status) {
+                        id
+                        status
+                        verificationStatus
+                        documentRef
+                    }
                 }
             """,
             "variables": {"id": cert.id, "status": "VERIFIED"},
@@ -126,7 +133,10 @@ async def test_verify_certification_status(client, db_session):
     )
     body = response.json()
     assert "errors" not in body, body
-    assert body["data"]["verifyCertification"]["verificationStatus"] == "verified"
+    data = body["data"]["verifyCertification"]
+    assert data["verificationStatus"] == "verified"
+    assert data["status"] == "valid"
+    assert data["documentRef"] == "doc-test-123"
 
 
 @pytest.mark.asyncio

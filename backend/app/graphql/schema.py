@@ -137,6 +137,7 @@ def _model_to_graphql_certification(model: CertificationModel) -> Certification:
         expiry_date=str(model.expiry_date) if model.expiry_date else None,
         renewal_date=str(model.renewal_date) if model.renewal_date else None,
         status=model.status,
+        document_ref=model.document_ref,
         extracted_confidence=model.extracted_confidence,
         verification_status=model.verification_status,
     )

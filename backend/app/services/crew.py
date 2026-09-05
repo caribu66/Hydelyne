@@ -389,7 +389,7 @@ class CertificationService:
             return cert
 
     async def verify_certification(self, cert_id: str, status: str) -> Certification:
-        """Set a certification's verification status."""
+        """Set a certification's verification status and update lifecycle status."""
         factory = get_session_factory()
         async with factory() as session:
             stmt = select(Certification).where(Certification.id == cert_id)
@@ -398,8 +398,24 @@ class CertificationService:
             if not cert:
                 raise ValueError(f"Certification {cert_id} not found")
             cert.verification_status = status
+            today = date.today()
+            if status == "verified":
+                if cert.expiry_date and cert.expiry_date < today:
+                    cert.status = "expired"
+                elif cert.expiry_date and cert.expiry_date <= today + timedelta(days=30):
+                    cert.status = "expiring_soon"
+                else:
+                    cert.status = "valid"
+            elif status == "rejected":
+                cert.status = "pending_verification"
+
             await session.commit()
             await session.refresh(cert)
+
+            cache_key = cache_service._make_key("compliance", cert.crew_member_id)
+            await cache_service.delete(cache_key)
+            await cache_service.invalidate_pattern("hydenlyne:compliance:*")
+
             return cert
 
     async def get_expiring_certifications(self, days: int = 30) -> list[Certification]:

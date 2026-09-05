@@ -20,7 +20,7 @@ export type BackendCrew = {
   geographicalExperience?: string | null
   systemsExperience?: string | null
   trainingQualifications?: string | null
-  certifications?: Array<{ id: string; certType: string; certNumber?: string | null; issuingBody?: string | null; issueDate?: string | null; expiryDate?: string | null; renewalDate?: string | null; status?: string | null; verificationStatus?: string | null }> | null
+  certifications?: Array<{ id: string; certType: string; certNumber?: string | null; issuingBody?: string | null; issueDate?: string | null; expiryDate?: string | null; renewalDate?: string | null; status?: string | null; verificationStatus?: string | null; documentRef?: string | null }> | null
   workHistory?: Array<{ id: string; clientName?: string | null; projectName?: string | null; projectType?: string | null; location?: string | null; country?: string | null; role?: string | null; responsibilities?: string | null; startDate?: string | null; endDate?: string | null; status?: string | null }> | null
   tags?: string | null // JSON string
   passport?: { number?: string | null; expiry?: string | null; issuingCountry?: string | null } | null
@@ -250,6 +250,10 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
       issueDate: cert.issueDate || undefined,
       expiryDate: cert.expiryDate || undefined,
       status: cert.status || undefined,
+      verificationStatus: cert.verificationStatus || 'unverified',
+      documentRef: cert.documentRef || undefined,
+      certNumber: cert.certNumber || undefined,
+      issuingBody: cert.issuingBody || undefined,
     })),
     workHistory: (raw.workHistory || []).map((entry) => ({
       id: entry.id,

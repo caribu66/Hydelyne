@@ -61,7 +61,17 @@ export interface UserProfile {
   systemsCategories?: { hardware: string[]; software: string[]; instrumentation: string[]; other: string[] };
   trainingQualifications?: string[];
   trainingDetails?: Array<{ id: string; name: string; location?: string; completedDate?: string; expiryDate?: string }>;
-  certificationDetails?: Array<{ id: string; name: string; issueDate?: string; expiryDate?: string; status?: string }>;
+  certificationDetails?: Array<{
+    id: string;
+    name: string;
+    issueDate?: string;
+    expiryDate?: string;
+    status?: string;
+    verificationStatus?: string;
+    documentRef?: string;
+    certNumber?: string;
+    issuingBody?: string;
+  }>;
   email: string;
   phone?: string;
   linkedinUrl?: string;
