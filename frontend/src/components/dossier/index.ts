@@ -1,0 +1,10 @@
+export { DossierHeader } from './DossierHeader';
+export type { DossierTabType } from './DossierHeader';
+export { DossierBottomBar } from './DossierBottomBar';
+export { DossierRadarModal } from './DossierRadarModal';
+export { DossierOverviewTab } from './DossierOverviewTab';
+export { DossierExperienceTab } from './DossierExperienceTab';
+export { DossierCredentialsTab } from './DossierCredentialsTab';
+export { DossierExpertiseTab } from './DossierExpertiseTab';
+export { DossierSystemsTab } from './DossierSystemsTab';
+export { DossierRadarTab } from './DossierRadarTab';

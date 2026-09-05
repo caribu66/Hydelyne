@@ -10,6 +10,48 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-05 — Specialist dossier modular decomposition & UI architecture hardening (Antigravity)
+
+Decomposed monolithic `SpecialistDossierPane.tsx` (previously 1,238 lines) into clean, decoupled sub-tab components located in `frontend/src/components/dossier/`:
+- **Sub-Tab Architecture**:
+  - `DossierHeader.tsx`: Handles focused contractor workspace banner, contractor avatar/status, rate badge, shortlist toggle, and accessible ellipsis actions.
+  - `DossierOverviewTab.tsx`: Encapsulates context strip, AI summary, executive bio, interactive at-a-glance metrics cards, survey disciplines, and summary credentials.
+  - `DossierExperienceTab.tsx`: Encapsulates past client track record, historical projects data table, geographical zones, and survey disciplines.
+  - `DossierCredentialsTab.tsx`: Manages personal details, certifications badge grid, completion/expiry list with 30/60/90-day warning badges, proof viewer trigger, and compliance verification controls.
+  - `DossierExpertiseTab.tsx`: Manages technical competency tags with live real-time query filtering.
+  - `DossierSystemsTab.tsx`: Renders categorized hardware and software system proficiencies.
+  - `DossierRadarTab.tsx`: Displays candidate skill radar chart and methodology criteria.
+  - `DossierBottomBar.tsx`: Houses animated email copy feedback, LinkedIn deep link, and mobilization request triggers.
+  - `DossierRadarModal.tsx`: Extracted modal dialog and backdrop with focus trap for radar exploration.
+- **Engineering Standards Compliance**:
+  - Reduced `SpecialistDossierPane.tsx` from 1,238 lines down to 296 lines (satisfying the `<300` lines threshold from `docs/ENGINEERING_STANDARDS.md`).
+  - 100% semantic color token adherence verified by `npm run ui:audit:strict` (84 source files clean).
+  - TypeScript strict typing (`tsc --noEmit`), ESLint, Vitest (58 tests passed), and production Vite build passed with zero warnings.
+
+## 2026-09-05 — Natural language search bar testing & offshore medical refinement (Antigravity)
+
+Executed end-to-end testing of the search bar across natural language queries and automated UX flows:
+- **Natural Language Live Verification**: Evaluated multiple plain English queries against the live backend engine (`queryCrew` via GraphQL with PostgreSQL and Ollama):
+  - `"Show surveyors available immediately"`: matched 11 contractors with active availability.
+  - `"Who has BOSIET certification?"`: matched 14 contractors with valid or active BOSIET credentials.
+  - `"Find crew with IMCA"`: matched 9 contractors with IMCA credentials across IMCA Survey QC, Client Rep, and Geotech.
+  - `"Find Dutch consultants available immediately"`: matched 3 available Dutch specialists.
+  - `"Show specialists with JNCC MMO"`: matched 10 MMO accredited contractors.
+  - `"Find crew with NEBOSH"`: matched 8 contractors with NEBOSH credentials.
+  - `"Who has valid STCW?"`: matched 5 contractors with in-date STCW certificates.
+  - `"Show available client reps"`: matched 4 available client representatives.
+  - `"Who has a current offshore medical?"`: refined `app/domain/crew_query_rules.py` to recognize "offshore medical" as part of the medical certificate family rather than creating a separate project/skill requirement that falsely constrained results. Now reliably returns the 5 specialists with valid offshore medicals.
+- **Automated Frontend Test Suite (`tests/search-bar-natural-language.spec.ts`)**: Added 20 automated Playwright tests verifying:
+  - Input debounce and natural language query execution with GraphQL integration.
+  - Interactive AI criteria badges and summary banner rendering (`CrewQuerySummary`).
+  - Filtered contractor dossiers rendering in the results workspace.
+  - Keyboard shortcuts (`/` to focus, `Enter` to search, `Escape` to blur).
+  - "Recent Searches" history dropdown in localStorage (storage, retrieval, jump-to-search, clear history).
+  - Quick discovery chips populating and triggering searches.
+  - Search clear (`X`) button resetting the workspace to the calm hero state.
+  - All 20 tests passed across mobile, tablet, desktop, and wide viewports.
+- **Code Quality**: `tsc --noEmit`, ESLint, vitest (58 tests), and backend query tests (11 tests in `test_crew_query.py`) all pass cleanly.
+
 ## 2026-09-05 — Contractor document upload portal redesign (Antigravity)
 
 Redesigned the contractor document upload route (`/upload/:token`) into an exceptionally crafted, fully responsive, professional maritime portal:
