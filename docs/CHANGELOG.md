@@ -46,6 +46,16 @@ build` (byte-identical chunk sizes to the prior build), `npm run
 ui:audit:strict` (0 findings), `npm audit` (0 vulnerabilities). No app code
 changed. No migration, no API/contract change.
 
+## 2026-09-05 — Refine Hero search and discovery cards for executive showcase (Antigravity)
+
+Refined the entry hero and search experience in `ModernHeroSearch.tsx`:
+- **Search container depth**: Enhanced the search box with `bg-surface/90 backdrop-blur-sm`, permanent subtle 1px border contrast (`border-border-subtle hover:border-border-strong`), and focused ring elevation (`ring-2 ring-focus/25 bg-surface`).
+- **Showcase discovery chips**: Elevated prompt chips with pill styling (`rounded-full px-3.5 py-1.5 text-xs font-medium`), active contrast ring, and added a dedicated `Environmental Lead` quick preset.
+- **Executive 3-pillar feature cards**: Upgraded the Discover, Shortlist, and Request summary blocks into discrete micro-cards with individual icon containers and border contrast.
+- **Editorial typography**: Tightened headline tracking (`tracking-[-0.03em]`) and refined font weights.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run build` (all chunks clean), `npm run ui:audit:strict` (66 files, 0 findings), live container deployed.
+
 ## 2026-09-05 — Refine Specialist cards, table actions, and avatar framing for executive showcase (Antigravity)
 
 Polished the specialist presentation layer in `App.tsx`, `SpecialistTableView.tsx`, and `SpecialistDossierPane.tsx` for executive showcase standards with restrained precision styling and zero visual clutter:

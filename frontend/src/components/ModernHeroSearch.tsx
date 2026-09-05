@@ -20,6 +20,7 @@ const QUICK_DISCOVERY_CHIPS = [
   { label: 'Client Representative', query: 'Client Rep' },
   { label: 'Medical Ready', query: 'Who has a current offshore medical?' },
   { label: 'Available Immediately', query: 'Available immediately' },
+  { label: 'Environmental Lead', query: 'Environmental' },
 ];
 
 export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
@@ -133,14 +134,14 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
       <div className="w-full max-w-2xl px-4 flex flex-col items-center">
         {/* Refined Enterprise Editorial Header & Status (Visible in Calm/Initial State) */}
         {isCalmState && (
-          <div className="text-center space-y-4 mb-10 w-full animate-in fade-in slide-in-from-bottom-3 duration-500">
+          <div className="text-center space-y-3 mb-9 w-full animate-in fade-in slide-in-from-bottom-3 duration-500">
             {/* Editorial Title */}
-            <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08] font-semibold tracking-[-0.025em] text-primary font-sans">
+            <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.65rem] lg:leading-[1.12] font-semibold tracking-[-0.03em] text-primary font-sans">
               Find the right contractor for the next campaign.
             </h1>
 
             {/* Enterprise Subtitle */}
-            <p className="text-sm text-secondary font-normal max-w-md mx-auto leading-6">
+            <p className="text-sm text-secondary font-normal max-w-md mx-auto leading-relaxed">
               Search the private network by discipline, certification, region, or availability.
             </p>
           </div>
@@ -150,10 +151,10 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
         <div className="relative w-full">
           {/* Search Box */}
           <div
-              className={`relative flex min-h-16 items-center gap-3 rounded-[14px] border bg-surface px-4 py-3 shadow-lg shadow-black/5 transition-all duration-150 ${
+            className={`relative flex min-h-16 items-center gap-3 rounded-[14px] border px-4 py-3 shadow-sm transition-all duration-200 ${
               isFocused
-                ? 'border-border-strong ring-1 ring-focus/20 bg-surface'
-                : 'border-border-subtle hover:border-border-strong'
+                ? 'border-border-strong ring-2 ring-focus/25 bg-surface shadow-md'
+                : 'border-border-subtle hover:border-border-strong bg-surface/90 backdrop-blur-sm hover:bg-surface'
             }`}
           >
             <Search
@@ -176,7 +177,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               placeholder={isAuthenticated ? 'Ask in plain English — e.g. “Who has medical experience?”' : 'Sign in to search the private network'}
               readOnly={!isAuthenticated}
               aria-label={isAuthenticated ? 'Search contractors' : 'Sign in to search contractors'}
-              className="w-full bg-transparent text-primary placeholder:text-muted focus:outline-none text-base sm:text-lg font-light resize-none leading-relaxed antialiased"
+              className="w-full bg-transparent text-primary placeholder:text-muted/70 focus:outline-none text-base sm:text-lg font-normal tracking-tight resize-none leading-relaxed antialiased"
               spellCheck="false"
             />
 
@@ -206,9 +207,9 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
                 }
               }}
               disabled={isAuthenticated && !query.trim()}
-              className={`min-h-11 min-w-11 p-2 rounded-[10px] transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
+              className={`min-h-11 min-w-11 p-2 rounded-xl transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
                 query.trim() || !isAuthenticated
-                  ? 'bg-action hover:bg-action-hover text-on-action shadow-sm'
+                  ? 'bg-action hover:bg-action-hover text-on-action shadow-xs active:scale-95'
                   : 'bg-surface-raised/80 text-muted cursor-not-allowed'
               }`}
               title="Search"
@@ -254,87 +255,96 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
             </div>
           )}
 
-          <div className="mt-3 flex min-h-6 items-center justify-center px-1 text-xs text-secondary">
-            <span className={isAuthenticated ? 'hidden sm:inline' : 'inline'}>
+          <div className="mt-3 flex min-h-6 items-center justify-between px-1 text-xs text-secondary">
+            <span className={isAuthenticated ? 'hidden sm:inline text-muted' : 'inline text-muted'}>
               {isAuthenticated ? 'Search by role, qualification, or availability' : 'Private workforce system · Access is monitored'}
             </span>
-            {isAuthenticated && <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted">
-              <kbd className="rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-xs text-secondary">↵</kbd>
-              <span>to search</span>
-              <span className="mx-1 text-muted">·</span>
-              <kbd className="rounded-md border border-border-subtle bg-surface px-1.5 py-0.5 font-mono text-xs text-secondary">/</kbd>
-              <span>to focus</span>
-            </span>}
+            {isAuthenticated && (
+              <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted">
+                <kbd className="rounded-md border border-border-subtle bg-surface-raised px-1.5 py-0.5 font-mono text-xs text-secondary">↵</kbd>
+                <span>to search</span>
+                <span className="mx-1 text-muted/60">·</span>
+                <kbd className="rounded-md border border-border-subtle bg-surface-raised px-1.5 py-0.5 font-mono text-xs text-secondary">/</kbd>
+                <span>to focus</span>
+              </span>
+            )}
           </div>
 
           {/* Suggested searches help discovery before the result workspace opens. */}
-          {isCalmState && isAuthenticated && <div className="mt-5 flex items-center justify-center flex-wrap gap-2 px-1">
-            <span className="text-xs text-muted font-medium mr-1 hidden sm:inline">
-              Suggested:
-            </span>
-            {QUICK_DISCOVERY_CHIPS.map((chip) => {
-              const isActive = query.trim().toLowerCase() === chip.query.toLowerCase();
-              return (
+          {isCalmState && isAuthenticated && (
+            <div className="mt-5 flex items-center justify-center flex-wrap gap-2 px-1">
+              <span className="text-xs text-muted font-medium mr-1 hidden sm:inline">
+                Suggested:
+              </span>
+              {QUICK_DISCOVERY_CHIPS.map((chip) => {
+                const isActive = query.trim().toLowerCase() === chip.query.toLowerCase();
+                return (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        onSearch('');
+                        return;
+                      }
+                      if (isActive) {
+                        onClear();
+                      } else {
+                        onChange(chip.query);
+                        onSearch(chip.query);
+                      }
+                    }}
+                    className={`inline-flex min-h-11 items-center px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer border ${
+                      isActive
+                        ? 'bg-surface-raised border-border-strong text-primary font-semibold shadow-xs ring-1 ring-border-strong/40'
+                        : 'bg-surface/70 hover:bg-surface-raised border-border-subtle/80 hover:border-border-strong text-secondary hover:text-primary font-medium'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+              {isAuthenticated && onOpenFilters && (
                 <button
-                  key={chip.label}
                   type="button"
-                  onClick={() => {
-                    if (!isAuthenticated) {
-                      onSearch('');
-                      return;
-                    }
-                    if (isActive) {
-                      onClear();
-                    } else {
-                      onChange(chip.query);
-                      onSearch(chip.query);
-                    }
-                  }}
-                  className={`inline-flex min-h-11 items-center px-3 py-1 rounded-full text-xs transition-all cursor-pointer border ${
-                    isActive
-                      ? 'bg-surface-raised border-border-strong text-primary font-medium shadow-xs'
-                        : 'bg-transparent hover:bg-surface/70 border-border-subtle/80 hover:border-border-strong text-secondary hover:text-primary font-normal'
-                  }`}
+                  onClick={onOpenFilters}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-secondary border border-border-subtle/80 hover:border-border-strong bg-surface/70 hover:bg-surface-raised hover:text-primary transition-all cursor-pointer"
                 >
-                  {chip.label}
+                  <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>More filters</span>
                 </button>
-              );
-            })}
-            {isAuthenticated && onOpenFilters && (
-              <button
-                type="button"
-                onClick={onOpenFilters}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-secondary transition-colors hover:bg-surface hover:text-primary"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                More filters
-              </button>
-            )}
-          </div>}
+              )}
+            </div>
+          )}
 
           {!isCalmState && isAuthenticated && onOpenFilters && (
             <div className="mt-2 flex justify-end px-1">
               <button
                 type="button"
                 onClick={onOpenFilters}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-secondary transition-colors hover:bg-surface hover:text-primary"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-subtle/80 bg-surface/70 hover:bg-surface-raised px-3 text-xs font-medium text-secondary hover:text-primary transition-all cursor-pointer"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                Refine filters
+                <span>Refine filters</span>
               </button>
             </div>
           )}
 
           {isCalmState && isAuthenticated && (
-            <div className="mt-12 grid w-full max-w-xl grid-cols-3 text-center">
+            <div className="mt-12 grid w-full max-w-xl grid-cols-3 gap-2 text-center">
               {[
-                { icon: Search, label: 'Discover', detail: 'Search the network' },
-                { icon: Bookmark, label: 'Shortlist', detail: 'Save your strongest fits' },
+                { icon: Search, label: 'Discover', detail: 'Search the private network' },
+                { icon: Bookmark, label: 'Shortlist', detail: 'Save strongest fits' },
                 { icon: Send, label: 'Request', detail: 'Plan mobilization' },
               ].map(({ icon: Icon, label, detail }) => (
-                <div key={label} className="border-r border-border-subtle/70 px-3 last:border-r-0">
-                  <Icon className="mx-auto mb-2 h-4 w-4 text-muted" aria-hidden="true" />
-                  <p className="text-xs font-semibold text-secondary">{label}</p>
+                <div
+                  key={label}
+                  className="rounded-xl border border-border-subtle/60 bg-surface/40 p-4 transition-all hover:border-border-subtle hover:bg-surface/70"
+                >
+                  <div className="mx-auto mb-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-surface-raised text-secondary">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <p className="text-xs font-semibold text-primary">{label}</p>
                   <p className="mt-1 text-xs leading-4 text-muted">{detail}</p>
                 </div>
               ))}
