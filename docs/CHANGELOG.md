@@ -112,6 +112,15 @@ build` (byte-identical chunk sizes to the prior build), `npm run
 ui:audit:strict` (0 findings), `npm audit` (0 vulnerabilities). No app code
 changed. No migration, no API/contract change.
 
+## 2026-09-05 — Refine Specialist Dossier Pane and Profile Detail Modal (Antigravity)
+
+Elevated the specialist detail presentation in `SpecialistDossierPane.tsx` and `ProfileDetailModal.tsx`:
+- **Avatar framing & presence**: Upgraded profile modal avatars to `w-16 h-16 rounded-2xl` with an inset border ring (`ring-1 ring-border-subtle/80 shadow-sm`) and `ring-2 ring-surface` border on availability indicators.
+- **Header actions standard**: Upgraded modal shortlist button to an explicit 44px `Shortlist`/`Saved` pill with filled active state, added an active `Comparing` badge, and standardized focus mode, close, and 3-dots trigger controls to `min-h-11 min-w-11` (44px touch targets).
+- **Navigation tabs**: Upgraded dossier section tabs (`sectionButtonClass`) to `min-h-11` with active pill indicator and refined metadata counters.
+
+Verified: `npm run lint` (0 errors), `npm run test` (54 passed), `npm run build` (all chunks clean), `npm run ui:audit:strict` (66 files, 0 findings), deployed to container.
+
 ## 2026-09-05 — Elevate candidate comparison selection and floating dock (Antigravity)
 
 Substantially improved the candidate comparison experience across `App.tsx` and `ComparisonBar.tsx`:

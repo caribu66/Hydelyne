@@ -158,11 +158,11 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   src={profile.avatar}
                   alt={profile.name}
                   referrerPolicy="no-referrer"
-                  className="w-16 h-16 rounded-[14px] object-cover border border-border-strong shadow-md"
+                  className="w-16 h-16 rounded-2xl object-cover ring-1 ring-border-subtle/80 shadow-sm"
                 />
                 {isAvailableNow && (
                   <span
-                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-positive border-2 border-border-subtle shadow-xs"
+                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-positive ring-2 ring-surface shadow-xs"
                     title="Available for immediate deployment"
                   />
                 )}
@@ -174,9 +174,14 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                     {profile.name}
                   </h2>
                   {profile.isHighlyRecommended && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-accent-soft/80 border border-border-strong/60 text-xs text-accent font-medium">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-raised border border-border-strong/60 text-xs text-primary font-medium">
                       <BadgeCheck className="w-3.5 h-3.5 text-accent" />
                       <span>Verified Contractor</span>
+                    </span>
+                  )}
+                  {isCompared && (
+                    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold bg-surface-raised border border-border-strong text-primary shrink-0">
+                      <Scale className="w-3 h-3 text-secondary" /> Comparing
                     </span>
                   )}
                 </div>
@@ -188,9 +193,9 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                     <MapPin className="w-3.5 h-3.5 text-secondary shrink-0" />
                     <span>{profile.location}</span>
                   </span>
-                  <span>•</span>
+                  <span className="text-muted/60">•</span>
                   <span className="text-accent font-medium">{profile.department}</span>
-                  <span>•</span>
+                  <span className="text-muted/60">•</span>
                   <span className="font-mono text-secondary">{profile.yearsOfExperience} yrs experience</span>
                 </div>
               </div>
@@ -204,12 +209,12 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   aria-label={isCompared ? `Remove ${profile.name} from comparison` : `Compare ${profile.name}`}
                   className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border transition-colors cursor-pointer ${
                     isCompared
-                      ? 'bg-accent-soft/70 border-border-strong text-accent'
+                      ? 'bg-surface-raised border-border-strong text-primary ring-1 ring-border-strong/40'
                       : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
                   }`}
                   title={isCompared ? 'Remove from compare' : 'Add to compare'}
                 >
-                  <Scale className="w-4 h-4" />
+                  <Scale className={`w-4 h-4 ${isCompared ? 'stroke-[2.5]' : ''}`} />
                 </button>
               )}
 
@@ -241,17 +246,23 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 type="button"
                 onClick={() => onToggleBookmark(profile.id)}
                 aria-label={isBookmarked ? `Remove ${profile.name} from shortlist` : `Save ${profile.name} to shortlist`}
-                className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border transition-colors cursor-pointer ${
+                className={`inline-flex min-h-11 px-3.5 py-1.5 rounded-[10px] border transition-colors cursor-pointer items-center gap-1.5 text-xs font-semibold shadow-xs ${
                   isBookmarked
-                    ? 'bg-action text-on-action border-border-strong'
-                    : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
+                    ? 'bg-action text-on-action border-action'
+                    : 'bg-surface-raised/80 border-border-strong text-primary hover:bg-surface-raised'
                 }`}
-                title={isBookmarked ? 'Remove from shortlist' : 'Save to shortlist'}
+                title={isBookmarked ? 'Saved in shortlist' : 'Save to shortlist'}
               >
                 {isBookmarked ? (
-                  <BookmarkCheck className="w-4 h-4 fill-on-action" />
+                  <>
+                    <BookmarkCheck className="w-4 h-4 fill-on-action" />
+                    <span>Saved</span>
+                  </>
                 ) : (
-                  <Bookmark className="w-4 h-4" />
+                  <>
+                    <Bookmark className="w-4 h-4" />
+                    <span>Shortlist</span>
+                  </>
                 )}
               </button>
 
@@ -259,7 +270,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close contractor profile"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer border border-border-subtle"
                 title="Close"
               >
                 <X className="w-4 h-4" />

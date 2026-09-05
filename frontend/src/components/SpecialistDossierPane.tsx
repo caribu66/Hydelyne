@@ -243,7 +243,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   const latestProject = [...(profile.workHistory ?? [])]
     .sort((left, right) => (right.startDate ?? '').localeCompare(left.startDate ?? ''))[0];
   const highlightedSkills = profileSkills.slice(0, 3);
-  const sectionButtonClass = (isActive: boolean) => `min-h-10 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
+  const sectionButtonClass = (isActive: boolean) => `min-h-11 px-3.5 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer flex items-center gap-1.5 ${
     isFocusMode ? 'text-xs sm:text-sm' : 'text-xs'
   } ${isActive ? 'bg-surface-raised text-primary shadow-xs ring-1 ring-border-strong font-semibold' : 'text-secondary hover:text-primary hover:bg-surface-raised/50'}`;
 
@@ -334,13 +334,13 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 src={profile.avatar}
                 alt={profile.name}
                 referrerPolicy="no-referrer"
-                className={`rounded-xl object-cover border border-border-strong/80 shadow-sm transition-all ${
+                className={`rounded-xl object-cover ring-1 ring-border-subtle/80 shadow-sm transition-all ${
                   isFocusMode ? 'w-14 h-14 sm:w-16 sm:h-16' : 'w-12 h-12'
                 }`}
               />
               {isAvailableNow && (
                 <span
-                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-positive border-2 border-border-subtle shadow-xs"
+                  className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-positive ring-2 ring-surface shadow-xs"
                   title="Ready for deployment immediately"
                 />
               )}
@@ -366,18 +366,18 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
 
               <div className="flex items-center gap-2 text-xs text-secondary flex-wrap">
                 <span className="font-medium text-primary">{profile.title}</span>
-                <span>•</span>
+                <span className="text-muted/60">•</span>
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-secondary" />
                   <HighlightText text={profile.location.split(',')[0] ?? profile.location} query={searchQuery} />
                 </span>
-                <span>•</span>
+                <span className="text-muted/60">•</span>
                 <span className="text-accent font-medium">{profile.department}</span>
-                <span>•</span>
+                <span className="text-muted/60">•</span>
                 <span className="font-mono text-secondary">{profile.yearsOfExperience}y exp</span>
                 {profile.rating && (
                   <>
-                    <span>•</span>
+                    <span className="text-muted/60">•</span>
                     <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>
                   </>
                 )}
@@ -390,7 +390,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               <button
                 type="button"
                 onClick={onToggleFocusMode}
-                className={`min-h-9 min-w-9 p-2 rounded-lg border transition-colors cursor-pointer inline-flex items-center justify-center ${
+                className={`min-h-11 min-w-11 p-2 rounded-lg border transition-colors cursor-pointer inline-flex items-center justify-center ${
                   isFocusMode
                     ? 'bg-action border-border-strong text-on-action shadow-xs'
                     : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
@@ -398,7 +398,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                 title={isFocusMode ? 'Exit focus mode (Split View)' : 'Open focused contractor view (Press F)'}
                 aria-label={isFocusMode ? 'Exit focused contractor view' : 'Open focused contractor view'}
               >
-                {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                {isFocusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
             )}
 
@@ -435,9 +435,9 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
                   aria-haspopup="menu"
                   aria-expanded={isHeaderActionsOpen}
                   onClick={() => setIsHeaderActionsOpen((open) => !open)}
-                  className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border transition-colors ${isHeaderActionsOpen ? 'border-border-strong bg-surface-raised text-primary' : 'border-border-strong bg-surface-raised/80 text-secondary hover:text-primary'}`}
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border transition-colors cursor-pointer ${isHeaderActionsOpen ? 'border-border-strong bg-surface-raised text-primary' : 'border-border-strong bg-surface-raised/80 text-secondary hover:text-primary'}`}
                 >
-                  <Ellipsis className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Ellipsis className="h-4 w-4" aria-hidden="true" />
                 </button>
                 {isHeaderActionsOpen && (
                   <div role="menu" aria-label={`Dossier actions for ${profile.name}`} className="absolute right-0 top-11 z-30 w-56 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
