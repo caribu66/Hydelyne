@@ -233,6 +233,8 @@ export default function App() {
     handleResetAll,
     handlePrevProfile,
     handleNextProfile,
+    openWorkspace,
+    closeWorkspace,
   } = useSearchWorkspace({
     allProfiles,
     isBookmarked,
@@ -248,13 +250,14 @@ export default function App() {
 
   const handleOperationsSearch = useCallback((nextQuery: string) => {
     const trimmed = nextQuery.trim()
+    openWorkspace()
     setQuery(nextQuery)
     setCommittedQuery(trimmed)
     requestAnimationFrame(() => {
       const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Search contractors"]')
       if (input) input.focus()
     })
-  }, [setCommittedQuery, setQuery])
+  }, [openWorkspace, setCommittedQuery, setQuery])
 
   const handleOpenDocumentReview = useCallback(() => {
     setIsDocumentReviewOpen(true)
@@ -745,6 +748,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
+                    closeWorkspace();
                     setQuery('');
                     setCommittedQuery('');
                     resetFilters();

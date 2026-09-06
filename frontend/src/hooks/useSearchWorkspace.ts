@@ -39,6 +39,8 @@ export interface UseSearchWorkspaceReturn {
   handleResetAll: () => void
   handlePrevProfile: () => void
   handleNextProfile: () => void
+  openWorkspace: () => void
+  closeWorkspace: () => void
 }
 
 export function useSearchWorkspace({
@@ -56,6 +58,7 @@ export function useSearchWorkspace({
   const [showSavedOnly, setShowSavedOnly] = useState(false)
   const [viewMode, setViewMode] = useState<'split' | 'grid' | 'table'>('split')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false)
   const activeFilterCount = useMemo(() => getActiveFilterCount(filters), [filters])
 
   // Debounce: keep the result canvas stable while the user is still typing
@@ -71,8 +74,16 @@ export function useSearchWorkspace({
   // keys off, so no future entry point (URL param, restored state, a
   // websocket push) can render gated UI just by forgetting its own auth check.
   const isSearchActive = Boolean(
-    isAuthenticated && (committedQuery.trim() || showSavedOnly || activeFilterCount > 0)
+    isAuthenticated && (isWorkspaceOpen || committedQuery.trim() || showSavedOnly || activeFilterCount > 0)
   )
+
+  const openWorkspace = useCallback(() => {
+    setIsWorkspaceOpen(true)
+  }, [])
+
+  const closeWorkspace = useCallback(() => {
+    setIsWorkspaceOpen(false)
+  }, [])
 
   const handleSelectPreset = useCallback((presetId: string) => {
     const preset = FILTER_PRESETS.find((item) => item.id === presetId)
@@ -94,6 +105,7 @@ export function useSearchWorkspace({
   }, [])
 
   const handleResetAll = useCallback(() => {
+    setIsWorkspaceOpen(false)
     setShowSavedOnly(false)
     setQuery('')
     setCommittedQuery('')
@@ -192,5 +204,7 @@ export function useSearchWorkspace({
     handleResetAll,
     handlePrevProfile,
     handleNextProfile,
+    openWorkspace,
+    closeWorkspace,
   }
 }

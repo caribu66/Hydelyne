@@ -9,6 +9,7 @@ import {
   X,
   ArrowUpRight,
   ExternalLink,
+  Maximize2,
 } from 'lucide-react'
 import { UserProfile } from '../../types'
 import { SegmentedControl } from '../ui'
@@ -129,7 +130,7 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (query.trim() && onSearchFull) {
+    if (onSearchFull) {
       onSearchFull(query.trim())
     }
   }
@@ -299,21 +300,7 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                     return (
                       <div
                         key={p.id}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            setSelectedProfileId(p.id)
-                          }
-                        }}
-                        onClick={() => {
-                          setSelectedProfileId(p.id)
-                          if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-                            onSelectProfile?.(p)
-                          }
-                        }}
-                        className={`group relative p-2.5 rounded-[10px] border transition-all cursor-pointer flex items-center justify-between gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+                        className={`group relative rounded-[10px] border transition-all flex items-center justify-between gap-1.5 p-1.5 ${
                           isSel
                             ? 'bg-surface border-border-strong shadow-md ring-1 ring-border-strong'
                             : 'bg-surface/40 hover:bg-surface border-border-subtle/80 hover:border-border-subtle'
@@ -327,7 +314,18 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                           aria-hidden="true"
                         />
 
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1 pl-1">
+                        {/* Primary selection button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProfileId(p.id)
+                            if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+                              onSelectProfile?.(p)
+                            }
+                          }}
+                          onDoubleClick={() => onSelectProfile?.(p)}
+                          className="flex items-center gap-2.5 min-w-0 flex-1 pl-1 text-left cursor-pointer rounded-lg p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                        >
                           <div className="relative shrink-0">
                             <img
                               src={p.avatar}
@@ -359,7 +357,20 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                               {p.department && <span>{p.department}</span>}
                             </div>
                           </div>
-                        </div>
+                        </button>
+
+                        {/* Expand view modal button */}
+                        {onSelectProfile && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectProfile(p)}
+                            className="p-1.5 rounded-md hover:bg-surface-selected text-secondary hover:text-primary transition-all cursor-pointer shrink-0 opacity-60 group-hover:opacity-100 hover:!opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus mr-1"
+                            title={`Open full expanded view for ${p.name}`}
+                            aria-label={`Open full expanded view for ${p.name}`}
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        )}
                       </div>
                     )
                   })}
@@ -409,6 +420,7 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                 return (
                   <div
                     key={p.id}
+                    onDoubleClick={() => onSelectProfile?.(p)}
                     className="flex flex-col justify-between gap-2.5 rounded-[12px] border border-border-subtle bg-surface p-3.5 hover:border-border-strong hover:bg-surface-raised/40 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-3">

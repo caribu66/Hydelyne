@@ -257,21 +257,22 @@ export const DossierHeader: FC<DossierHeaderProps> = ({
               <button
                 type="button"
                 onClick={onToggleFocusMode}
-                className={`min-h-11 min-w-11 p-2 rounded-lg border transition-colors cursor-pointer inline-flex items-center justify-center ${
+                className={`min-h-11 px-2.5 sm:px-3 py-1.5 rounded-lg border transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-medium shadow-xs ${
                   isFocusMode
-                    ? 'bg-action border-border-strong text-on-action shadow-xs'
-                    : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary'
+                    ? 'bg-action border-border-strong text-on-action'
+                    : 'bg-surface-raised/80 border-border-strong text-secondary hover:text-primary hover:bg-surface-raised'
                 }`}
                 title={
                   isFocusMode
                     ? 'Exit focus mode (Split View)'
-                    : 'Open focused contractor view (Press F)'
+                    : 'Open expanded profile modal (Press F)'
                 }
                 aria-label={
-                  isFocusMode ? 'Exit focused contractor view' : 'Open focused contractor view'
+                  isFocusMode ? 'Exit focused contractor view' : 'Open expanded profile modal'
                 }
               >
                 {isFocusMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                <span className="hidden sm:inline">{isFocusMode ? 'Exit focus' : 'Expand view'}</span>
               </button>
             )}
 
@@ -303,7 +304,7 @@ export const DossierHeader: FC<DossierHeaderProps> = ({
               )}
             </button>
 
-            {(onToggleCompare || onPrintDossier || canDeleteCrew) && (
+            {(onToggleCompare || onPrintDossier || canDeleteCrew || onToggleFocusMode) && (
               <div ref={headerActionsRef} className="relative">
                 <button
                   ref={headerActionsTriggerRef}
@@ -326,6 +327,16 @@ export const DossierHeader: FC<DossierHeaderProps> = ({
                     aria-label={`Dossier actions for ${profile.name}`}
                     className="absolute right-0 top-11 z-30 w-56 rounded-[14px] border border-border-strong/80 bg-surface/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl"
                   >
+                    {onToggleFocusMode && !isFocusMode && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => runHeaderAction(onToggleFocusMode)}
+                        className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-secondary hover:bg-surface-raised hover:text-primary"
+                      >
+                        <Maximize2 className="h-4 w-4" /> Open expanded view
+                      </button>
+                    )}
                     {onToggleCompare && (
                       <button
                         type="button"

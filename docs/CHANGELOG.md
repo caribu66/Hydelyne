@@ -10,6 +10,26 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Fix Opening Full Database View & Expanded Contractor Modal (Antigravity)
+
+Fixed opening the full dedicated contractor database search workspace and accessing the expanded contractor profile modal:
+
+- **Full Database View Activation (`frontend/src/hooks/useSearchWorkspace.ts`, `frontend/src/App.tsx`, `frontend/src/components/operations/ContractorSearchPane.tsx`)**:
+  - Added explicit `isWorkspaceOpen` state with `openWorkspace()` and `closeWorkspace()` callbacks to `useSearchWorkspace`.
+  - Fixed `isSearchActive` calculation so clicking "Open full database view ↗" or submitting search in Operations transitions directly to the full search workspace showing all 108 specialists, even when the query keyword is empty.
+  - Linked the "← Operations" return button to `closeWorkspace()`, providing clean, predictable round-trip navigation back to the Operations overview.
+- **Contractor Expanded Profile Modal Access (`frontend/src/components/dossier/DossierHeader.tsx`, `frontend/src/components/operations/ContractorSearchPane.tsx`)**:
+  - Added an explicit `[ [ ] Expand view ]` button to `DossierHeader` with visible label and accessible tooltip, opening the full `ProfileDetailModal`.
+  - Added an "Open expanded view" menu item to the Dossier actions (`...`) dropdown.
+  - Added an accessible quick-expand icon button and double-click handler to every candidate card in the Split View roster, structured as accessible sibling controls without nested interactive elements.
+  - Added double-click to Cards view contractor cards to open the full modal.
+- **Verification**:
+  - Automated browser test via Playwright verifying clicking "Open full database view", returning to operations, opening modal from header button, opening modal from candidate card, and opening modal from Cards view.
+  - Playwright test suite: 60/60 tests passed across all viewports (`desktop`, `tablet`, `mobile`, `wide`).
+  - Vitest: 114/114 tests passed.
+  - TypeScript strict check: 0 errors (`npx tsc --noEmit`).
+  - Production build: Clean bundle with zero errors.
+
 ## 2026-09-06 — Overhaul Operations Split View to Full SpecialistDossierPane & Fix Layout (Antigravity)
 
 Overhauled the Split View in the Operations Contractor Hub to eliminate layout cramping, replace ad-hoc preview blocks with the full-featured `SpecialistDossierPane`, and resolve accessibility heading hierarchy:
