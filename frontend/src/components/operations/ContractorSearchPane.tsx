@@ -1,14 +1,42 @@
-import { FC, useState, useMemo, ReactNode } from 'react'
-import { Filter, Search, UserPlus, X, ArrowUpRight } from 'lucide-react'
+import { FC, useState, useMemo, ReactNode, FormEvent, lazy, Suspense } from 'react'
+import {
+  Columns,
+  Filter,
+  LayoutGrid,
+  Search,
+  Table,
+  UserPlus,
+  X,
+  ArrowUpRight,
+  MapPin,
+  Briefcase,
+  Award,
+  Calendar,
+  ExternalLink,
+} from 'lucide-react'
 import { UserProfile } from '../../types'
+import { SegmentedControl } from '../ui'
+
+const SpecialistTableView = lazy(() =>
+  import('../SpecialistTableView').then((module) => ({ default: module.SpecialistTableView }))
+)
+
+export type ContractorViewMode = 'split' | 'grid' | 'table'
 
 interface ContractorSearchPaneProps {
   profiles: UserProfile[]
   loading?: boolean
   searchControl?: ReactNode
+  viewMode?: ContractorViewMode
+  onViewModeChange?: (mode: ContractorViewMode) => void
   onSelectProfile?: (profile: UserProfile) => void
   onMobilize?: (profile: UserProfile) => void
   onSearchFull?: (query: string) => void
+  onShowToast?: (message: string) => void
+  isBookmarked?: (id: string) => boolean
+  onToggleBookmark?: (id: string, e?: React.MouseEvent) => void
+  compareIds?: string[]
+  onToggleCompare?: (profile: UserProfile) => void
 }
 
 const DISCIPLINE_CHIPS = [
@@ -26,13 +54,21 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
   profiles,
   loading = false,
   searchControl,
+  viewMode = 'grid',
+  onViewModeChange,
   onSelectProfile,
   onMobilize,
   onSearchFull,
+  onShowToast = () => {},
+  isBookmarked = () => false,
+  onToggleBookmark = () => {},
+  compareIds = [],
+  onToggleCompare,
 }) => {
   const [query, setQuery] = useState('')
   const [selectedDiscipline, setSelectedDiscipline] = useState('all')
   const [useAdvancedSearch, setUseAdvancedSearch] = useState(false)
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
 
   const filteredProfiles = useMemo(() => {
     let list = profiles
@@ -63,10 +99,26 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
     return list
   }, [profiles, selectedDiscipline, query])
 
+  const activeSplitProfile = useMemo(() => {
+    if (!filteredProfiles.length) return null
+    if (selectedProfileId) {
+      const found = filteredProfiles.find((p) => p.id === selectedProfileId)
+      if (found) return found
+    }
+    return filteredProfiles[0]
+  }, [filteredProfiles, selectedProfileId])
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    if (query.trim() && onSearchFull) {
+      onSearchFull(query.trim())
+    }
+  }
+
   return (
-    <div className="mt-3 flex flex-col gap-3">
-      {/* Header with toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="mt-3 flex flex-col gap-3.5">
+      {/* Top Controls Row: Quick discipline chips + View Mode Switcher */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {/* Quick discipline chips */}
         <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
           <span className="text-xs text-muted flex items-center gap-1 mr-1">
@@ -92,15 +144,30 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
           })}
         </div>
 
-        {searchControl && (
-          <button
-            type="button"
-            onClick={() => setUseAdvancedSearch((prev) => !prev)}
-            className="text-xs font-medium text-accent hover:underline inline-flex items-center gap-1 cursor-pointer"
-          >
-            {useAdvancedSearch ? 'Switch to quick specialist cards' : 'Open natural language search bar'}
-          </button>
-        )}
+        {/* View Mode Switcher: Split, Cards (Grid), Matrix (Table) */}
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <SegmentedControl<ContractorViewMode>
+            label="Contractor view"
+            value={viewMode}
+            onChange={(m) => onViewModeChange?.(m)}
+            className="inline-flex"
+            options={[
+              { value: 'split', label: 'Split', icon: <Columns className="h-3.5 w-3.5" aria-hidden="true" /> },
+              { value: 'grid', label: 'Cards', icon: <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" /> },
+              { value: 'table', label: 'Matrix', icon: <Table className="h-3.5 w-3.5" aria-hidden="true" /> },
+            ]}
+          />
+
+          {searchControl && (
+            <button
+              type="button"
+              onClick={() => setUseAdvancedSearch((prev) => !prev)}
+              className="text-xs font-medium text-accent hover:underline hidden lg:inline-flex items-center gap-1 cursor-pointer"
+            >
+              {useAdvancedSearch ? 'Quick search' : 'Natural language'}
+            </button>
+          )}
+        </div>
       </div>
 
       {useAdvancedSearch && searchControl ? (
@@ -110,32 +177,43 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
       ) : (
         <div className="flex flex-col gap-2.5">
           {/* Quick Search Input */}
-          <div className="relative">
-            <label htmlFor="contractor-search-input" className="sr-only">
-              Search contractors
-            </label>
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted">
-              <Search className="h-4 w-4" aria-hidden="true" />
+          <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <label htmlFor="contractor-search-input" className="sr-only">
+                Search contractors
+              </label>
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted">
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <input
+                id="contractor-search-input"
+                type="search"
+                placeholder="Search contractor by name, role, skills, or region…"
+                className="w-full min-h-11 rounded-lg border border-border-subtle bg-surface pl-10 pr-9 py-2 text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-primary transition-colors cursor-pointer rounded-full"
+                  aria-label="Clear contractor search"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </div>
-            <input
-              id="contractor-search-input"
-              type="search"
-              placeholder="Search contractor by name, role, skills, or region…"
-              className="w-full min-h-11 rounded-lg border border-border-subtle bg-surface pl-10 pr-9 py-2 text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && (
+            {onSearchFull && query.trim() && (
               <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-primary transition-colors cursor-pointer rounded-full"
-                aria-label="Clear contractor search"
+                type="submit"
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-action px-4 py-2 text-xs font-semibold text-on-action transition-colors hover:bg-action-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer shrink-0"
               >
-                <X className="h-4 w-4" aria-hidden="true" />
+                <span>Search in workspace</span>
+                <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
-          </div>
+          </form>
 
           {/* Results Summary */}
           <div className="flex items-center justify-between px-1 text-xs text-secondary">
@@ -144,19 +222,19 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
               {filteredProfiles.length === 1 ? 'specialist' : 'specialists'}
               {selectedDiscipline !== 'all' && ' in filtered category'}
             </span>
-            {onSearchFull && query.trim() && (
+            {onSearchFull && (
               <button
                 type="button"
                 onClick={() => onSearchFull(query.trim())}
                 className="inline-flex items-center gap-1 text-accent font-medium hover:underline cursor-pointer"
               >
-                <span>Launch in full search view</span>
-                <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                <span>Open full database view</span>
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
               </button>
             )}
           </div>
 
-          {/* Specialist Cards Grid */}
+          {/* Content Views: Matrix (Table), Split, or Cards (Grid) */}
           {loading ? (
             <div className="rounded-[10px] border border-border-subtle bg-surface-raised/20 p-8 text-center text-xs text-muted">
               Loading specialists…
@@ -165,9 +243,202 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
             <div className="rounded-[10px] border border-border-subtle bg-surface-raised/20 p-8 text-center text-xs text-muted">
               No specialists match the selected criteria. Try adjusting your search query or discipline filter.
             </div>
+          ) : viewMode === 'table' ? (
+            /* Matrix View (Table) */
+            <div className="rounded-[10px] border border-border-subtle bg-surface overflow-hidden">
+              <Suspense fallback={<div className="p-8 text-center text-xs text-muted">Loading spreadsheet matrix…</div>}>
+                <SpecialistTableView
+                  profiles={filteredProfiles}
+                  searchQuery={query}
+                  selectedId={selectedProfileId}
+                  onSelectProfile={(p) => onSelectProfile?.(p)}
+                  isBookmarked={isBookmarked}
+                  onToggleBookmark={onToggleBookmark}
+                  onShowToast={onShowToast}
+                  compareIds={compareIds}
+                  onToggleCompare={onToggleCompare}
+                  onRequestMobilization={onMobilize}
+                />
+              </Suspense>
+            </div>
+          ) : viewMode === 'split' ? (
+            /* Split View: List on left + Live Dossier on right */
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 min-h-[460px] max-h-[600px]">
+              {/* Left Candidate List */}
+              <div className="md:col-span-5 flex flex-col gap-2 overflow-y-auto pr-1 border border-border-subtle rounded-[10px] bg-surface-raised/20 p-2">
+                {filteredProfiles.map((p) => {
+                  const isSel = activeSplitProfile?.id === p.id
+                  const isAvail = p.availability?.toLowerCase().includes('immediately')
+                  const isOnTour = p.availability?.toLowerCase().includes('employed') || p.availability?.toLowerCase().includes('assignment')
+
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelectedProfileId(p.id)}
+                      className={`text-left p-3 rounded-[8px] border transition-all cursor-pointer ${
+                        isSel
+                          ? 'border-accent bg-accent-soft/40 shadow-xs'
+                          : 'border-border-subtle bg-surface hover:border-border-strong hover:bg-surface-raised/60'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-primary truncate">{p.name}</p>
+                          <p className="text-xs text-secondary truncate">{p.title}</p>
+                          <p className="text-xs text-muted truncate mt-0.5">{p.department || 'Operations'}</p>
+                        </div>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-mono shrink-0 ${
+                            isAvail
+                              ? 'bg-positive-soft text-positive border border-positive-border'
+                              : isOnTour
+                              ? 'bg-accent-soft text-accent border border-accent/30'
+                              : 'bg-surface-raised text-muted border border-border-subtle'
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isAvail ? 'bg-positive' : isOnTour ? 'bg-accent' : 'bg-muted'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {isAvail ? 'Available' : isOnTour ? 'On Tour' : 'Unavailable'}
+                        </span>
+                      </div>
+                      {p.dayRate ? (
+                        <p className="mt-2 text-xs font-mono text-secondary">Day rate: £{p.dayRate}/d</p>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Right Live Dossier Preview */}
+              <div className="md:col-span-7 flex flex-col justify-between border border-border-subtle rounded-[10px] bg-surface p-4 overflow-y-auto">
+                {activeSplitProfile ? (
+                  <div className="space-y-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3 border-b border-border-subtle pb-3">
+                      <div className="min-w-0">
+                        <h3 className="text-base font-bold text-primary">{activeSplitProfile.name}</h3>
+                        <p className="text-xs font-semibold text-accent">{activeSplitProfile.title}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-secondary font-mono">
+                          {activeSplitProfile.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-muted" aria-hidden="true" />
+                              {activeSplitProfile.location}
+                            </span>
+                          )}
+                          {activeSplitProfile.yearsOfExperience && (
+                            <span className="flex items-center gap-1">
+                              <Briefcase className="h-3 w-3 text-muted" aria-hidden="true" />
+                              {activeSplitProfile.yearsOfExperience} yrs exp
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {activeSplitProfile.dayRate ? (
+                          <span className="font-mono text-sm font-bold text-primary">
+                            £{activeSplitProfile.dayRate}/day
+                          </span>
+                        ) : null}
+                        <span className="text-xs font-medium text-secondary">
+                          {activeSplitProfile.availability}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bio / Summary */}
+                    {activeSplitProfile.bio || activeSplitProfile.professionalSummary ? (
+                      <div>
+                        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1">
+                          Professional Overview
+                        </h4>
+                        <p className="text-xs text-secondary leading-relaxed">
+                          {activeSplitProfile.bio || activeSplitProfile.professionalSummary}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {/* Skills */}
+                    {(activeSplitProfile.skills || []).length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
+                          Verified Disciplines & Skills
+                        </h4>
+                        <div className="flex flex-wrap gap-1">
+                          {activeSplitProfile.skills.map((skill, idx) => (
+                            <span
+                              key={idx}
+                              className="badge-neutral rounded px-2 py-0.5 text-xs font-mono"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Certifications preview */}
+                    {(activeSplitProfile.certifications || []).length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <Award className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+                          <span>Key Certifications</span>
+                        </h4>
+                        <div className="flex flex-wrap gap-1">
+                          {(activeSplitProfile.certifications || []).map((cert, idx) => (
+                            <span
+                              key={idx}
+                              className="rounded px-2 py-0.5 text-xs font-mono bg-positive-soft text-positive border border-positive-border"
+                            >
+                              {cert}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions bar */}
+                    <div className="pt-3 border-t border-border-subtle flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {onSelectProfile && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectProfile(activeSplitProfile)}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-raised px-3 text-xs font-semibold text-primary hover:bg-surface-selected transition-colors cursor-pointer"
+                          >
+                            <span>Open dossier</span>
+                            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+
+                      {onMobilize && (
+                        <button
+                          type="button"
+                          onClick={() => onMobilize(activeSplitProfile)}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-action px-4 text-xs font-semibold text-on-action hover:bg-action-hover transition-colors cursor-pointer"
+                          aria-label={`Mobilize ${activeSplitProfile.name}`}
+                        >
+                          <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>Mobilize to vessel</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted m-auto">Select a specialist on the left to preview their dossier.</p>
+                )}
+              </div>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[480px] overflow-y-auto pr-1">
-              {filteredProfiles.slice(0, 16).map((p) => {
+            /* Cards View (Grid) */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
+              {filteredProfiles.map((p) => {
                 const isAvail = p.availability?.toLowerCase().includes('immediately')
                 const isOnTour = p.availability?.toLowerCase().includes('employed') || p.availability?.toLowerCase().includes('assignment')
 

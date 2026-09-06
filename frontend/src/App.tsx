@@ -680,6 +680,12 @@ export default function App() {
                 onShowToast={showToast}
                 onSelectProfile={(p) => setModalProfile(p)}
                 onMobilizeProfile={handleRequestMobilization}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                isBookmarked={isBookmarked}
+                onToggleBookmark={toggleBookmark}
+                compareIds={compareIds}
+                onToggleCompare={handleToggleCompare}
                 searchControl={
                   <ModernHeroSearch
                     query={query}

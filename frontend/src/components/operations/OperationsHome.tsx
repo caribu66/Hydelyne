@@ -26,6 +26,12 @@ interface OperationsHomeProps {
   onShowToast?: (message: string) => void
   onSelectProfile?: (profile: UserProfile) => void
   onMobilizeProfile?: (profile: UserProfile) => void
+  viewMode?: 'split' | 'grid' | 'table'
+  onViewModeChange?: (mode: 'split' | 'grid' | 'table') => void
+  isBookmarked?: (id: string) => boolean
+  onToggleBookmark?: (id: string, e?: React.MouseEvent) => void
+  compareIds?: string[]
+  onToggleCompare?: (profile: UserProfile) => void
 }
 
 export const OperationsHome: FC<OperationsHomeProps> = ({
@@ -41,6 +47,12 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
   onShowToast,
   onSelectProfile,
   onMobilizeProfile,
+  viewMode,
+  onViewModeChange,
+  isBookmarked,
+  onToggleBookmark,
+  compareIds,
+  onToggleCompare,
 }) => {
   const metrics = deriveCrewReadinessMetrics(profiles)
 
@@ -224,9 +236,16 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
               profiles={profiles}
               loading={profilesLoading}
               searchControl={searchControl}
+              viewMode={viewMode}
+              onViewModeChange={onViewModeChange}
               onSelectProfile={onSelectProfile}
               onMobilize={onMobilizeProfile}
               onSearchFull={onSearch}
+              onShowToast={onShowToast}
+              isBookmarked={isBookmarked}
+              onToggleBookmark={onToggleBookmark}
+              compareIds={compareIds}
+              onToggleCompare={onToggleCompare}
             />
           </div>
         ) : (

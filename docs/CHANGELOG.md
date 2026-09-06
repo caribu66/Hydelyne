@@ -10,6 +10,23 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Restore Grid, Matrix, and Split Views in Operations Contractor Hub (Antigravity)
+
+Restored full view mode versatility (Split, Cards / Grid, Matrix / Table) directly inside the Operations Command Center:
+
+- **View Mode Switcher (`frontend/src/components/operations/ContractorSearchPane.tsx`)**:
+  - Embedded the `SegmentedControl` with `Split`, `Cards`, and `Matrix` directly into the top bar of the Operations contractor hub.
+  - Synchronized `viewMode` state across Operations and the dedicated search workspace via `useSearchWorkspace` in `App.tsx`.
+- **Three Comprehensive View Renderers**:
+  - **Matrix (Table)**: Lazy-loads `<SpecialistTableView>` with sortable columns, rates, bookmarks, compare, and mobilization actions directly in Operations.
+  - **Cards (Grid)**: Renders the visual card grid with status badges, day rates, and quick actions.
+  - **Split View**: Renders an interactive split pane featuring a candidate list on the left and a live detailed dossier inspector on the right with verified disciplines, key certifications, and quick mobilization triggers.
+- **Verification**:
+  - Vitest: 114/114 passed.
+  - TypeScript: 0 errors (`npx tsc --noEmit`).
+  - Playwright: 60/60 passed across all 4 viewport projects.
+  - Production build: Zero warnings, code-splitting preserved.
+
 ## 2026-09-06 — Operations Command Center Modernization & Search Elevation (Antigravity)
 
 Redesigned and elevated the Operations Panel searches from an awkward bottom-of-page widget into a top-level Command Center:
