@@ -394,10 +394,10 @@ test.describe('operations home — staff visibility and actions', () => {
     await expect(page.getByText('Arbroath Wind Survey')).toBeVisible()
     await expect(page.getByText('Celtic Deep Seismic')).toHaveCount(0)
 
-    const searchBox = await page.getByRole('heading', { name: 'Find a contractor' }).boundingBox()
     const attentionBox = await page.getByRole('heading', { name: 'Needs attention' }).boundingBox()
-    // Verify search hub is elevated to top command position above telemetry
-    expect(searchBox?.y).toBeLessThan(attentionBox?.y ?? Number.POSITIVE_INFINITY)
+    const searchBox = await page.getByRole('heading', { name: 'Find a contractor' }).boundingBox()
+    // Verify operational telemetry sits at top with search & specialist database underneath
+    expect(attentionBox?.y).toBeLessThan(searchBox?.y ?? Number.POSITIVE_INFINITY)
   })
 
   test('documents attention opens the pending documents review dialog', async ({ page }) => {

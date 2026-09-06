@@ -33,7 +33,7 @@ export const DensityIndicator: FC<DensityIndicatorProps> = ({
       <span className="text-muted font-medium hidden xs:inline">Roster</span>
       
       {/* 5-segment micro density meter */}
-      <div className="flex items-center gap-0.5" aria-label={`Density: ${percentage}%`}>
+      <div role="img" className="flex items-center gap-0.5" aria-label={`Density: ${percentage}%`}>
         {Array.from({ length: totalBlocks }).map((_, i) => {
           const isActive = i < activeBlocks;
           return (

@@ -10,6 +10,24 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Unified Operations + Search Workspace (Antigravity)
+
+Merged the Operations dashboard and the Search Workspace into a single authenticated shell so the same Split / Cards / Matrix views never appear in two places simultaneously.
+
+**What changed:**
+- `frontend/src/App.tsx` — `shellKey` simplified to `gate | public | workspace`; the former `ops` and `search` shells are gone. The `workspace` shell permanently renders `<OperationsHome>` wrapping the specialist database as a `children` slot. The results area landmark was renamed `"Specialist database results"` to avoid aria collision with the split view's `"Contractor search results"` section.
+- `frontend/src/components/operations/OperationsHome.tsx` — Full rewrite: removed 8 props that delegated to `ContractorSearchPane`; added `children?: ReactNode` slot; layout order is Greeting → Telemetry (KPIs, Needs Attention, Active Projects) → Search Hub → `{searchControl}` → `{children}`.
+- `frontend/src/components/operations/ContractorSearchPane.tsx` — **Deleted.** It was the duplicate source of Split / Cards / Matrix views.
+- `frontend/src/hooks/useSearchWorkspace.ts` — Removed `if (!isSearchActive) return []` guard so `results` always returns the full/filtered specialist list even when no search is active.
+- `frontend/src/components/DensityIndicator.tsx` — Added `role="img"` to fix Axe `aria-prohibited-attr` WCAG violation.
+- `frontend/src/components/ModernHeroSearch.tsx` — Responsive sizing fix (padding, min-height, icon, textarea `min-w-0 flex-1`) to prevent textarea width-collapse at 200% CSS zoom on mobile.
+- `frontend/tests/operations-home.spec.ts` — Updated bounding-box assertion to `attentionBox.y < searchBox.y` (telemetry is now above search hub).
+- Visual baselines regenerated for all 8 authenticated-workspace viewports and the 2 public-shell mobile/tablet snapshots.
+
+**Why:** User identified that Split / Cards / Matrix views existed in both the Operations panel and the Search Workspace, creating confusion. The fix is a single unified surface, not a toggle.
+
+**Follow-up:** None. All 185 Playwright tests pass, 114 Vitest tests pass, 0 TypeScript errors, 0 Axe violations.
+
 ## 2026-09-06 — Fix Opening Full Database View & Expanded Contractor Modal (Antigravity)
 
 Fixed opening the full dedicated contractor database search workspace and accessing the expanded contractor profile modal:

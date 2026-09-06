@@ -156,14 +156,14 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
         <div className="relative w-full">
           {/* Search Box */}
           <div
-            className={`relative flex min-h-16 items-center gap-3 rounded-[14px] border px-4 py-3 shadow-sm transition-all duration-200 ${
+            className={`relative flex min-h-14 sm:min-h-16 items-center gap-2.5 sm:gap-3 rounded-[14px] border px-3 sm:px-4 py-2.5 sm:py-3 shadow-sm transition-all duration-200 ${
               isFocused
                 ? 'border-border-strong ring-2 ring-focus/25 bg-surface shadow-md'
                 : 'border-border-subtle hover:border-border-strong bg-surface/90 backdrop-blur-sm hover:bg-surface'
             }`}
           >
             <Search
-              className={`w-5 h-5 shrink-0 transition-colors ${
+              className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 transition-colors ${
                 isFocused ? 'text-primary' : 'text-muted'
               }`}
             />
@@ -182,7 +182,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               placeholder={isAuthenticated ? 'Ask in plain English — e.g. “Who has medical experience?”' : 'Sign in to search the private network'}
               readOnly={!isAuthenticated}
               aria-label={isAuthenticated ? 'Search contractors' : 'Sign in to search contractors'}
-              className="w-full bg-transparent text-primary placeholder:text-muted/70 focus:outline-none text-base sm:text-lg font-normal tracking-tight resize-none leading-relaxed antialiased"
+              className="min-w-0 flex-1 w-full bg-transparent text-primary placeholder:text-muted/70 focus:outline-none text-sm sm:text-base lg:text-lg font-normal tracking-tight resize-none leading-relaxed antialiased"
               spellCheck="false"
             />
 
@@ -190,7 +190,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
               <button
                 type="button"
                 onClick={onClear}
-                className="min-h-11 min-w-11 p-1 rounded-lg text-muted hover:text-secondary hover:bg-surface-raised transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
+                className="min-h-9 min-w-9 sm:min-h-11 sm:min-w-11 p-1 rounded-lg text-muted hover:text-secondary hover:bg-surface-raised transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
                 title="Clear"
                 aria-label="Clear search"
               >
@@ -212,7 +212,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
                 }
               }}
               disabled={isAuthenticated && !query.trim()}
-              className={`min-h-11 min-w-11 p-2 rounded-xl transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
+              className={`min-h-9 min-w-9 sm:min-h-11 sm:min-w-11 p-2 rounded-xl transition-all cursor-pointer shrink-0 inline-flex items-center justify-center ${
                 query.trim() || !isAuthenticated
                   ? 'bg-action hover:bg-action-hover text-on-action shadow-xs active:scale-95'
                   : 'bg-surface-raised/80 text-muted cursor-not-allowed'

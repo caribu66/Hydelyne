@@ -7,7 +7,6 @@ import { OperationsAttention } from './OperationsAttention'
 import { OperationsMetrics } from './OperationsMetrics'
 import { OperationsProjectsPanel } from './OperationsProjectsPanel'
 import { VesselSearchPane } from './VesselSearchPane'
-import { ContractorSearchPane } from './ContractorSearchPane'
 import { deriveCrewReadinessMetrics, formatExpiringCertSearchQuery } from '../../utils/operationsHome'
 import { UserProfile } from '../../types'
 import { EXPIRING_CERTS_QUERY } from '../../lib/queries'
@@ -23,15 +22,8 @@ interface OperationsHomeProps {
   documentReviewVersion: number
   isStaff: boolean
   searchControl: ReactNode
+  children?: ReactNode
   onShowToast?: (message: string) => void
-  onSelectProfile?: (profile: UserProfile) => void
-  onMobilizeProfile?: (profile: UserProfile) => void
-  viewMode?: 'split' | 'grid' | 'table'
-  onViewModeChange?: (mode: 'split' | 'grid' | 'table') => void
-  isBookmarked?: (id: string) => boolean
-  onToggleBookmark?: (id: string, e?: React.MouseEvent) => void
-  compareIds?: string[]
-  onToggleCompare?: (profile: UserProfile) => void
 }
 
 export const OperationsHome: FC<OperationsHomeProps> = ({
@@ -44,15 +36,8 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
   documentReviewVersion,
   isStaff,
   searchControl,
+  children,
   onShowToast,
-  onSelectProfile,
-  onMobilizeProfile,
-  viewMode,
-  onViewModeChange,
-  isBookmarked,
-  onToggleBookmark,
-  compareIds,
-  onToggleCompare,
 }) => {
   const metrics = deriveCrewReadinessMetrics(profiles)
 
@@ -154,6 +139,37 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
         </motion.p>
       )}
 
+      {/* Operations Telemetry: Metrics ribbon & operational action boards at the top */}
+      {isStaff ? (
+        <>
+          <motion.div variants={itemVariants}>
+            <OperationsMetrics
+              available={metrics.available}
+              onAssignment={metrics.onAssignment}
+              unavailable={metrics.unavailable}
+              total={metrics.total}
+              loading={profilesLoading}
+              error={profilesError}
+              onSelectStatus={onSearch}
+            />
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <OperationsAttention
+              documents={{ count: docCount, loading: docLoading, error: docError }}
+              expiring={{ count: expiringCount, loading: expiringLoading, error: expiringErrorMessage }}
+              onOpenDocuments={onOpenDocumentReview}
+              onOpenExpiring={handleOpenExpiring}
+            />
+            <OperationsProjectsPanel
+              onSelectProject={(query) => {
+                onSearch(query)
+              }}
+            />
+          </motion.div>
+        </>
+      ) : null}
+
       {/* Primary Operations Command Center: Search & Mobilization Hub */}
       <motion.section
         variants={itemVariants}
@@ -220,33 +236,22 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
             role="tabpanel"
             aria-labelledby="tab-contractors"
             tabIndex={0}
-            className="focus-visible:outline-none"
+            className="focus-visible:outline-none space-y-4"
           >
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h2 id="find-contractor-heading" className="text-sm font-semibold text-primary">
-                Find a contractor
-              </h2>
-              <span className="font-mono text-xs text-muted">Specialist network</span>
+            <div>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h2 id="find-contractor-heading" className="text-sm font-semibold text-primary">
+                  Find a contractor
+                </h2>
+                <span className="font-mono text-xs text-muted">Specialist network</span>
+              </div>
+              <p className="mt-1 text-sm text-secondary">
+                Search by discipline, certification, region, and availability — try "Available hydrography surveyors
+                with BOSIET in the North Sea".
+              </p>
             </div>
-            <p className="mt-1 text-sm text-secondary">
-              Search by discipline, certification, region, and availability — try "Available hydrography surveyors
-              with BOSIET in the North Sea".
-            </p>
-            <ContractorSearchPane
-              profiles={profiles}
-              loading={profilesLoading}
-              searchControl={searchControl}
-              viewMode={viewMode}
-              onViewModeChange={onViewModeChange}
-              onSelectProfile={onSelectProfile}
-              onMobilize={onMobilizeProfile}
-              onSearchFull={onSearch}
-              onShowToast={onShowToast}
-              isBookmarked={isBookmarked}
-              onToggleBookmark={onToggleBookmark}
-              compareIds={compareIds}
-              onToggleCompare={onToggleCompare}
-            />
+            {searchControl}
+            {children}
           </div>
         ) : (
           <div
@@ -269,38 +274,6 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
           </div>
         )}
       </motion.section>
-
-      {/* Operations Telemetry: Metrics ribbon & operational action boards */}
-      {isStaff ? (
-        <>
-          <motion.div variants={itemVariants}>
-            <OperationsMetrics
-              available={metrics.available}
-              onAssignment={metrics.onAssignment}
-              unavailable={metrics.unavailable}
-              total={metrics.total}
-              loading={profilesLoading}
-              error={profilesError}
-              onSelectStatus={onSearch}
-            />
-          </motion.div>
-
-          <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <OperationsAttention
-              documents={{ count: docCount, loading: docLoading, error: docError }}
-              expiring={{ count: expiringCount, loading: expiringLoading, error: expiringErrorMessage }}
-              onOpenDocuments={onOpenDocumentReview}
-              onOpenExpiring={handleOpenExpiring}
-            />
-            <OperationsProjectsPanel
-              onSelectProject={(query) => {
-                onSearch(query)
-              }}
-            />
-          </motion.div>
-        </>
-      ) : null}
-
     </motion.div>
   )
 }

@@ -116,8 +116,6 @@ export function useSearchWorkspace({
 
   // Filtered & Ranked Specialists
   const results = useMemo(() => {
-    if (!isSearchActive) return []
-
     let list = filterProfiles(allProfiles, { ...filters, keyword: '' })
 
     // Search query filter

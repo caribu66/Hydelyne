@@ -465,7 +465,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logout, handleResetAll, clearShortlist, showToast]);
 
-  const shellKey = !authInitialized ? 'gate' : !isAuthenticated ? 'public' : isSearchActive ? 'search' : 'ops';
+  const shellKey = !authInitialized ? 'gate' : !isAuthenticated ? 'public' : 'workspace';
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-canvas font-sans text-primary antialiased selection:bg-action selection:text-on-action">
@@ -663,9 +663,9 @@ export default function App() {
               />
             </motion.div>
           )}
-          {shellKey === 'ops' && (
+          {shellKey === 'workspace' && (
             <motion.div
-              key="ops"
+              key="workspace"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
@@ -681,170 +681,131 @@ export default function App() {
                 documentReviewVersion={documentReviewVersion}
                 isStaff={isStaffOrAdmin(user?.role)}
                 onShowToast={showToast}
-                onSelectProfile={(p) => setModalProfile(p)}
-                onMobilizeProfile={handleRequestMobilization}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-                isBookmarked={isBookmarked}
-                onToggleBookmark={toggleBookmark}
-                compareIds={compareIds}
-                onToggleCompare={handleToggleCompare}
                 searchControl={
                   <ModernHeroSearch
                     query={query}
-                    onChange={setQuery}
-                    onSearch={(value) => {
-                      setQuery(value)
-                      setCommittedQuery(value.trim())
+                    onChange={(val) => {
+                      if (isAuthenticated) setQuery(val);
+                    }}
+                    onSearch={(val) => {
+                      setQuery(val);
+                      setCommittedQuery(val.trim());
+                      if (!isAuthenticated) requestLogin();
                     }}
                     onClear={() => {
-                      setQuery('')
-                      setCommittedQuery('')
+                      setQuery('');
+                      setCommittedQuery('');
                     }}
-                    isCalmState
-                    isAuthenticated
+                    isCalmState={!isSearchActive}
+                    isAuthenticated={isAuthenticated}
                     onAIResults={handleAIResults}
                     onOpenFilters={() => setIsFilterOpen(true)}
                     variant="compact"
                   />
                 }
-              />
-            </motion.div>
-          )}
-          {shellKey === 'search' && (
-            <motion.div
-              key="search"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.20, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <div className="sticky top-16 z-20 -mx-4 px-4 bg-canvas/90 backdrop-blur-md sm:-mx-6 sm:px-6 py-1 border-b border-border-subtle/50">
-                <ModernHeroSearch
-                  query={query}
-                  onChange={(val) => {
-                    if (isAuthenticated) setQuery(val);
-                  }}
-                  onSearch={(val) => {
-                    setQuery(val);
-                    setCommittedQuery(val.trim());
-                    if (!isAuthenticated) requestLogin();
-                  }}
-                  onClear={() => {
-                    setQuery('');
-                    setCommittedQuery('');
-                  }}
-                  isCalmState={!isSearchActive}
-                  isAuthenticated={isAuthenticated}
-                  onAIResults={handleAIResults}
-                  onOpenFilters={() => setIsFilterOpen(true)}
-                />
-              </div>
-        {/* Results Header (Active Search Only) */}
-        {isSearchActive && (
-          <div className="ui-panel mb-3 flex flex-col gap-3 px-3 py-2.5 text-xs text-secondary sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 flex-wrap" aria-live="polite">
-              {isAuthenticated && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeWorkspace();
-                    setQuery('');
-                    setCommittedQuery('');
-                    resetFilters();
-                  }}
-                  className="badge-neutral inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs hover:brightness-95 cursor-pointer font-medium"
-                  aria-label="Return to operations overview"
-                >
-                  <ArrowLeft className="h-3 w-3 opacity-80" aria-hidden="true" />
-                  <span>Operations</span>
-                </button>
-              )}
-              <span>
-                Found <strong className="text-primary font-semibold">{results.length}</strong> {results.length === 1 ? 'contractor' : 'contractors'}
-              </span>
-              {isResultsUpdating && (
-                <span className="inline-flex items-center gap-1.5 text-muted">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-                  Updating results…
-                </span>
-              )}
-              <DensityIndicator matchedCount={results.length} totalCount={allProfiles.length} />
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {committedQuery && (
-                  <button type="button" onClick={() => { setQuery(''); setCommittedQuery(''); }} className="badge-accent inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1 text-xs hover:brightness-95" aria-label="Remove search query filter">
-                    <span className="font-mono font-semibold">Query</span> “{committedQuery}” <X className="h-3 w-3 opacity-80" />
-                  </button>
-                )}
-                {activePresetId !== 'all' && (
-                  <button type="button" onClick={resetFilters} className="badge-neutral inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1 text-xs hover:brightness-95" aria-label="Remove active preset filter">
-                    <span className="font-mono font-semibold opacity-80">Preset</span> {FILTER_PRESETS.find((p) => p.id === activePresetId)?.name} <X className="h-3 w-3 opacity-70" />
-                  </button>
-                )}
-                {showSavedOnly && (
-                  <button type="button" onClick={() => setShowSavedOnly(false)} className="badge-neutral inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1 text-xs hover:brightness-95" aria-label="Remove shortlist-only filter">
-                    <span className="font-semibold">Shortlist only</span> <X className="h-3 w-3 opacity-70" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-              <SegmentedControl
-                label="Result view"
-                value={viewMode}
-                onChange={setViewMode}
-                className="hidden md:inline-flex"
-                options={[
-                  { value: 'split', label: 'Split', icon: <Columns className="h-3.5 w-3.5" aria-hidden="true" /> },
-                  { value: 'grid', label: 'Cards', icon: <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" /> },
-                  { value: 'table', label: 'Matrix', icon: <Table className="h-3.5 w-3.5" aria-hidden="true" /> },
-                ]}
-              />
-              {compareIds.length > 0 && (
-                <button type="button" onClick={() => setIsCompareModalOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 font-semibold text-primary transition-colors hover:bg-surface-raised">
-                  <Scale className="h-3.5 w-3.5" aria-hidden="true" />
-                  Compare {compareIds.length}
-                </button>
-              )}
-              {/* Sort Dropdown */}
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                aria-label="Sort contractors"
-                className="ui-control min-w-0 flex-1 px-2.5 text-xs font-medium text-secondary sm:flex-none"
               >
-                <option value="relevance">Sort: Relevance & Match</option>
-                <option value="experience-desc">Sort: Experience (High to Low)</option>
-                <option value="rate-desc">Sort: Day Rate (High to Low)</option>
-                <option value="rate-asc">Sort: Day Rate (Low to High)</option>
-                <option value="rating-desc">Sort: Rating (★ Highest)</option>
-              </select>
+                {/* Results Header */}
+                <div className="ui-panel mb-3 flex flex-col gap-3 px-3 py-2.5 text-xs text-secondary sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 flex-wrap" aria-live="polite">
+                    {isAuthenticated && isSearchActive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeWorkspace();
+                          setQuery('');
+                          setCommittedQuery('');
+                          resetFilters();
+                        }}
+                        className="badge-neutral inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs hover:brightness-95 cursor-pointer font-medium"
+                        aria-label="Return to operations overview"
+                      >
+                        <ArrowLeft className="h-3 w-3 opacity-80" aria-hidden="true" />
+                        <span>Operations</span>
+                      </button>
+                    )}
+                    <span>
+                      {isSearchActive ? 'Found' : 'Showing'} <strong className="text-primary font-semibold">{results.length}</strong> {results.length === 1 ? 'contractor' : 'contractors'}
+                    </span>
+                    {isResultsUpdating && (
+                      <span className="inline-flex items-center gap-1.5 text-muted">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden="true" />
+                        Updating results…
+                      </span>
+                    )}
+                    <DensityIndicator matchedCount={results.length} totalCount={allProfiles.length} />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {committedQuery && (
+                        <button type="button" onClick={() => { setQuery(''); setCommittedQuery(''); }} className="badge-accent inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1 text-xs hover:brightness-95" aria-label="Remove search query filter">
+                          <span className="font-mono font-semibold">Query</span> “{committedQuery}” <X className="h-3 w-3 opacity-80" />
+                        </button>
+                      )}
+                      {activePresetId !== 'all' && (
+                        <button type="button" onClick={resetFilters} className="badge-neutral inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1 text-xs hover:brightness-95" aria-label="Remove active preset filter">
+                          <span className="font-mono font-semibold opacity-80">Preset</span> {FILTER_PRESETS.find((p) => p.id === activePresetId)?.name} <X className="h-3 w-3 opacity-70" />
+                        </button>
+                      )}
+                      {showSavedOnly && (
+                        <button type="button" onClick={() => setShowSavedOnly(false)} className="badge-neutral inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1 text-xs hover:brightness-95" aria-label="Remove shortlist-only filter">
+                          <span className="font-semibold">Shortlist only</span> <X className="h-3 w-3 opacity-70" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
 
-              {(query || showSavedOnly || activeFilterCount > 0 || sortBy !== 'relevance') && (
-                <button
-                  type="button"
-                  onClick={handleResetAll}
-                  className="min-h-11 shrink-0 rounded-lg px-2 text-xs font-medium text-secondary transition-colors hover:bg-surface-raised hover:text-primary"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+                  <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                    <SegmentedControl
+                      label="Result view"
+                      value={viewMode}
+                      onChange={setViewMode}
+                      className="hidden md:inline-flex"
+                      options={[
+                        { value: 'split', label: 'Split', icon: <Columns className="h-3.5 w-3.5" aria-hidden="true" /> },
+                        { value: 'grid', label: 'Cards', icon: <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" /> },
+                        { value: 'table', label: 'Matrix', icon: <Table className="h-3.5 w-3.5" aria-hidden="true" /> },
+                      ]}
+                    />
+                    {compareIds.length > 0 && (
+                      <button type="button" onClick={() => setIsCompareModalOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 font-semibold text-primary transition-colors hover:bg-surface-raised">
+                        <Scale className="h-3.5 w-3.5" aria-hidden="true" />
+                        Compare {compareIds.length}
+                      </button>
+                    )}
+                    {/* Sort Dropdown */}
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as SortOption)}
+                      aria-label="Sort contractors"
+                      className="ui-control min-w-0 flex-1 px-2.5 text-xs font-medium text-secondary sm:flex-none"
+                    >
+                      <option value="relevance">Sort: Relevance & Match</option>
+                      <option value="experience-desc">Sort: Experience (High to Low)</option>
+                      <option value="rate-desc">Sort: Day Rate (High to Low)</option>
+                      <option value="rate-asc">Sort: Day Rate (Low to High)</option>
+                      <option value="rating-desc">Sort: Rating (★ Highest)</option>
+                    </select>
 
-        {isSearchActive && activeFilterCount > 0 && (
-          <ActiveFilterChips
-            filters={filters}
-            onUpdateFilters={setFilters}
-            onResetFilters={resetFilters}
-          />
-        )}
+                    {(query || showSavedOnly || activeFilterCount > 0 || sortBy !== 'relevance') && (
+                      <button
+                        type="button"
+                        onClick={handleResetAll}
+                        className="min-h-11 shrink-0 rounded-lg px-2 text-xs font-medium text-secondary transition-colors hover:bg-surface-raised hover:text-primary"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-        {/* Results Area */}
-        {isSearchActive && (
-          <div className="pb-16" role="region" aria-busy={profilesLoading || aiQueryLoading} aria-label="Contractor search results">
+                {activeFilterCount > 0 && (
+                  <ActiveFilterChips
+                    filters={filters}
+                    onUpdateFilters={setFilters}
+                    onResetFilters={resetFilters}
+                  />
+                )}
+
+                {/* Results Area */}
+                <div className="pb-16" role="region" aria-busy={profilesLoading || aiQueryLoading} aria-label="Specialist database results">
             {aiQueryActive && showAISummary && (
               <CrewQuerySummary
                 data={aiQueryData}
@@ -1531,10 +1492,10 @@ export default function App() {
               </motion.div>
             )}
           </div>
-        )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </OperationsHome>
+      </motion.div>
+    )}
+  </AnimatePresence>
       </main>
       <DocumentReviewModal
         isOpen={isDocumentReviewOpen}
