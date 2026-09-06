@@ -1,4 +1,4 @@
-import { FC, useState, useMemo, ReactNode, FormEvent, lazy, Suspense } from 'react'
+import { FC, useState, useMemo, useCallback, ReactNode, FormEvent, lazy, Suspense } from 'react'
 import {
   Columns,
   Filter,
@@ -8,10 +8,6 @@ import {
   UserPlus,
   X,
   ArrowUpRight,
-  MapPin,
-  Briefcase,
-  Award,
-  Calendar,
   ExternalLink,
 } from 'lucide-react'
 import { UserProfile } from '../../types'
@@ -19,6 +15,10 @@ import { SegmentedControl } from '../ui'
 
 const SpecialistTableView = lazy(() =>
   import('../SpecialistTableView').then((module) => ({ default: module.SpecialistTableView }))
+)
+
+const SpecialistDossierPane = lazy(() =>
+  import('../SpecialistDossierPane').then((module) => ({ default: module.SpecialistDossierPane }))
 )
 
 export type ContractorViewMode = 'split' | 'grid' | 'table'
@@ -107,6 +107,25 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
     }
     return filteredProfiles[0]
   }, [filteredProfiles, selectedProfileId])
+
+  const activeIndex = useMemo(() => {
+    if (!activeSplitProfile) return -1
+    return filteredProfiles.findIndex((p) => p.id === activeSplitProfile.id)
+  }, [filteredProfiles, activeSplitProfile])
+
+  const handlePrevProfile = useCallback(() => {
+    if (activeIndex > 0) {
+      const prev = filteredProfiles[activeIndex - 1]
+      if (prev) setSelectedProfileId(prev.id)
+    }
+  }, [activeIndex, filteredProfiles])
+
+  const handleNextProfile = useCallback(() => {
+    if (activeIndex >= 0 && activeIndex < filteredProfiles.length - 1) {
+      const next = filteredProfiles[activeIndex + 1]
+      if (next) setSelectedProfileId(next.id)
+    }
+  }, [activeIndex, filteredProfiles])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -262,204 +281,156 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
               </Suspense>
             </div>
           ) : viewMode === 'split' ? (
-            /* Split View: List on left + Live Dossier on right */
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 min-h-[460px] max-h-[600px]">
+            /* Split View: Left roster column + Right live SpecialistDossierPane */
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 h-[660px]">
               {/* Left Candidate List */}
-              <div className="md:col-span-5 flex flex-col gap-2 overflow-y-auto pr-1 border border-border-subtle rounded-[10px] bg-surface-raised/20 p-2">
-                {filteredProfiles.map((p) => {
-                  const isSel = activeSplitProfile?.id === p.id
-                  const isAvail = p.availability?.toLowerCase().includes('immediately')
-                  const isOnTour = p.availability?.toLowerCase().includes('employed') || p.availability?.toLowerCase().includes('assignment')
+              <div className="md:col-span-5 lg:col-span-4 flex flex-col h-full border border-border-subtle rounded-[14px] bg-surface/50 p-2.5 overflow-hidden">
+                <div className="flex items-center justify-between px-1 pb-2 border-b border-border-subtle/80 mb-2 shrink-0">
+                  <span className="text-xs font-semibold text-primary">Specialist Roster</span>
+                  <span className="font-mono text-[11px] text-muted">
+                    {filteredProfiles.length} {filteredProfiles.length === 1 ? 'candidate' : 'candidates'}
+                  </span>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                  {filteredProfiles.map((p) => {
+                    const isSel = activeSplitProfile?.id === p.id
+                    const isAvail = p.availability?.toLowerCase().includes('immediately')
 
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setSelectedProfileId(p.id)}
-                      className={`text-left p-3 rounded-[8px] border transition-all cursor-pointer ${
-                        isSel
-                          ? 'border-accent bg-accent-soft/40 shadow-xs'
-                          : 'border-border-subtle bg-surface hover:border-border-strong hover:bg-surface-raised/60'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm text-primary truncate">{p.name}</p>
-                          <p className="text-xs text-secondary truncate">{p.title}</p>
-                          <p className="text-xs text-muted truncate mt-0.5">{p.department || 'Operations'}</p>
-                        </div>
-                        <span
-                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-mono shrink-0 ${
-                            isAvail
-                              ? 'bg-positive-soft text-positive border border-positive-border'
-                              : isOnTour
-                              ? 'bg-accent-soft text-accent border border-accent/30'
-                              : 'bg-surface-raised text-muted border border-border-subtle'
+                    return (
+                      <div
+                        key={p.id}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setSelectedProfileId(p.id)
+                          }
+                        }}
+                        onClick={() => {
+                          setSelectedProfileId(p.id)
+                          if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+                            onSelectProfile?.(p)
+                          }
+                        }}
+                        className={`group relative p-2.5 rounded-[10px] border transition-all cursor-pointer flex items-center justify-between gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+                          isSel
+                            ? 'bg-surface border-border-strong shadow-md ring-1 ring-border-strong'
+                            : 'bg-surface/40 hover:bg-surface border-border-subtle/80 hover:border-border-subtle'
+                        }`}
+                      >
+                        {/* Active selection indicator bar */}
+                        <div
+                          className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full transition-all duration-200 ${
+                            isSel ? 'bg-primary opacity-100' : 'bg-transparent opacity-0'
                           }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              isAvail ? 'bg-positive' : isOnTour ? 'bg-accent' : 'bg-muted'
-                            }`}
-                            aria-hidden="true"
-                          />
-                          {isAvail ? 'Available' : isOnTour ? 'On Tour' : 'Unavailable'}
-                        </span>
+                          aria-hidden="true"
+                        />
+
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1 pl-1">
+                          <div className="relative shrink-0">
+                            <img
+                              src={p.avatar}
+                              alt={p.name}
+                              referrerPolicy="no-referrer"
+                              className="w-9 h-9 rounded-lg object-cover border border-border-subtle"
+                            />
+                            {isAvail && (
+                              <span
+                                className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-positive border-2 border-surface"
+                                title="Available immediately"
+                              />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-1">
+                              <p className="font-semibold text-xs text-primary truncate">{p.name}</p>
+                              {p.dayRate ? (
+                                <span className="font-mono font-bold text-[11px] text-primary shrink-0">
+                                  £{p.dayRate}/d
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="text-[11px] text-secondary truncate">{p.title}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted font-mono truncate">
+                              {p.location && <span>{p.location}</span>}
+                              {p.location && p.department && <span>·</span>}
+                              {p.department && <span>{p.department}</span>}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      {p.dayRate ? (
-                        <p className="mt-2 text-xs font-mono text-secondary">Day rate: £{p.dayRate}/d</p>
-                      ) : null}
-                    </button>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
 
-              {/* Right Live Dossier Preview */}
-              <div className="md:col-span-7 flex flex-col justify-between border border-border-subtle rounded-[10px] bg-surface p-4 overflow-y-auto">
-                {activeSplitProfile ? (
-                  <div className="space-y-4">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-3 border-b border-border-subtle pb-3">
-                      <div className="min-w-0">
-                        <h3 className="text-base font-bold text-primary">{activeSplitProfile.name}</h3>
-                        <p className="text-xs font-semibold text-accent">{activeSplitProfile.title}</p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-secondary font-mono">
-                          {activeSplitProfile.location && (
-                            <span className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-muted" aria-hidden="true" />
-                              {activeSplitProfile.location}
-                            </span>
-                          )}
-                          {activeSplitProfile.yearsOfExperience && (
-                            <span className="flex items-center gap-1">
-                              <Briefcase className="h-3 w-3 text-muted" aria-hidden="true" />
-                              {activeSplitProfile.yearsOfExperience} yrs exp
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        {activeSplitProfile.dayRate ? (
-                          <span className="font-mono text-sm font-bold text-primary">
-                            £{activeSplitProfile.dayRate}/day
-                          </span>
-                        ) : null}
-                        <span className="text-xs font-medium text-secondary">
-                          {activeSplitProfile.availability}
-                        </span>
-                      </div>
+              {/* Right Column: Full-Featured SpecialistDossierPane */}
+              <div className="hidden md:flex md:col-span-7 lg:col-span-8 flex-col h-full min-w-0 overflow-hidden">
+                <Suspense
+                  fallback={
+                    <div className="h-full min-h-[460px] animate-pulse bg-surface/40 rounded-[14px] border border-border-subtle flex items-center justify-center text-xs text-muted font-mono">
+                      Loading dossier…
                     </div>
-
-                    {/* Bio / Summary */}
-                    {activeSplitProfile.bio || activeSplitProfile.professionalSummary ? (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1">
-                          Professional Overview
-                        </h4>
-                        <p className="text-xs text-secondary leading-relaxed">
-                          {activeSplitProfile.bio || activeSplitProfile.professionalSummary}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    {/* Skills */}
-                    {(activeSplitProfile.skills || []).length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
-                          Verified Disciplines & Skills
-                        </h4>
-                        <div className="flex flex-wrap gap-1">
-                          {activeSplitProfile.skills.map((skill, idx) => (
-                            <span
-                              key={idx}
-                              className="badge-neutral rounded px-2 py-0.5 text-xs font-mono"
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Certifications preview */}
-                    {(activeSplitProfile.certifications || []).length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                          <Award className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-                          <span>Key Certifications</span>
-                        </h4>
-                        <div className="flex flex-wrap gap-1">
-                          {(activeSplitProfile.certifications || []).map((cert, idx) => (
-                            <span
-                              key={idx}
-                              className="rounded px-2 py-0.5 text-xs font-mono bg-positive-soft text-positive border border-positive-border"
-                            >
-                              {cert}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions bar */}
-                    <div className="pt-3 border-t border-border-subtle flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {onSelectProfile && (
-                          <button
-                            type="button"
-                            onClick={() => onSelectProfile(activeSplitProfile)}
-                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-raised px-3 text-xs font-semibold text-primary hover:bg-surface-selected transition-colors cursor-pointer"
-                          >
-                            <span>Open dossier</span>
-                            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                          </button>
-                        )}
-                      </div>
-
-                      {onMobilize && (
-                        <button
-                          type="button"
-                          onClick={() => onMobilize(activeSplitProfile)}
-                          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-action px-4 text-xs font-semibold text-on-action hover:bg-action-hover transition-colors cursor-pointer"
-                          aria-label={`Mobilize ${activeSplitProfile.name}`}
-                        >
-                          <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                          <span>Mobilize to vessel</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted m-auto">Select a specialist on the left to preview their dossier.</p>
-                )}
+                  }
+                >
+                  <SpecialistDossierPane
+                    profile={activeSplitProfile ?? null}
+                    searchQuery={query}
+                    isBookmarked={activeSplitProfile ? isBookmarked(activeSplitProfile.id) : false}
+                    onToggleBookmark={onToggleBookmark}
+                    onShowToast={onShowToast}
+                    isCompared={activeSplitProfile ? compareIds.includes(activeSplitProfile.id) : false}
+                    onToggleCompare={onToggleCompare}
+                    onRequestMobilization={onMobilize}
+                    onPrintDossier={onSelectProfile}
+                    documents={[]}
+                    summary={activeSplitProfile?.bio || activeSplitProfile?.professionalSummary}
+                    summaryLoading={false}
+                    profileIndex={activeIndex >= 0 ? activeIndex : undefined}
+                    totalProfiles={filteredProfiles.length}
+                    onPrevProfile={handlePrevProfile}
+                    onNextProfile={handleNextProfile}
+                  />
+                </Suspense>
               </div>
             </div>
           ) : (
             /* Cards View (Grid) */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[520px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[580px] overflow-y-auto pr-1">
               {filteredProfiles.map((p) => {
                 const isAvail = p.availability?.toLowerCase().includes('immediately')
-                const isOnTour = p.availability?.toLowerCase().includes('employed') || p.availability?.toLowerCase().includes('assignment')
+                const isOnTour =
+                  p.availability?.toLowerCase().includes('employed') ||
+                  p.availability?.toLowerCase().includes('assignment')
 
                 return (
                   <div
                     key={p.id}
-                    className="flex flex-col justify-between gap-2.5 rounded-[10px] border border-border-subtle bg-surface p-3.5 hover:border-border-strong hover:bg-surface-raised/40 transition-colors"
+                    className="flex flex-col justify-between gap-2.5 rounded-[12px] border border-border-subtle bg-surface p-3.5 hover:border-border-strong hover:bg-surface-raised/40 transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => onSelectProfile?.(p)}
-                          className="text-left font-semibold text-sm text-primary hover:text-accent transition-colors truncate block cursor-pointer"
-                        >
-                          {p.name}
-                        </button>
-                        <p className="text-xs text-secondary truncate">{p.title}</p>
-                        <p className="text-xs text-muted truncate mt-0.5">
-                          {p.department || 'Marine Operations'} {p.location ? `· ${p.location}` : ''}
-                        </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <img
+                          src={p.avatar}
+                          alt={p.name}
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-xl object-cover border border-border-subtle shrink-0 mt-0.5"
+                        />
+                        <div className="min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => onSelectProfile?.(p)}
+                            className="text-left font-semibold text-sm text-primary hover:text-accent transition-colors truncate block cursor-pointer"
+                          >
+                            {p.name}
+                          </button>
+                          <p className="text-xs text-secondary truncate">{p.title}</p>
+                          <p className="text-xs text-muted truncate mt-0.5">
+                            {p.department || 'Marine Operations'} {p.location ? `· ${p.location}` : ''}
+                          </p>
+                        </div>
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0">
@@ -481,15 +452,17 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                           {isAvail ? 'Available' : isOnTour ? 'On Tour' : 'Unavailable'}
                         </span>
                         {p.dayRate ? (
-                          <span className="text-xs font-mono text-secondary">£{p.dayRate}/d</span>
+                          <span className="font-mono text-xs font-semibold text-primary">
+                            £{p.dayRate}/d
+                          </span>
                         ) : null}
                       </div>
                     </div>
 
-                    {/* Skills pills & actions */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-border-subtle/50 text-xs">
-                      <div className="flex flex-wrap gap-1 min-w-0 overflow-hidden">
-                        {(p.skills || []).slice(0, 3).map((skill, idx) => (
+                    {/* Skills pills */}
+                    {p.skills && p.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {p.skills.slice(0, 3).map((skill, idx) => (
                           <span
                             key={idx}
                             className="badge-neutral rounded px-1.5 py-0.5 text-[11px] font-mono text-muted truncate max-w-[110px]"
@@ -497,30 +470,38 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                             {skill}
                           </span>
                         ))}
+                        {p.skills.length > 3 && (
+                          <span className="text-[10px] text-muted self-center font-mono">
+                            +{p.skills.length - 3} more
+                          </span>
+                        )}
                       </div>
+                    )}
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {onMobilize && (
-                          <button
-                            type="button"
-                            onClick={() => onMobilize(p)}
-                            className="inline-flex min-h-8 items-center gap-1 rounded-md bg-accent-soft/60 border border-accent/40 px-2 py-0.5 text-xs font-semibold text-accent hover:bg-accent-soft transition-colors cursor-pointer"
-                            aria-label={`Mobilize ${p.name}`}
-                          >
-                            <UserPlus className="h-3 w-3" aria-hidden="true" />
-                            <span>Mobilize</span>
-                          </button>
-                        )}
-                        {onSelectProfile && (
-                          <button
-                            type="button"
-                            onClick={() => onSelectProfile(p)}
-                            className="inline-flex min-h-8 items-center rounded-md border border-border-subtle bg-surface-raised px-2 py-0.5 text-xs font-medium text-secondary hover:text-primary hover:bg-surface-selected transition-colors cursor-pointer"
-                          >
-                            View
-                          </button>
-                        )}
-                      </div>
+                    {/* Actions bar */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-border-subtle/60 text-xs">
+                      {onSelectProfile && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectProfile(p)}
+                          className="inline-flex min-h-8 items-center gap-1 rounded-md border border-border-subtle bg-surface-raised px-2.5 py-1 text-xs font-medium text-secondary hover:text-primary hover:bg-surface-selected transition-colors cursor-pointer"
+                        >
+                          <span>View profile</span>
+                          <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      )}
+
+                      {onMobilize && (
+                        <button
+                          type="button"
+                          onClick={() => onMobilize(p)}
+                          className="inline-flex min-h-8 items-center gap-1 rounded-md bg-action px-3 py-1 text-xs font-semibold text-on-action hover:bg-action-hover transition-colors cursor-pointer"
+                          aria-label={`Mobilize ${p.name}`}
+                        >
+                          <UserPlus className="h-3 w-3" aria-hidden="true" />
+                          <span>Mobilize</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 )

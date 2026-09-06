@@ -78,10 +78,10 @@ export const DossierOverviewTab: FC<DossierOverviewTabProps> = ({
             isFocusMode ? 'p-2 lg:col-span-2' : 'p-3'
           }`}
         >
-          <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono flex items-center gap-1.5">
+          <h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-secondary" aria-hidden="true" />
             AI Summary
-          </h4>
+          </h3>
           {summaryLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Generating summary…
@@ -100,9 +100,9 @@ export const DossierOverviewTab: FC<DossierOverviewTabProps> = ({
           isFocusMode ? 'p-2 lg:col-span-2' : 'p-3'
         }`}
       >
-        <h4 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">
+        <h3 className="text-xs font-semibold text-secondary uppercase tracking-wider font-mono">
           Overview & Track Record
-        </h4>
+        </h3>
         <p className="text-secondary leading-relaxed">
           <HighlightText text={profile.bio} query={searchQuery} />
         </p>

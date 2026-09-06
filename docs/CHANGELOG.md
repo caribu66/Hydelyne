@@ -10,6 +10,23 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Overhaul Operations Split View to Full SpecialistDossierPane & Fix Layout (Antigravity)
+
+Overhauled the Split View in the Operations Contractor Hub to eliminate layout cramping, replace ad-hoc preview blocks with the full-featured `SpecialistDossierPane`, and resolve accessibility heading hierarchy:
+
+- **Full-Featured Specialist Dossier Integration (`frontend/src/components/operations/ContractorSearchPane.tsx`)**:
+  - Replaced the makeshift, text-only preview container with the complete, lazy-loaded `<SpecialistDossierPane>`, providing tabs (Overview, Experience, Credentials, Skills, Documents, Radar), AI summary, verified credentials, document vault, and action controls.
+  - Upgraded the left roster column with avatar photos, presence indicator dots, day rates, and left accent selection indicator bars.
+  - Added previous/next keyboard and click profile navigation handlers (`handlePrevProfile`, `handleNextProfile`).
+  - Added avatar images and elevated card styling to Cards (Grid) view.
+- **Accessibility & Heading Hierarchy (`frontend/src/components/dossier/DossierOverviewTab.tsx`)**:
+  - Corrected heading levels from `<h4>` to `<h3>` under `<h2>` in `DossierOverviewTab.tsx` and changed candidate list names in the roster to semantic `<p>`, ensuring 100% WCAG compliance and passing all Axe accessibility audits.
+- **Verification**:
+  - Playwright: 60/60 passed across all 4 viewport projects (`desktop`, `tablet`, `mobile`, `wide`).
+  - Vitest: 114/114 passed.
+  - TypeScript strict: 0 errors.
+  - Live browser inspection: Zero console errors, zero warnings.
+
 ## 2026-09-06 — Restore Grid, Matrix, and Split Views in Operations Contractor Hub (Antigravity)
 
 Restored full view mode versatility (Split, Cards / Grid, Matrix / Table) directly inside the Operations Command Center:
