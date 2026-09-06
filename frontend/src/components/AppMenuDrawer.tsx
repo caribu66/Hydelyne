@@ -91,6 +91,7 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
           {/* Slide-over Drawer Panel */}
           <motion.div
             ref={drawerRef}
+            id="workspace-menu"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -98,12 +99,14 @@ export const AppMenuDrawer: FC<AppMenuDrawerProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="app-menu-title"
+            aria-describedby="app-menu-description"
             className="absolute right-0 top-0 flex h-full w-[min(100%,360px)] flex-col border-l border-border-subtle bg-surface p-5 shadow-2xl z-10"
           >
             <div className="flex items-center justify-between border-b border-border-subtle pb-4">
               <div>
                 <p className="text-xs font-mono uppercase tracking-[0.18em] text-muted">Workspace</p>
                 <h2 id="app-menu-title" className="mt-1 text-base font-semibold text-primary">Menu</h2>
+                <p id="app-menu-description" className="mt-1 text-xs text-secondary">Workspace actions and display preferences.</p>
               </div>
               <button
                 type="button"

@@ -44,7 +44,6 @@ warn_unused_ignores = true
 strict_equality = true
 enable_error_code = ["ignore-without-code"]
 ignore_missing_imports = true
-
 [[tool.mypy.overrides]]
 module = ["strawberry.*", "sqlalchemy.*", "alembic.*", "celery.*"]
 ignore_missing_imports = true

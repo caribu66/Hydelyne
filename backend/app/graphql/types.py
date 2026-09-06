@@ -274,3 +274,126 @@ class CVExtractionResult:
     work_history_created: int
     skills_found: list[str]
     specializations_found: list[str]
+
+
+# --- VesselAPI proxy types (backend-owned, no secrets) ---
+
+
+@strawberry.type
+class VesselSummary:
+    id: str
+    name: Optional[str] = None
+    imo: Optional[str] = None
+    mmsi: Optional[str] = None
+    callsign: Optional[str] = None
+    vessel_type: Optional[str] = None
+    flag: Optional[str] = None
+    length: Optional[float] = None
+    width: Optional[float] = None
+    year_built: Optional[int] = None
+
+
+@strawberry.type
+class VesselPosition:
+    mmsi: Optional[str] = None
+    imo: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    sog: Optional[float] = None
+    cog: Optional[float] = None
+    heading: Optional[float] = None
+    timestamp: Optional[str] = None
+    destination: Optional[str] = None
+    eta: Optional[str] = None
+
+
+@strawberry.enum
+class VesselIdType(Enum):
+    IMO = "imo"
+    MMSI = "mmsi"
+    ENI = "eni"
+
+
+@strawberry.type
+class VesselSearchResponse:
+    vessels: list[VesselSummary] = strawberry.field(default_factory=list)
+    cached: bool = False
+    provider: str = "vesselapi"
+    upstream_count: Optional[int] = None
+    # When VESSELAPI_API_KEY is blank - callers get a typed disabled signal,
+    # not a 500. Lets Operations UI render the "configure" empty state.
+    configured: bool = True
+
+
+@strawberry.enum
+class CampaignAssignmentStatus(Enum):
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
+    ON_BOARD = "on_board"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+@strawberry.type
+class VesselType:
+    imo: str
+    name: str
+    mmsi: Optional[str] = None
+    callsign: Optional[str] = None
+    vessel_type: Optional[str] = None
+    flag: Optional[str] = None
+    length: Optional[float] = None
+    width: Optional[float] = None
+    year_built: Optional[int] = None
+    created_at: str
+    updated_at: str
+
+
+@strawberry.type
+class CampaignAssignmentType:
+    id: str
+    crew_member_id: str
+    project_id: Optional[str] = None
+    vessel_imo: str
+    role_on_board: str
+    start_date: str
+    end_date: str
+    status: str
+    agreed_day_rate: Optional[float] = None
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+    crew_name: Optional[str] = None
+    vessel_name: Optional[str] = None
+    project_name: Optional[str] = None
+
+
+@strawberry.input
+class CreateCampaignAssignmentInput:
+    crew_member_id: str
+    vessel_imo: str
+    role_on_board: str
+    start_date: str
+    end_date: str
+    project_id: Optional[str] = None
+    vessel_name: Optional[str] = None
+    agreed_day_rate: Optional[float] = None
+    notes: Optional[str] = None
+    status: Optional[CampaignAssignmentStatus] = CampaignAssignmentStatus.PROPOSED
+
+
+@strawberry.type
+class ComplianceCheckItemType:
+    item: str
+    status: str
+    detail: str
+
+
+@strawberry.type
+class AssignmentComplianceReportType:
+    crew_member_id: str
+    crew_name: str
+    status: str
+    has_conflict: bool
+    issues: list[str]
+    checks: list[ComplianceCheckItemType]

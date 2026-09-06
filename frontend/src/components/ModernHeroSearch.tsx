@@ -14,6 +14,7 @@ interface ModernHeroSearchProps {
   isAuthenticated?: boolean;
   onOpenFilters?: () => void;
   onAIResults?: (data: CrewQueryResult | null, loading: boolean, isActive: boolean, showSummary: boolean) => void;
+  variant?: 'hero' | 'compact';
 }
 
 const QUICK_DISCOVERY_CHIPS = [
@@ -33,6 +34,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
   isAuthenticated = true,
   onOpenFilters,
   onAIResults,
+  variant = 'hero',
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -129,15 +131,24 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
     <div
       ref={containerRef}
       className={`w-full flex flex-col items-center justify-center transition-all duration-300 ease-out ${
-        isCalmState ? `${isAuthenticated ? 'min-h-[44vh]' : 'min-h-[calc(100dvh-4rem)]'} py-8 sm:py-12` : 'py-1'
+        isCalmState
+          ? variant === 'compact'
+            ? 'py-0'
+            : `${isAuthenticated ? 'min-h-[44vh]' : 'min-h-[calc(100dvh-4rem)]'} py-8 sm:py-12`
+          : 'py-1'
       }`}
     >
-      <div className="w-full max-w-2xl px-4 flex flex-col items-center">
-        {/* Company Brand with Animated Logo Waveform (Calm/Initial State) */}
-        {isCalmState && (
-          <div className="text-center mb-8 w-full flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className={`w-full flex flex-col items-center ${variant === 'compact' ? 'max-w-none px-0' : 'max-w-2xl px-4'}`}>
+        {/* Public hero — plain-language value proposition for the logged-out shell */}
+        {isCalmState && !isAuthenticated && (
+          <div className="text-center space-y-3 mb-9 w-full flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-3 duration-300">
             <HydenlyneAnimatedLogo isFocused={isFocused} />
-            <h1 className="sr-only">Hydenlyne</h1>
+            <h1 className="mx-auto max-w-xl text-3xl sm:text-4xl lg:text-[2.65rem] lg:leading-[1.12] font-semibold tracking-[-0.03em] text-primary font-sans">
+              Find the right contractor for the next campaign.
+            </h1>
+            <p className="text-sm text-secondary font-normal max-w-md mx-auto leading-relaxed">
+              Search Hydenlyne&apos;s private specialist network by discipline, certification, region, and availability.
+            </p>
           </div>
         )}
 
@@ -251,7 +262,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
 
           <div className="mt-3 flex min-h-6 items-center justify-between px-1 text-xs text-secondary">
             <span className={isAuthenticated ? 'hidden sm:inline text-muted' : 'inline text-muted'}>
-              {isAuthenticated ? 'Search by role, qualification, or availability' : 'Private workforce system · Access is monitored'}
+              {isAuthenticated ? 'Search by role, qualification, or availability' : 'Private workforce network. Access is protected.'}
             </span>
             {isAuthenticated && (
               <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted">
@@ -324,12 +335,12 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
             </div>
           )}
 
-          {isCalmState && isAuthenticated && (
-            <div className="mt-12 grid w-full max-w-xl grid-cols-3 gap-2 text-center">
+          {isCalmState && !isAuthenticated && (
+            <div className="mt-12 grid w-full max-w-xl grid-cols-3 gap-2 text-center" aria-label="How it works">
               {[
                 { icon: Search, label: 'Discover', detail: 'Search the private network' },
                 { icon: Bookmark, label: 'Shortlist', detail: 'Save strongest fits' },
-                { icon: Send, label: 'Request', detail: 'Plan mobilization' },
+                { icon: Send, label: 'Mobilize', detail: 'Plan mobilization' },
               ].map(({ icon: Icon, label, detail }) => (
                 <div
                   key={label}

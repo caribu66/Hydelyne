@@ -120,7 +120,7 @@ export const LoginPage: FC<LoginPageProps> = ({
       </form>
 
       <p className="mt-8 text-center text-xs text-muted">
-        Private workforce system · Access is monitored
+        Private workforce network. Access is protected.
       </p>
     </>
   );

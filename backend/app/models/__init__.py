@@ -75,6 +75,9 @@ class CrewMember(Base):
         "WorkHistory", back_populates="crew_member", cascade="all, delete-orphan"
     )
     documents = relationship("Document", back_populates="crew_member")
+    assignments = relationship(
+        "CampaignAssignment", back_populates="crew_member", cascade="all, delete-orphan"
+    )
 
 
 class Certification(Base):
@@ -148,6 +151,59 @@ class Project(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=sa.func.now(), onupdate=sa.func.now()
     )
+
+    assignments = relationship("CampaignAssignment", back_populates="project")
+
+
+class Vessel(Base):
+    __tablename__ = "vessels"
+
+    imo: Mapped[str] = mapped_column(String(20), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    mmsi: Mapped[Optional[str]] = mapped_column(String(50), index=True)
+    callsign: Mapped[Optional[str]] = mapped_column(String(50))
+    vessel_type: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    flag: Mapped[Optional[str]] = mapped_column(String(50))
+    length: Mapped[Optional[float]] = mapped_column(Float)
+    width: Mapped[Optional[float]] = mapped_column(Float)
+    year_built: Mapped[Optional[int]] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=sa.func.now(), onupdate=sa.func.now()
+    )
+
+    assignments = relationship("CampaignAssignment", back_populates="vessel")
+
+
+class CampaignAssignment(Base):
+    __tablename__ = "campaign_assignments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    crew_member_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("crew_members.id", ondelete="CASCADE"), index=True
+    )
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="SET NULL"), index=True
+    )
+    vessel_imo: Mapped[str] = mapped_column(
+        String(20), ForeignKey("vessels.imo", ondelete="RESTRICT"), index=True
+    )
+    role_on_board: Mapped[str] = mapped_column(String(100), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="proposed", server_default="proposed", index=True
+    )
+    agreed_day_rate: Mapped[Optional[float]] = mapped_column(Float)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=sa.func.now(), onupdate=sa.func.now()
+    )
+
+    crew_member = relationship("CrewMember", back_populates="assignments")
+    project = relationship("Project", back_populates="assignments")
+    vessel = relationship("Vessel", back_populates="assignments")
 
 
 class Document(Base):

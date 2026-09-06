@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     SESSION_MAX_AGE: int = 28800
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
+    # VesselAPI (https://github.com/vessel-api) — real-time AIS proxy.
+    # Leave blank to disable external vessel search; backend then returns a
+    # typed unavailable signal instead of failing open to the provider.
+    VESSELAPI_API_KEY: str = ""
+    VESSELAPI_BASE_URL: str = "https://api.vesselapi.com/v1"
+    VESSELAPI_TIMEOUT_SECONDS: float = 10.0
+    VESSELAPI_CACHE_TTL_SECONDS: int = 120
 
 
 @lru_cache()

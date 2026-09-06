@@ -12,6 +12,7 @@ from strawberry import Info
 
 from app.auth.decorators import require_admin, require_auth, require_staff
 from app.database import get_session_factory
+from app.domain.access_tiers import tier_for_role
 from app.graphql.dtos import (
     CertificationCreateDTO,
     CrewMemberCreateDTO,
@@ -23,12 +24,18 @@ from app.graphql.mappers import (
     dto_to_crew_member_model,
     dto_to_project_model,
 )
+from app.graphql.scrub import scrub_crew_member, scrub_document, scrub_project
 from app.graphql.types import (
+    AssignmentComplianceReportType,
     AuthPayload,
     AvailabilityStatus,
+    CampaignAssignmentStatus,
+    CampaignAssignmentType,
     Certification,
     CertStatus,
     CertType,
+    ComplianceCheckItemType,
+    CreateCampaignAssignmentInput,
     CrewMember,
     CrewQueryResponse,
     CVExtractionResult,
@@ -44,13 +51,20 @@ from app.graphql.types import (
     Report,
     ReportType,
     VerificationStatus,
+    VesselIdType,
+    VesselPosition,
+    VesselSearchResponse,
+    VesselSummary,
+    VesselType,
     VisaInfo,
     WorkHistory,
 )
+from app.models import CampaignAssignment as CampaignAssignmentModel
 from app.models import Certification as CertificationModel
 from app.models import CrewMember as CrewMemberModel
 from app.models import Document as DocumentModel
 from app.models import Project as ProjectModel
+from app.models import Vessel as VesselModel
 from app.models import WorkHistory as WorkHistoryModel
 from app.services.audit import audit_service
 from app.services.crew import (
@@ -202,6 +216,42 @@ def _model_to_graphql_project(model: ProjectModel) -> Project:
     )
 
 
+def _model_to_graphql_vessel(model: VesselModel) -> VesselType:
+    return VesselType(
+        imo=model.imo,
+        name=model.name,
+        mmsi=model.mmsi,
+        callsign=model.callsign,
+        vessel_type=model.vessel_type,
+        flag=model.flag,
+        length=model.length,
+        width=model.width,
+        year_built=model.year_built,
+        created_at=str(model.created_at),
+        updated_at=str(model.updated_at),
+    )
+
+
+def _model_to_graphql_assignment(model: CampaignAssignmentModel) -> CampaignAssignmentType:
+    return CampaignAssignmentType(
+        id=model.id,
+        crew_member_id=model.crew_member_id,
+        project_id=model.project_id,
+        vessel_imo=model.vessel_imo,
+        role_on_board=model.role_on_board,
+        start_date=str(model.start_date),
+        end_date=str(model.end_date),
+        status=model.status,
+        agreed_day_rate=model.agreed_day_rate,
+        notes=model.notes,
+        created_at=str(model.created_at),
+        updated_at=str(model.updated_at),
+        crew_name=model.crew_member.full_name if model.crew_member else None,
+        vessel_name=model.vessel.name if model.vessel else None,
+        project_name=model.project.project_name if model.project else None,
+    )
+
+
 @strawberry.type
 class Query:
     @strawberry.field
@@ -253,7 +303,13 @@ class Query:
             await audit_service.log_profile_access(
                 actor_id=actor.id, action="view_profile", crew_member_id=crew.id
             )
-        return _model_to_graphql_crew_member(crew) if crew else None
+            tier = tier_for_role(actor.role)
+            # Staff T2 scope: C2 visible only for own drafts or approved profiles.
+            # For an approved profile T2 is fine; for another staff member's draft
+            # the publication check above already returned None, so no leak.
+            gql = _model_to_graphql_crew_member(crew)
+            return scrub_crew_member(gql, tier)
+        return None
 
     @strawberry.field
     @require_auth
@@ -278,7 +334,8 @@ class Query:
         await audit_service.log_profile_access(
             actor_id=actor.id, action="list_profiles", result_count=len(crew_list)
         )
-        return [_model_to_graphql_crew_member(c) for c in crew_list]
+        tier = tier_for_role(actor.role)
+        return [scrub_crew_member(_model_to_graphql_crew_member(c), tier) for c in crew_list]
 
     @strawberry.field
     @require_auth
@@ -288,20 +345,28 @@ class Query:
         await audit_service.log_profile_access(
             actor_id=actor.id, action="keyword_search", result_count=len(crew_list)
         )
-        return [_model_to_graphql_crew_member(c) for c in crew_list]
+        tier = tier_for_role(actor.role)
+        return [scrub_crew_member(_model_to_graphql_crew_member(c), tier) for c in crew_list]
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def expiring_certifications(
         self,
         info: Info,
         days: int = 30,
     ) -> list[Certification]:
         certs = await certification_service.get_expiring_certifications(days)
-        return [_model_to_graphql_certification(c) for c in certs]
+        actor = info.context["current_user"]
+        tier = tier_for_role(actor.role)
+        # Expiring certs carry cert_number/issuing_body (C2) — T2+ only.
+        # Resolver is @require_staff so T1 never reaches here, but scrub still
+        # enforces C3 denial for staff.
+        from app.graphql.scrub import scrub_certification
+
+        return [scrub_certification(_model_to_graphql_certification(c), tier) for c in certs]
 
     @strawberry.field
-    @require_auth
+    @require_admin
     async def compliance_status(self, info: Info, crew_id: str) -> str:
         actor = info.context["current_user"]
         if not await crew_service.can_access_profile(
@@ -333,7 +398,14 @@ class Query:
             )
         ):
             return None
-        return _model_to_graphql_document(doc) if doc else None
+        if not doc:
+            return None
+        tier = tier_for_role(actor.role)
+        # T1 callers must not see document metadata at all (C2).
+        if tier == "T1":
+            return None
+        gql = _model_to_graphql_document(doc)
+        return scrub_document(gql, tier)
 
     @strawberry.field
     @require_auth
@@ -343,8 +415,11 @@ class Query:
             crew_id, actor_id=actor.id, actor_role=actor.role
         ):
             return []
+        tier = tier_for_role(actor.role)
+        if tier == "T1":
+            return []
         docs = await document_service.get_documents_by_crew(crew_id)
-        return [_model_to_graphql_document(d) for d in docs]
+        return [scrub_document(_model_to_graphql_document(d), tier) for d in docs]
 
     @strawberry.field
     @require_admin
@@ -385,7 +460,11 @@ class Query:
     @require_auth
     async def project(self, info: Info, id: str) -> Optional[Project]:
         model = await project_service.get_project(id)
-        return _model_to_graphql_project(model) if model else None
+        if not model:
+            return None
+        actor = info.context["current_user"]
+        tier = tier_for_role(actor.role)
+        return scrub_project(_model_to_graphql_project(model), tier)
 
     @strawberry.field
     @require_auth
@@ -395,7 +474,205 @@ class Query:
         status: Optional[ProjectStatus] = None,
     ) -> list[Project]:
         models = await project_service.list_projects(status.value if status else None)
-        return [_model_to_graphql_project(m) for m in models]
+        actor = info.context["current_user"]
+        tier = tier_for_role(actor.role)
+        return [scrub_project(_model_to_graphql_project(m), tier) for m in models]
+
+    @strawberry.field
+    @require_auth
+    async def vessel_search(self, info: Info, name: str, limit: int = 20) -> VesselSearchResponse:
+        """Search external AIS vessels via VesselAPI. Auth-gated, backend-owned key."""
+        from app.services.vessel_api import (
+            VesselApiNotConfiguredError,
+            vessel_api_service,
+        )
+
+        # Input validation at the boundary - never trust a GraphQL string.
+        trimmed = name.strip()
+        if not trimmed:
+            return VesselSearchResponse(
+                vessels=[], cached=False, configured=vessel_api_service.is_configured()
+            )
+        # Clamp limit server-side regardless of client.
+        limit = min(max(limit, 1), 50)
+        try:
+            result = await vessel_api_service.search_vessels(trimmed, limit=limit)
+        except VesselApiNotConfiguredError:
+            return VesselSearchResponse(vessels=[], cached=False, configured=False)
+        except ValueError as exc:
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        except Exception as exc:
+            from graphql import GraphQLError as _GQLE
+
+            # Do not leak upstream body; log at service layer.
+            raise _GQLE("Vessel search unavailable", extensions={"code": "UPSTREAM_ERROR"}) from exc
+        return VesselSearchResponse(
+            vessels=[VesselSummary(**s.__dict__) for s in result.vessels],
+            cached=result.cached,
+            upstream_count=result.upstream_count,
+            configured=True,
+        )
+
+    @strawberry.field
+    @require_auth
+    async def vessel_position(
+        self, info: Info, vessel_id: str, id_type: VesselIdType
+    ) -> Optional[VesselPosition]:
+        from app.services.vessel_api import (
+            VesselApiNotConfiguredError,
+            VesselApiNotFoundError,
+            vessel_api_service,
+        )
+
+        if not vessel_id.strip():
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE("vesselId must not be empty", extensions={"code": "BAD_USER_INPUT"})
+        try:
+            pos = await vessel_api_service.get_position(vessel_id.strip(), id_type=id_type.value)
+        except VesselApiNotConfiguredError:
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE(
+                "Vessel tracking is not configured", extensions={"code": "NOT_CONFIGURED"}
+            ) from None
+        except VesselApiNotFoundError:
+            return None
+        except ValueError as exc:
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        return VesselPosition(**pos.__dict__)
+
+    @strawberry.field
+    @require_auth
+    async def vessels_in_radius(
+        self,
+        info: Info,
+        latitude: float,
+        longitude: float,
+        radius: int,
+        limit: int = 20,
+    ) -> VesselSearchResponse:
+        from app.services.vessel_api import (
+            VesselApiNotConfiguredError,
+            vessel_api_service,
+        )
+
+        limit = min(max(limit, 1), 50)
+        try:
+            result = await vessel_api_service.vessels_in_radius(
+                latitude=latitude, longitude=longitude, radius_m=radius, limit=limit
+            )
+        except VesselApiNotConfiguredError:
+            return VesselSearchResponse(vessels=[], cached=False, configured=False)
+        except ValueError as exc:
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        except Exception as exc:
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE("Vessel lookup unavailable", extensions={"code": "UPSTREAM_ERROR"}) from exc
+        return VesselSearchResponse(
+            vessels=[VesselSummary(**s.__dict__) for s in result.vessels],
+            cached=result.cached,
+            upstream_count=result.upstream_count,
+            configured=True,
+        )
+
+    @strawberry.field
+    @require_auth
+    async def campaign_assignments(
+        self,
+        info: Info,
+        vessel_imo: Optional[str] = None,
+        project_id: Optional[str] = None,
+        crew_id: Optional[str] = None,
+        status: Optional[CampaignAssignmentStatus] = None,
+    ) -> list[CampaignAssignmentType]:
+        from app.services.assignment import assignment_service
+
+        status_val = status.value if status else None
+        models = await assignment_service.list_assignments(
+            vessel_imo=vessel_imo,
+            project_id=project_id,
+            crew_member_id=crew_id,
+            status=status_val,
+        )
+        return [_model_to_graphql_assignment(m) for m in models]
+
+    @strawberry.field
+    @require_auth
+    async def vessel_roster(
+        self,
+        info: Info,
+        imo: str,
+    ) -> list[CampaignAssignmentType]:
+        from app.services.assignment import assignment_service
+
+        models = await assignment_service.list_assignments(vessel_imo=imo)
+        return [_model_to_graphql_assignment(m) for m in models]
+
+    @strawberry.field
+    @require_auth
+    async def vessel_record(
+        self,
+        info: Info,
+        imo: str,
+    ) -> Optional[VesselType]:
+        from app.services.assignment import assignment_service
+
+        model = await assignment_service.get_vessel(imo)
+        return _model_to_graphql_vessel(model) if model else None
+
+    @strawberry.field
+    @require_staff
+    async def evaluate_assignment_compliance(
+        self,
+        info: Info,
+        crew_member_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> AssignmentComplianceReportType:
+        from datetime import date
+        from graphql import GraphQLError
+        from app.services.assignment import assignment_service
+
+        try:
+            start = date.fromisoformat(start_date)
+            end = date.fromisoformat(end_date)
+        except Exception as exc:
+            raise GraphQLError(f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}) from exc
+
+        try:
+            report = await assignment_service.evaluate_compliance(
+                crew_member_id=crew_member_id,
+                start_date=start,
+                end_date=end,
+            )
+        except ValueError as exc:
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+
+        checks = [
+            ComplianceCheckItemType(
+                item=c["item"],
+                status=c["status"],
+                detail=c["detail"],
+            )
+            for c in report["checks"]
+        ]
+
+        return AssignmentComplianceReportType(
+            crew_member_id=report["crew_member_id"],
+            crew_name=report["crew_name"],
+            status=report["status"],
+            has_conflict=report["has_conflict"],
+            issues=report["issues"],
+            checks=checks,
+        )
 
     @strawberry.field
     @require_auth
@@ -405,6 +682,19 @@ class Query:
         report_type: ReportType,
         filters: Optional[str] = None,
     ) -> Report:
+        actor = info.context["current_user"]
+        tier = tier_for_role(actor.role)
+        # Compliance/performance/project_readiness carry C3 detail — T2+ only.
+        if report_type in (
+            ReportType.COMPLIANCE,
+            ReportType.PERFORMANCE,
+            ReportType.PROJECT_READINESS,
+        ):
+            if tier == "T1":
+                from graphql import GraphQLError
+
+                raise GraphQLError("Admin access required", extensions={"code": "FORBIDDEN"})
+
         filter_dict = json.loads(filters) if filters else {}
 
         factory = get_session_factory()
@@ -839,3 +1129,61 @@ class Mutation:
             "/api/documents/upload with classification 'cv'.",
             extensions={"code": "BAD_USER_INPUT"},
         )
+
+    @strawberry.mutation
+    @require_staff
+    async def create_campaign_assignment(
+        self,
+        info: Info,
+        input: CreateCampaignAssignmentInput,
+    ) -> CampaignAssignmentType:
+        from datetime import date
+
+        from graphql import GraphQLError
+
+        from app.services.assignment import assignment_service
+
+        try:
+            start = date.fromisoformat(input.start_date)
+            end = date.fromisoformat(input.end_date)
+        except Exception as exc:
+            raise GraphQLError(f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}) from exc
+
+        status_val = input.status.value if input.status else "proposed"
+
+        try:
+            model = await assignment_service.create_assignment(
+                crew_member_id=input.crew_member_id,
+                vessel_imo=input.vessel_imo,
+                role_on_board=input.role_on_board,
+                start_date=start,
+                end_date=end,
+                project_id=input.project_id,
+                vessel_name=input.vessel_name,
+                agreed_day_rate=input.agreed_day_rate,
+                notes=input.notes,
+                status=status_val,
+            )
+        except ValueError as exc:
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+
+        return _model_to_graphql_assignment(model)
+
+    @strawberry.mutation
+    @require_staff
+    async def update_campaign_assignment_status(
+        self,
+        info: Info,
+        assignment_id: str,
+        status: CampaignAssignmentStatus,
+    ) -> CampaignAssignmentType:
+        from graphql import GraphQLError
+
+        from app.services.assignment import assignment_service
+
+        try:
+            model = await assignment_service.update_status(assignment_id, status.value)
+        except ValueError as exc:
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+
+        return _model_to_graphql_assignment(model)

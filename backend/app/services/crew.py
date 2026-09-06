@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,7 +17,7 @@ from app.auth.session import (
 )
 from app.database import get_session_factory
 from app.domain.certifications import normalize_cert_name
-from app.models import Certification, CrewMember, Document
+from app.models import Certification, CrewMember, Document, WorkHistory
 from app.services.cache import cache_service
 from app.services.consultant_knowledge import consultant_knowledge_service
 from app.services.upload import document_upload_service
@@ -321,12 +321,21 @@ class CrewService:
                 stmt = stmt.where(CrewMember.availability_status == availability)
 
             if search:
-                search_term = f"%{search}%"
+                search_term = f"%{search.strip()}%"
                 stmt = stmt.where(
                     or_(
                         CrewMember.full_name.ilike(search_term),
                         CrewMember.email.ilike(search_term),
                         CrewMember.nationality.ilike(search_term),
+                        CrewMember.professional_summary.ilike(search_term),
+                        cast(CrewMember.tags, String).ilike(search_term),
+                        CrewMember.certifications.any(Certification.cert_type.ilike(search_term)),
+                        CrewMember.work_history.any(
+                            or_(
+                                WorkHistory.role.ilike(search_term),
+                                WorkHistory.project_type.ilike(search_term),
+                            )
+                        ),
                     )
                 )
 

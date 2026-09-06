@@ -58,7 +58,7 @@ export function IncomingDocumentAlert({
   }
 
   return (
-    <details className="relative">
+    <details id="incoming-document-review" className="relative">
       <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-[10px] border border-border-subtle bg-surface px-3 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary focus-visible:ring-2 focus-visible:ring-focus">
         <Bell className="h-3.5 w-3.5" aria-hidden="true" />
         <span className="hidden sm:inline">Documents</span>

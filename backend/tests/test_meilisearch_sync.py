@@ -48,8 +48,13 @@ async def test_create_crew_member_syncs_meilisearch_index(client):
     (indexed_doc,), _ = meilisearch_client.index_crew_member.call_args
     assert indexed_doc["id"] == crew_id
     assert indexed_doc["full_name"] == "Priya Anand"
-    assert indexed_doc["email"] == "priya@example.com"
     assert indexed_doc["publication_status"] == "approved"
+    # General crew index is C1-only per ADR 0005 — email/phone and C3 must never be indexed.
+    assert "email" not in indexed_doc
+    assert "phone" not in indexed_doc
+    assert "passport_number" not in indexed_doc
+    assert "medical_status" not in indexed_doc
+    assert "extracted_data" not in indexed_doc
 
 
 @pytest.mark.asyncio

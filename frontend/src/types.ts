@@ -1,5 +1,5 @@
 export type RemoteType = 'Remote' | 'Hybrid' | 'On-site';
-export type AvailabilityStatus = 'Available immediately' | 'Open to offers' | 'Employed (Not looking)' | 'Contract / Freelance';
+export type AvailabilityStatus = 'Available immediately' | 'Open to offers' | 'Employed (Not looking)' | 'Contract / Freelance' | 'Unavailable';
 
 export interface WorkExperience {
   company: string;
@@ -49,6 +49,7 @@ export interface UserProfile {
   bio: string;
   professionalSummary?: string;
   availability: AvailabilityStatus;
+  availabilityDate?: string;
   education: string;
   nationality?: string;
   countryOfResidence?: string;
@@ -100,6 +101,7 @@ export interface UserProfile {
   isHighlyRecommended?: boolean;
   dateAdded?: string;
   documents?: SpecialistDocument[];
+  medical?: { status?: string; expiry?: string; provider?: string };
 }
 
 export type SortOption =
@@ -145,3 +147,23 @@ export interface FilterPreset {
 }
 
 export type DossierTab = 'dossier' | 'experience' | 'expertise' | 'systems' | 'credentials' | 'radar' | 'vault';
+
+export type CampaignAssignmentStatus = 'proposed' | 'confirmed' | 'on_board' | 'completed' | 'cancelled';
+
+export interface CampaignAssignment {
+  id: string;
+  crewMemberId: string;
+  projectId?: string | null;
+  vesselImo: string;
+  roleOnBoard: string;
+  startDate: string;
+  endDate: string;
+  status: CampaignAssignmentStatus;
+  agreedDayRate?: number | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  crewName?: string | null;
+  vesselName?: string | null;
+  projectName?: string | null;
+}

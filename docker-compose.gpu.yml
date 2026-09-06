@@ -1,0 +1,6 @@
+services:
+  ollama:
+    # This overlay is selected by scripts/local-stack.sh only after it verifies
+    # external power, a usable NVIDIA device, and the Podman CDI specification.
+    devices:
+      - nvidia.com/gpu=all

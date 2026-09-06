@@ -7,8 +7,9 @@ A crew document management platform for Hydenlyne's internal team to manage thei
 ### Prerequisites
 
 - Podman + `podman-compose` (Docker + `docker compose` works too)
-- Optional: an NVIDIA GPU with CDI configured (`/etc/cdi/nvidia.yaml`) — the
-  Ollama container claims `nvidia.com/gpu=all` and falls back to CPU without it
+- Optional: an NVIDIA GPU with CDI configured (`/etc/cdi/nvidia.yaml`). The
+  launcher automatically enables GPU acceleration only on external power when
+  it can verify the device and CDI runtime; otherwise it uses CPU safely.
 
 Every service, including Ollama, runs in a container. Nothing needs to be
 installed on the host.
@@ -194,8 +195,13 @@ owns the frontend or backend port, waits for both health endpoints, and then
 prints the usable URL. This avoids a browser silently talking to a stale
 frontend or backend from another worktree. Use `./scripts/local-stack.sh stop`
 or `./scripts/local-stack.sh status` to manage it. The default stack is
-CPU-safe; start the optional GPU worker only when an NVIDIA runtime is
-available with `podman compose --profile gpu up -d celery_gpu_worker`.
+CPU-safe by default. At each `start` or `status`, the launcher prints the
+selected compute mode and reason. In automatic mode, GPU acceleration is used
+only on external power when `nvidia-smi`, `/dev/nvidia0`, and the CDI
+specification are available; battery mode stays on CPU. Use
+`HYDENLYNE_COMPUTE_MODE=cpu ./scripts/local-stack.sh start` to force CPU, or
+`HYDENLYNE_COMPUTE_MODE=gpu ./scripts/local-stack.sh start` to require GPU and
+fail visibly if it cannot be used.
 
 Running a service directly on the host is only worth it for a fast edit loop
 on one component, and it needs the matching container stopped first so the

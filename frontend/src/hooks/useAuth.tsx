@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import { LOGIN_MUTATION, LOGOUT_MUTATION, ME_QUERY } from '../lib/queries'
 import { setAuthToken } from '../lib/apollo'
@@ -10,7 +10,20 @@ export interface AuthUser {
   role?: string
 }
 
-export function useAuth() {
+interface AuthContextValue {
+  user: AuthUser | null
+  initialized: boolean
+  isAuthenticated: boolean
+  login: (email: string, password: string, _remember?: boolean) => Promise<{ ok: boolean; message?: string }>
+  logout: () => Promise<void>
+  refreshSession: () => Promise<void>
+  loggingIn: boolean
+  error: unknown
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+function useAuthState(): AuthContextValue {
   const apolloClient = useApolloClient()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [initialized, setInitialized] = useState(false)
@@ -37,10 +50,6 @@ export function useAuth() {
   }, [])
 
   const login = useCallback(
-    // `remember` is currently a no-op: the backend login mutation has no
-    // session-duration parameter, so the "Remember me" checkbox in
-    // LoginPage.tsx does not change behavior yet. Kept in the signature so
-    // that isn't lost, not because it does anything today.
     async (email: string, password: string, _remember = true): Promise<{ ok: boolean; message?: string }> => {
       try {
         const { data } = await loginMutation({ variables: { email, password } })
@@ -64,12 +73,11 @@ export function useAuth() {
   )
 
   const logout = useCallback(async () => {
-    // Hide authenticated surfaces immediately, even if the network request is slow.
     setUser(null)
     try {
       await logoutMutation()
     } catch {
-      // Logout is best-effort; clear local state regardless of server response
+      // best-effort
     }
     setAuthToken(null)
     await apolloClient.clearStore()
@@ -82,4 +90,16 @@ export function useAuth() {
   }, [refetch])
 
   return { user, initialized, isAuthenticated, login, logout, refreshSession, loggingIn, error }
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const value = useAuthState()
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext)
+  if (ctx) return ctx
+  throw new Error('useAuth must be used within AuthProvider — wrap your tree with <AuthProvider> in main.tsx')
 }

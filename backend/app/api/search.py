@@ -6,7 +6,8 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.auth.decorators import get_current_user_rest, require_admin_rest
+from app.auth.decorators import get_current_user_rest, require_admin_rest, require_staff_rest
+from app.domain.access_tiers import MEILISEARCH_CREW_DENIED_FIELDS, tier_for_role
 from app.domain.fields import AVAILABILITY_STATUS_VALUES, DOCUMENT_CLASSIFICATIONS
 from app.models import CrewMember
 from app.services.audit import audit_service
@@ -60,7 +61,7 @@ async def search_crew(
     offset: int = Query(0, ge=0),
     current_user: CrewMember = Depends(get_current_user_rest),
 ) -> dict[str, Any]:
-    """Search crew members using Meilisearch."""
+    """Search crew members using Meilisearch. General index is C1-only."""
     filters = APPROVED_CREW_FILTER
     if availability:
         availability_filter = _quote_filter_value(
@@ -74,6 +75,14 @@ async def search_crew(
         limit=limit,
         offset=offset,
     )
+    # Defense-in-depth: strip any denied fields that might remain from a
+    # pre-migration index (old docs still contain email/phone).
+    for hit in results.get("hits", []) or []:
+        for denied in MEILISEARCH_CREW_DENIED_FIELDS:
+            hit.pop(denied, None)
+        # Also strip denormalized keys that map to denied storage
+        hit.pop("extracted_data", None)
+        hit.pop("extracted_text", None)
     hits = results.get("hits")
     await audit_service.log_profile_access(
         actor_id=current_user.id,
@@ -91,9 +100,13 @@ async def search_documents(
     crew_id: Optional[str] = Query(None, description="Filter by crew member ID"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: CrewMember = Depends(get_current_user_rest),
+    current_user: CrewMember = Depends(require_staff_rest),
 ) -> dict[str, Any]:
-    """Search documents using Meilisearch."""
+    """Search documents using Meilisearch. Requires T2 (staff/admin) — C2 metadata.
+
+    C3 evidence (extracted_data) is stripped for T2 and only returned for T3.
+    Never expose processing, rejected, or failed extraction records.
+    """
     # Never expose processing, rejected, or failed extraction records through
     # the document search surface. Reviewers use the CV review queue instead.
     filters_parts = [SEARCHABLE_DOCUMENTS_FILTER]
@@ -112,6 +125,12 @@ async def search_documents(
         limit=limit,
         offset=offset,
     )
+    tier = tier_for_role(current_user.role)
+    if tier != "T3":
+        for hit in results.get("hits", []) or []:
+            hit.pop("extracted_data", None)
+            hit.pop("extracted_text", None)
+            hit.pop("extraction_confidence", None)
     return results
 
 

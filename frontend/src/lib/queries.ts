@@ -7,6 +7,34 @@ export const CREW_MEMBERS_QUERY = gql`
       fullName
       nationality
       countryOfResidence
+      gender
+      languages
+      flyingPoint
+      availabilityStatus
+      availabilityDate
+      profileCompletenessScore
+      yearsOfExperience
+      education
+      professionalSummary
+      geographicalExperience
+      systemsExperience
+      trainingQualifications
+      tags
+      medical { status expiry }
+      certifications { id certType issueDate expiryDate status verificationStatus }
+      createdAt
+      updatedAt
+    }
+  }
+`
+
+export const CREW_MEMBER_DETAIL_QUERY = gql`
+  query CrewMemberDetail($id: String!) {
+    crewMember(id: $id) {
+      id
+      fullName
+      nationality
+      countryOfResidence
       dateOfBirth
       gender
       languages
@@ -41,8 +69,11 @@ export const CREW_MEMBERS_QUERY = gql`
       }
       insurance {
         provider
+        policyNumber
+        coverage
         expiry
       }
+      internalNotes
       createdAt
       updatedAt
     }
@@ -231,6 +262,138 @@ export const VERIFY_CERTIFICATION = gql`
       documentRef
       issueDate
       expiryDate
+    }
+  }
+`
+
+export const PROJECTS_QUERY = gql`
+  query Projects($status: ProjectStatus) {
+    projects(status: $status) {
+      id
+      clientName
+      projectName
+      projectType
+      location
+      country
+      startDate
+      endDate
+      status
+    }
+  }
+`
+
+export const SEARCH_VESSELS_QUERY = gql`
+  query SearchVessels($name: String!, $limit: Int) {
+    vesselSearch(name: $name, limit: $limit) {
+      vessels {
+        id
+        name
+        imo
+        mmsi
+        callsign
+        vesselType
+        flag
+        length
+        width
+        yearBuilt
+      }
+      cached
+      provider
+      upstreamCount
+      configured
+    }
+  }
+`
+
+export const VESSEL_POSITION_QUERY = gql`
+  query VesselPosition($vesselId: String!, $idType: VesselIdType) {
+    vesselPosition(vesselId: $vesselId, idType: $idType) {
+      mmsi
+      imo
+      latitude
+      longitude
+      sog
+      cog
+      heading
+      timestamp
+      destination
+      eta
+    }
+  }
+`
+
+export const CREATE_CAMPAIGN_ASSIGNMENT = gql`
+  mutation CreateCampaignAssignment($input: CreateCampaignAssignmentInput!) {
+    createCampaignAssignment(input: $input) {
+      id
+      crewMemberId
+      projectId
+      vesselImo
+      roleOnBoard
+      startDate
+      endDate
+      status
+      agreedDayRate
+      notes
+      createdAt
+      updatedAt
+      crewName
+      vesselName
+      projectName
+    }
+  }
+`
+
+export const UPDATE_CAMPAIGN_ASSIGNMENT_STATUS = gql`
+  mutation UpdateCampaignAssignmentStatus($assignmentId: String!, $status: CampaignAssignmentStatus!) {
+    updateCampaignAssignmentStatus(assignmentId: $assignmentId, status: $status) {
+      id
+      status
+      updatedAt
+    }
+  }
+`
+
+export const VESSEL_ROSTER_QUERY = gql`
+  query VesselRoster($imo: String!) {
+    vesselRoster(imo: $imo) {
+      id
+      crewMemberId
+      projectId
+      vesselImo
+      roleOnBoard
+      startDate
+      endDate
+      status
+      agreedDayRate
+      notes
+      createdAt
+      updatedAt
+      crewName
+      vesselName
+      projectName
+    }
+  }
+`
+
+export const CAMPAIGN_ASSIGNMENTS_QUERY = gql`
+  query CampaignAssignments($vesselImo: String, $projectId: String, $crewId: String, $status: CampaignAssignmentStatus) {
+    campaignAssignments(vesselImo: $vesselImo, projectId: $projectId, crewId: $crewId, status: $status) {
+      id
+      crewMemberId
+      projectId
+      vesselImo
+      roleOnBoard
+      startDate
+      endDate
+      status
+      agreedDayRate
+      notes
+      createdAt
+      updatedAt
+      crewName
+      vesselName
+      projectName
     }
   }
 `

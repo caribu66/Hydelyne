@@ -98,6 +98,9 @@ async def generate_crew(count: int = 100) -> int:
 
             availability = random.choice(AVAILABILITY_STATUSES)
 
+            is_active_or_ready = availability in ("available", "on_assignment")
+            med_exp = random_date(2027, 2028) if is_active_or_ready else (random_date(2025, 2026) if random.random() > 0.4 else None)
+
             crew = CrewMember(
                 id=str(uuid.uuid4()),
                 full_name=full_name,
@@ -107,24 +110,55 @@ async def generate_crew(count: int = 100) -> int:
                 availability_status=availability,
                 role="user",
                 tags=random.sample(CERTIFICATIONS_POOL, k=random.randint(2, 5)),
-                profile_completeness_score=round(random.uniform(60, 99), 1),
+                profile_completeness_score=round(random.uniform(75, 99), 1),
+                medical_status="fit_for_offshore" if is_active_or_ready else "expired",
+                medical_expiry=med_exp,
+                medical_provider="OEUK Approved Clinic" if is_active_or_ready else "Aberdeen Health",
+                passport_number=f"P{random.randint(10000000, 99999999)}",
+                passport_expiry=random_date(2029, 2033),
             )
             session.add(crew)
             await session.flush()
 
-            # Add 2-5 random certifications
-            num_certs = random.randint(2, 5)
-            crew_certs = random.sample(CERTIFICATIONS_POOL, k=num_certs)
+            # For offshore deployments, survival (BOSIET) and OGUK medical are standard
+            if is_active_or_ready:
+                session.add(
+                    Certification(
+                        id=str(uuid.uuid4()),
+                        crew_member_id=crew.id,
+                        cert_type="OPITO BOSIET with CA-EBS",
+                        issuing_body="OPITO",
+                        expiry_date=random_date(2027, 2028),
+                        status="valid",
+                        verification_status="verified",
+                    )
+                )
+                session.add(
+                    Certification(
+                        id=str(uuid.uuid4()),
+                        crew_member_id=crew.id,
+                        cert_type="OGUK Medical",
+                        issuing_body="OEUK",
+                        expiry_date=med_exp,
+                        status="valid",
+                        verification_status="verified",
+                    )
+                )
+
+            # Add 2-4 role-specific certifications
+            num_certs = random.randint(2, 4)
+            role_pool = [c for c in CERTIFICATIONS_POOL if c not in ("BOSIET", "OGUK Medical", "CA-EBS", "FOET")]
+            crew_certs = random.sample(role_pool, k=num_certs)
             for cert_type in crew_certs:
                 session.add(
                     Certification(
                         id=str(uuid.uuid4()),
                         crew_member_id=crew.id,
                         cert_type=cert_type,
-                        issuing_body=random.choice(["OPITO", "IMCA", "IHO", "NEBOSH", "OGUK"]),
-                        expiry_date=random_date(2025, 2028) if random.random() > 0.3 else None,
-                        status=random.choice(["valid", "expiring_soon", "expired", "pending_verification"]),
-                        verification_status=random.choice(["verified", "unverified", "pending"]),
+                        issuing_body=random.choice(["IMCA", "IHO", "NEBOSH", "JNCC"]),
+                        expiry_date=random_date(2027, 2029) if is_active_or_ready else random_date(2025, 2027),
+                        status="valid" if is_active_or_ready else random.choice(["valid", "expiring_soon", "expired", "pending_verification"]),
+                        verification_status="verified" if is_active_or_ready else random.choice(["verified", "unverified", "pending"]),
                     )
                 )
 

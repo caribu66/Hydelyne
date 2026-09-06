@@ -60,11 +60,12 @@ class MeilisearchClient:
                 self.client.create_index(CREW_MEMBERS_INDEX, {"primaryKey": "id"})
 
             crew_index = self.client.index(CREW_MEMBERS_INDEX)
+            # C1-only searchable attributes per ADR 0005 — email/phone and
+            # passport/visa/medical/insurance derived fields must never be
+            # searchable in the general index.
             crew_index.update_searchable_attributes(
                 [
                     "full_name",
-                    "email",
-                    "phone",
                     "nationality",
                     "country_of_residence",
                     "gender",
@@ -75,6 +76,7 @@ class MeilisearchClient:
                     "training_qualifications",
                     "geographical_experience",
                     "systems_experience",
+                    "professional_summary",
                 ]
             )
             crew_index.update_filterable_attributes(

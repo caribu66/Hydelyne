@@ -12,6 +12,7 @@ Only runs when APP_ENV != "production" to avoid contaminating real data.
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 import uuid
 
 from sqlalchemy import select
@@ -97,14 +98,15 @@ SEED_CREW = [
     },
 ]
 # Certifications seeded per crew member (index-matched to SEED_CREW)
+# Real offshore operations require OPITO BOSIET/FOET + CA-EBS and OGUK/OEUK Medical
 SEED_CERTS = [
-    ["BOSIET", "STCW", "JNCC MMO"],
-    ["BOSIET", "IOGP Geophysical Rep", "OGUK Medical"],
-    ["GWO Wind", "OGUK Medical", "IMCA Geotech"],
-    ["PAMGUARD Advanced", "NCS Safety", "BOSIET"],
-    ["NEBOSH Diploma", "ISO 45001 Lead Auditor", "BOSIET"],
-    ["IHO Cat A Hydrographer", "IMCA Survey QC", "BOSIET"],
-    ["EOD Level 3", "IMCA Client Rep", "BOSIET"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "JNCC MMO", "STCW"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "IOGP Geophysical Rep", "OBN Quality Control"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "GWO Wind", "IMCA Geotech"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "PAMGUARD Advanced", "NCS Safety"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "NEBOSH Diploma", "ISO 45001 Lead Auditor"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "IHO Cat A Hydrographer", "IMCA Survey QC"],
+    ["OPITO BOSIET with CA-EBS", "OGUK Medical", "EOD Level 3", "IMCA Client Rep"],
 ]
 
 
@@ -117,7 +119,15 @@ async def seed_all() -> int:
             exists = await session.execute(
                 select(CrewMember).where(CrewMember.email == data["email"])
             )
-            if exists.scalar_one_or_none():
+            existing_crew = exists.scalar_one_or_none()
+            if existing_crew:
+                # Update compliance fields if not populated
+                if not existing_crew.medical_expiry:
+                    existing_crew.medical_status = "fit_for_offshore"
+                    existing_crew.medical_expiry = date(2027, 12, 31)
+                    existing_crew.medical_provider = "Aberdeen Offshore Medical / OEUK"
+                    existing_crew.passport_expiry = date(2030, 6, 30)
+                    existing_crew.passport_issuing_country = str(data["nationality"])
                 continue
             crew = CrewMember(
                 id=str(uuid.uuid4()),
@@ -129,6 +139,12 @@ async def seed_all() -> int:
                 role=data.get("role", "user"),
                 tags=data.get("tags", []),
                 profile_completeness_score=data.get("profile_completeness_score"),
+                medical_status="fit_for_offshore",
+                medical_expiry=date(2027, 12, 31),
+                medical_provider="Aberdeen Offshore Medical / OEUK",
+                passport_number=f"GB{10000000 + i}",
+                passport_expiry=date(2030, 6, 30),
+                passport_issuing_country=data["nationality"],
             )
             session.add(crew)
             await session.flush()  # assign id
@@ -141,10 +157,11 @@ async def seed_all() -> int:
                         id=str(uuid.uuid4()),
                         crew_member_id=crew.id,
                         cert_type=cert_type,
-                        issuing_body="OPITO / IMCA",
-                        expiry_date=None,
-                        status="pending_verification",
-                        verification_status="unverified",
+                        issuing_body="OPITO / OEUK / IMCA",
+                        issue_date=date(2024, 1, 15),
+                        expiry_date=date(2027, 10, 15),
+                        status="valid",
+                        verification_status="verified",
                     )
                 )
             session.add(

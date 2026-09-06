@@ -23,6 +23,8 @@ import { DELETE_CREW_MEMBER } from './lib/queries';
 import { CrewQueryResult } from './hooks/useCrewQuery';
 import { ModernHeroSearch } from './components/ModernHeroSearch';
 import { CrewQuerySummary } from './components/CrewQuerySummary';
+import { OperationsHome } from './components/operations/OperationsHome';
+import { isStaffOrAdmin } from './utils/operationsHome';
 import { MatchEvidence } from './components/MatchEvidence';
 import { ActiveFilterChips } from './components/ActiveFilterChips';
 import { SpecialistActionsMenu } from './components/SpecialistActionsMenu';
@@ -31,6 +33,7 @@ import { HighlightText } from './components/HighlightText';
 import { CertificationBadge } from './components/CertificationBadge';
 import { Toast } from './components/Toast';
 import { IncomingDocumentAlert } from './components/IncomingDocumentAlert';
+import { DocumentReviewModal } from './components/DocumentReviewModal';
 import { ServiceStatus } from './components/ServiceStatus';
 import { DensityIndicator } from './components/DensityIndicator';
 import { SkeletonResults } from './components/SkeletonResults';
@@ -51,6 +54,7 @@ import {
   Menu,
   GripVertical,
   Star,
+  ArrowLeft,
 } from 'lucide-react';
 import hydenlyneLogoWhite from './assets/hydenlyne-logo-white.png';
 import hydenlyneLogoColour from './assets/hydenlyne-logo-colour.png';
@@ -114,6 +118,8 @@ export default function App() {
   const [isExportShortlistOpen, setIsExportShortlistOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isDocumentReviewOpen, setIsDocumentReviewOpen] = useState(false);
+  const [documentReviewVersion, setDocumentReviewVersion] = useState(0);
 
   // Candidate Comparison state
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -239,6 +245,26 @@ export default function App() {
     setSelectedProfileId(crewId);
     setShowSavedOnly(false);
   }, [setSelectedProfileId, setShowSavedOnly]);
+
+  const handleOperationsSearch = useCallback((nextQuery: string) => {
+    const trimmed = nextQuery.trim()
+    setQuery(nextQuery)
+    setCommittedQuery(trimmed)
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Search contractors"]')
+      if (input) input.focus()
+    })
+  }, [setCommittedQuery, setQuery])
+
+  const handleOpenDocumentReview = useCallback(() => {
+    setIsDocumentReviewOpen(true)
+  }, [])
+
+  const handleDocumentReviewResolved = useCallback(() => {
+    setDocumentReviewVersion((currentVersion) => currentVersion + 1)
+    if (activeSelectedProfile) void refreshDocuments(activeSelectedProfile.id)
+    if (modalProfile) void refreshDocuments(modalProfile.id)
+  }, [activeSelectedProfile, modalProfile, refreshDocuments])
 
   // Focused Workspace mode for working comfortably on a contractor
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -401,45 +427,42 @@ export default function App() {
     onToggleCompare: handleToggleCompare,
   });
 
-  // Auth gate: block until we know session state
-  if (!authInitialized) {
-    return (
-      <div className="min-h-screen bg-canvas text-primary flex items-center justify-center font-sans antialiased">
-        <div className="flex items-center gap-2 text-xs text-muted font-mono">
-          <span className="h-2 w-2 rounded-full bg-action animate-pulse" />
-          Loading session…
-        </div>
-      </div>
-    );
-  }
-
-  const handleLogout = async () => {
-    // A signed-out browser must not retain a previous user's workspace state.
-    handleResetAll();
-    setViewMode('split');
-    setSelectedProfileId(null);
-    clearShortlist();
-    setModalProfile(null);
-    setToastMessage(null);
-    setCopiedId(null);
-    setIsLoginOpen(false);
-    setIsShortcutsOpen(false);
-    setIsExportShortlistOpen(false);
-    setIsFilterOpen(false);
-    setCompareIds([]);
-    setIsCompareModalOpen(false);
-    setInquiryProfile(null);
-    setIsInquiryModalOpen(false);
-    setPrintProfile(null);
-    setAiQueryData(null);
-    setAiQueryLoading(false);
-    setAiQueryActive(false);
-    setShowAISummary(false);
-    setIsAddCrewMemberOpen(false);
-    setIsFocusMode(false);
-    window.history.replaceState(null, '', '/');
+  const handleLogout = useCallback(async () => {
+    setIsMenuOpen(false);
     await logout();
-  };
+    // Preserve the exiting workspace snapshot for the calm exit animation
+    // (header/workspace fade y -6 / 0.2) before clearing filters, selection,
+    // and URL state — otherwise the exiting branch would render empty.
+    window.setTimeout(() => {
+      handleResetAll();
+      setViewMode('split');
+      setSelectedProfileId(null);
+      clearShortlist();
+      setModalProfile(null);
+      setCopiedId(null);
+      setIsLoginOpen(false);
+      setIsShortcutsOpen(false);
+      setIsExportShortlistOpen(false);
+      setIsFilterOpen(false);
+      setCompareIds([]);
+      setIsCompareModalOpen(false);
+      setInquiryProfile(null);
+      setIsInquiryModalOpen(false);
+      setPrintProfile(null);
+      setAiQueryData(null);
+      setAiQueryLoading(false);
+      setAiQueryActive(false);
+      setShowAISummary(false);
+      setIsAddCrewMemberOpen(false);
+      setIsFocusMode(false);
+      window.history.replaceState(null, '', '/');
+      showToast('Signed out — workspace cleared');
+    }, 220);
+    // Setters are stable; handleResetAll/clearShortlist/showToast capture latest closures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logout, handleResetAll, clearShortlist, showToast]);
+
+  const shellKey = !authInitialized ? 'gate' : !isAuthenticated ? 'public' : isSearchActive ? 'search' : 'ops';
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-canvas font-sans text-primary antialiased selection:bg-action selection:text-on-action">
@@ -482,15 +505,21 @@ export default function App() {
 
           {/* Right Nav */}
           <div className="flex items-center gap-2 shrink-0">
-            {isAuthenticated && canSubmitCv && (
-              <span className="hidden max-w-[180px] truncate text-xs text-secondary sm:inline" title={user?.email}>
-                {user?.email}
-              </span>
-            )}
-            {!isAuthenticated && (
-              <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-[10px] bg-action px-3 py-1.5 text-xs font-semibold text-on-action transition-colors hover:bg-action-hover cursor-pointer">
-                Sign in
-              </button>
+            {!authInitialized ? (
+              <div className="h-8 w-20 animate-pulse rounded-lg bg-surface-raised" aria-hidden="true" />
+            ) : (
+              <>
+                {isAuthenticated && canSubmitCv && (
+                  <span className="hidden max-w-[180px] truncate text-xs text-secondary sm:inline" title={user?.email}>
+                    {user?.email}
+                  </span>
+                )}
+                {!isAuthenticated && (
+                  <button type="button" onClick={requestLogin} className="inline-flex min-h-11 items-center rounded-[10px] bg-action px-3 py-1.5 text-xs font-semibold text-on-action transition-colors hover:bg-action-hover cursor-pointer">
+                    Sign in
+                  </button>
+                )}
+              </>
             )}
             {isAuthenticated && canSubmitCv && (
               <button type="button" onClick={() => setIsAddCrewMemberOpen(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Add contractor" title="Add a contractor to the network">
@@ -503,8 +532,7 @@ export default function App() {
                 onOpenContractor={openIncomingDocumentContractor}
                 onShowToast={showToast}
                 onReviewResolved={() => {
-                  if (activeSelectedProfile) void refreshDocuments(activeSelectedProfile.id);
-                  if (modalProfile) void refreshDocuments(modalProfile.id);
+                  handleDocumentReviewResolved()
                 }}
               />
             )}
@@ -516,8 +544,16 @@ export default function App() {
                 <span className="font-mono text-xs">({shortlistCount})</span>
               </button>
             )}
-            <button type="button" onClick={() => setIsMenuOpen(true)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[10px] border border-border-subtle bg-surface text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer" aria-label="Open workspace menu" aria-expanded={isMenuOpen}>
-              <Menu className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen(true)}
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[10px] border border-border-subtle bg-surface px-2.5 text-secondary transition-colors hover:border-border-strong hover:bg-surface-raised hover:text-primary cursor-pointer focus-visible:ring-2 focus-visible:ring-focus"
+              aria-label="Open workspace menu"
+              aria-controls="workspace-menu"
+              aria-expanded={isMenuOpen}
+            >
+              <Menu className="h-4 w-4" aria-hidden="true" />
+              <span className="text-xs font-semibold">Menu</span>
             </button>
           </div>
         </div>
@@ -571,33 +607,147 @@ export default function App() {
             </button>
           </div>
         )}
-        {/* Modern Search Bar: stays available while scanning a long result set with seamless layout transition */}
-        <div className={`transition-all duration-300 ease-out ${isSearchActive ? 'sticky top-16 z-20 -mx-4 px-4 bg-canvas/90 backdrop-blur-md sm:-mx-6 sm:px-6 py-1 border-b border-border-subtle/50' : 'py-2'}`}>
-          <ModernHeroSearch
-            query={query}
-            onChange={(val) => {
-              if (isAuthenticated) setQuery(val);
-            }}
-            onSearch={(val) => {
-              setQuery(val);
-              setCommittedQuery(val.trim());
-              if (!isAuthenticated) requestLogin();
-            }}
-            onClear={() => {
-              setQuery('');
-              setCommittedQuery('');
-            }}
-            isCalmState={!isSearchActive}
-            isAuthenticated={isAuthenticated}
-            onAIResults={handleAIResults}
-            onOpenFilters={() => setIsFilterOpen(true)}
-          />
-        </div>
-
+        <AnimatePresence mode="wait" initial={false}>
+          {shellKey === 'gate' && (
+            <motion.div
+              key="gate"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              className="flex flex-1 flex-col items-center justify-center py-12"
+            >
+              <h1 className="mx-auto max-w-xl text-center text-3xl sm:text-4xl lg:text-[2.65rem] lg:leading-[1.12] font-semibold tracking-[-0.03em] text-primary">
+                Find the right contractor for the next campaign.
+              </h1>
+              <p className="mt-3 max-w-md text-center text-sm leading-relaxed text-secondary">
+                Search Hydenlyne&apos;s private specialist network by discipline, certification, region, and availability.
+              </p>
+              <div className="mt-8 flex items-center gap-2 text-xs text-muted font-mono" role="status" aria-live="polite">
+                <span className="h-2 w-2 rounded-full bg-action animate-pulse" aria-hidden="true" />
+                Loading session…
+              </div>
+              <p className="mt-6 text-center text-xs text-muted">Private workforce network. Access is protected.</p>
+            </motion.div>
+          )}
+          {shellKey === 'public' && (
+            <motion.div
+              key="public"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.20, ease: [0.22, 1, 0.36, 1] }}
+              className="py-2"
+            >
+              <ModernHeroSearch
+                query={query}
+                onChange={(val) => {
+                  if (isAuthenticated) setQuery(val);
+                }}
+                onSearch={(val) => {
+                  setQuery(val);
+                  setCommittedQuery(val.trim());
+                  if (!isAuthenticated) requestLogin();
+                }}
+                onClear={() => {
+                  setQuery('');
+                  setCommittedQuery('');
+                }}
+                isCalmState={!isSearchActive}
+                isAuthenticated={isAuthenticated}
+                onAIResults={handleAIResults}
+                onOpenFilters={() => setIsFilterOpen(true)}
+              />
+            </motion.div>
+          )}
+          {shellKey === 'ops' && (
+            <motion.div
+              key="ops"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.20, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <OperationsHome
+                fullName={user?.fullName}
+                profiles={allProfiles}
+                profilesLoading={profilesLoading}
+                profilesError={profilesError}
+                onSearch={handleOperationsSearch}
+                onOpenDocumentReview={handleOpenDocumentReview}
+                documentReviewVersion={documentReviewVersion}
+                isStaff={isStaffOrAdmin(user?.role)}
+                onShowToast={showToast}
+                searchControl={
+                  <ModernHeroSearch
+                    query={query}
+                    onChange={setQuery}
+                    onSearch={(value) => {
+                      setQuery(value)
+                      setCommittedQuery(value.trim())
+                    }}
+                    onClear={() => {
+                      setQuery('')
+                      setCommittedQuery('')
+                    }}
+                    isCalmState
+                    isAuthenticated
+                    onAIResults={handleAIResults}
+                    onOpenFilters={() => setIsFilterOpen(true)}
+                    variant="compact"
+                  />
+                }
+              />
+            </motion.div>
+          )}
+          {shellKey === 'search' && (
+            <motion.div
+              key="search"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.20, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="sticky top-16 z-20 -mx-4 px-4 bg-canvas/90 backdrop-blur-md sm:-mx-6 sm:px-6 py-1 border-b border-border-subtle/50">
+                <ModernHeroSearch
+                  query={query}
+                  onChange={(val) => {
+                    if (isAuthenticated) setQuery(val);
+                  }}
+                  onSearch={(val) => {
+                    setQuery(val);
+                    setCommittedQuery(val.trim());
+                    if (!isAuthenticated) requestLogin();
+                  }}
+                  onClear={() => {
+                    setQuery('');
+                    setCommittedQuery('');
+                  }}
+                  isCalmState={!isSearchActive}
+                  isAuthenticated={isAuthenticated}
+                  onAIResults={handleAIResults}
+                  onOpenFilters={() => setIsFilterOpen(true)}
+                />
+              </div>
         {/* Results Header (Active Search Only) */}
         {isSearchActive && (
           <div className="ui-panel mb-3 flex flex-col gap-3 px-3 py-2.5 text-xs text-secondary sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 flex-wrap" aria-live="polite">
+              {isAuthenticated && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('');
+                    setCommittedQuery('');
+                    resetFilters();
+                  }}
+                  className="badge-neutral inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs hover:brightness-95 cursor-pointer font-medium"
+                  aria-label="Return to operations overview"
+                >
+                  <ArrowLeft className="h-3 w-3 opacity-80" aria-hidden="true" />
+                  <span>Operations</span>
+                </button>
+              )}
               <span>
                 Found <strong className="text-primary font-semibold">{results.length}</strong> {results.length === 1 ? 'contractor' : 'contractors'}
               </span>
@@ -1370,7 +1520,17 @@ export default function App() {
             )}
           </div>
         )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
+      <DocumentReviewModal
+        isOpen={isDocumentReviewOpen}
+        onClose={() => setIsDocumentReviewOpen(false)}
+        onOpenContractor={openIncomingDocumentContractor}
+        onShowToast={showToast}
+        onReviewResolved={handleDocumentReviewResolved}
+      />
 
       {/* Floating Comparison Action Bar */}
       <ComparisonBar

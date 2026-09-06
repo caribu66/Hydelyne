@@ -14,7 +14,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import (
-    get_current_user_rest,
     require_admin_rest,
     require_api_key,
     require_staff_rest,
@@ -146,7 +145,11 @@ async def upload_requested_document(
                 ).scalar_one()
                 doc.extraction_status = "failed"
                 await session.commit()
-        return {"id": document_id, "file_name": file.filename or "upload", "status": dispatch_status}
+        return {
+            "id": document_id,
+            "file_name": file.filename or "upload",
+            "status": dispatch_status,
+        }
     except DropboxStorageError as exc:
         raise HTTPException(
             status_code=503, detail="Document storage is temporarily unavailable"
@@ -248,11 +251,7 @@ async def review_incoming_document(
         "extraction_status": doc.extraction_status,
         "document_id": doc.id,
         "claimed_by": review.claimed_by if review else current_user.id,
-        "resolved_at": (
-            review.resolved_at.isoformat()
-            if review and review.resolved_at
-            else None
-        ),
+        "resolved_at": (review.resolved_at.isoformat() if review and review.resolved_at else None),
     }
 
 
@@ -283,11 +282,7 @@ async def review_document_by_id(
         "extraction_status": doc.extraction_status,
         "document_id": doc.id,
         "claimed_by": review.claimed_by if review else current_user.id,
-        "resolved_at": (
-            review.resolved_at.isoformat()
-            if review and review.resolved_at
-            else None
-        ),
+        "resolved_at": (review.resolved_at.isoformat() if review and review.resolved_at else None),
     }
 
 
@@ -510,9 +505,13 @@ async def upload_document(
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: str,
-    current_user: CrewMember = Depends(get_current_user_rest),
+    current_user: CrewMember = Depends(require_admin_rest),
 ) -> StreamingResponse:
-    """Download a document."""
+    """Download a document. T3 (admin/compliance) only — raw bytes are C3.
+
+    Per docs/AUTHORIZATION.md and ADR 0005, compliance-only evidence (raw
+    document bytes and extracted_text/data) is never available to T1/T2.
+    """
     async with get_session_factory()() as session:
         from sqlalchemy import select
 
@@ -522,7 +521,8 @@ async def download_document(
 
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
-        if doc.crew_member_id and current_user.role != "admin":
+        # Retention of publication gate is defense-in-depth even for T3.
+        if doc.crew_member_id:
             crew = (
                 await session.execute(select(CrewMember).where(CrewMember.id == doc.crew_member_id))
             ).scalar_one_or_none()
@@ -530,6 +530,7 @@ async def download_document(
                 crew
                 and crew.publication_status != "approved"
                 and crew.submitted_by != current_user.id
+                and current_user.role != "admin"
             ):
                 raise HTTPException(status_code=404, detail="Document not found")
 
@@ -557,9 +558,9 @@ async def download_document(
 
 @router.get("/{document_id}/status")
 async def get_document_status(
-    document_id: str, request: Request, current_user: CrewMember = Depends(get_current_user_rest)
+    document_id: str, request: Request, current_user: CrewMember = Depends(require_staff_rest)
 ) -> dict[str, Any]:
-    """Get document processing status."""
+    """Get document processing status. T2 (staff/admin) — C2 metadata only."""
     async with get_session_factory()() as session:
         from sqlalchemy import select
 

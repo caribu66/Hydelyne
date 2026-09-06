@@ -67,17 +67,50 @@ class SearchResult:
 
 def _crew_meilisearch_doc(crew: CrewMember) -> dict:
     """Build the Meilisearch crew document. Mirrors app/api/search.py's
-    manual-reindex endpoint so every call site indexes the same shape."""
-    return {
-        "id": crew.id,
-        "full_name": crew.full_name,
-        "email": crew.email,
-        "phone": crew.phone,
-        "nationality": crew.nationality,
-        "availability_status": crew.availability_status,
-        "tags": crew.tags or [],
-        "publication_status": crew.publication_status,
-    }
+    manual-reindex endpoint so every call site indexes the same shape.
+
+    General crew index is C1-only per ADR 0005 — email, phone, and all
+    C2/C3 fields must never be indexed in the general projection. A future
+    compliance projection must be explicitly T3-gated if ever needed.
+    """
+    # Use the domain allow-list as single source of truth.
+    from app.domain.access_tiers import MEILISEARCH_CREW_C1_FIELDS
+
+    doc: dict[str, object] = {"id": crew.id, "publication_status": crew.publication_status}
+    if "full_name" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["full_name"] = crew.full_name
+    if "nationality" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["nationality"] = crew.nationality
+    if "country_of_residence" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["country_of_residence"] = crew.country_of_residence
+    if "availability_status" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["availability_status"] = crew.availability_status
+    if "tags" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["tags"] = crew.tags or []
+    if "gender" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["gender"] = crew.gender
+    if "languages" in MEILISEARCH_CREW_C1_FIELDS:
+        langs = crew.languages
+        doc["languages"] = " ".join(str(v) for v in langs) if isinstance(langs, list) else langs
+    if "flying_point" in MEILISEARCH_CREW_C1_FIELDS:
+        doc["flying_point"] = crew.flying_point
+    # Derived C1 text fields - stored as strings for keyword search
+    for field_name in (
+        "education",
+        "geographical_experience",
+        "systems_experience",
+        "training_qualifications",
+        "professional_summary",
+    ):
+        if field_name in MEILISEARCH_CREW_C1_FIELDS:
+            val = getattr(crew, field_name, None)
+            if isinstance(val, list):
+                doc[field_name] = " ".join(str(v) for v in val) if val else ""
+            elif isinstance(val, str):
+                doc[field_name] = val
+            elif val is not None:
+                doc[field_name] = str(val)
+    return doc
 
 
 class ConsultantKnowledgeService:

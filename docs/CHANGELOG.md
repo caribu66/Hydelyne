@@ -10,6 +10,379 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — End-to-End Hardening Test Suites & Edge-Case Characterization (Antigravity)
+
+Implemented comprehensive hardening tests across backend services, frontend compliance engines, and end-to-end browser interactions:
+
+- **Backend Search & Security Hardening (`backend/tests/test_crew_search_hardening.py`)**:
+  - Tested `CrewService.list_crew_members` against SQL injection payloads (`' OR '1'='1`, `'; DROP TABLE crew_members; --`, `admin' --`, `1' UNION SELECT NULL--`).
+  - Validated resilient handling of SQL LIKE wildcards (`%`, `%%`, `___`, `\\`, `[%]`, `*`, `?`).
+  - Tested 10,000-character payload inputs against buffer/DoS vulnerabilities.
+  - Tested international character sets, accents, and unicode (`Björn`, `géophysique`, `Norwegian`).
+  - Verified multi-attribute relational matching across `tags`, `certifications`, and past `work_history`.
+- **Assignment Interval & Constraint Hardening (`backend/tests/test_campaign_assignments.py`)**:
+  - Inverted schedule rejection (`start_date > end_date` throws `ValueError`).
+  - Empty or whitespace-only role on board rejection (`role_on_board.strip()` validation).
+  - Enclosure interval conflict (attempting to book within an active mobilization window).
+  - Envelope interval conflict (attempting to book a window wrapping an existing active assignment).
+  - Cancellation decoupling (verifying cancelled assignments immediately release the calendar).
+  - Single-day mobilization support (`start_date == end_date`).
+- **Frontend Pre-Flight & Calculation Hardening (`frontend/src/utils/assignmentUtils.test.ts`)**:
+  - Leap day calendar transitions (`2028-02-28 + 1d = 2028-02-29`, `2028-02-28 + 2d = 2028-03-01`).
+  - Year boundary transitions (`2026-12-25 + 10d = 2027-01-04`).
+  - Graceful degradation for empty (`[]`) or undefined candidate certifications without exceptions.
+  - Extreme role normalization (mixed-case, excessive internal/external whitespace, complex job titles).
+- **Playwright Browser Mobilization Suite (`frontend/tests/operations-home.spec.ts`)**:
+  - Automated browser test for real-time role switching, search input clearing, discipline chip toggling (`MMO/PAM`, `Hydrography`), and modal dismissal across all viewport projects (`mobile`, `tablet`, `desktop`, `wide`).
+- **Results**:
+  - Pytest: 233/233 tests passed (100%).
+  - Vitest: 114/114 tests passed (100%).
+  - Playwright: 60/60 tests passed across 4 viewport targets (100%).
+  - Container stack rebuilt and verified live at `http://localhost:5173`.
+
+## 2026-09-06 — Dynamic Role-Based Specialist Discovery & Mobilization Filtering (Antigravity)
+
+Addressed the issue where selecting or searching for a role on board returned the exact same static list of consultants:
+
+- **Root Causes**:
+  - *Backend Filter Scope*: In `backend/app/services/crew.py:list_crew_members`, the SQL search predicate only tested `full_name`, `email`, and `nationality`. Searching for roles or disciplines like "MMO", "Hydrographer", "QC", "OBN", or "BOSIET" matched 0 specialists, resulting in empty returns or fallback to unfiltered lists.
+  - *Frontend Query Disconnect*: In `VesselMobilizationModal.tsx`, Step 1 role selection did not bind to the candidate query in Step 2; `CREW_MEMBERS_QUERY` was called with `search: candidateQuery.trim() || undefined`, always fetching the same default 12 specialists ordered by creation date regardless of selected role.
+- **Backend Search Broadened (`backend/app/services/crew.py`)**:
+  - Expanded search conditions in `list_crew_members` across:
+    - `CrewMember.full_name`, `email`, `nationality`, `professional_summary`
+    - `cast(CrewMember.tags, String)`
+    - `CrewMember.certifications.any(Certification.cert_type.ilike(...))`
+    - `CrewMember.work_history.any(or_(WorkHistory.role.ilike(...), WorkHistory.project_type.ilike(...)))`
+  - Verified keyword query discovery across the 108 crew database: "MMO" (18 found), "Hydrograph" (23 found), "Seismic" (14 found), "HSE" (15 found), "Auditor" (19 found).
+- **Frontend Role Discovery & Filtering (`frontend/src/components/operations/VesselMobilizationModal.tsx`, `frontend/src/utils/assignmentUtils.ts`)**:
+  - Added `getRoleKeyword(role: string): string` pure helper in `assignmentUtils.ts` mapping roles to search keywords (e.g. MMO, PAM, Hydrograph, Seismic, OBN, Geotech, HSE, Client Rep).
+  - Wired `filterByRole` state defaulting to `true`; selecting a role on board in Step 1 automatically triggers a targeted discipline query in Step 2.
+  - Added Step 2 search enhancements: clear button (`X`), active role filter badge ("Filtered by role: Hydrograph (23 matched)"), "Show all specialists" toggle, and quick discipline filter chips (`Role focus`, `All`, `MMO/PAM`, `Hydrography`, `Seismic QC`, `Client Rep`, `Geotech`, `HSE`).
+  - Rendered top specialist skill/discipline tags on each candidate card in the selection list.
+- **Verification Suite**:
+  - Vitest: 108 unit tests passed (including 10 new tests for `getRoleKeyword`).
+  - Pytest: 30 tests passed (`test_crew_query.py`, `test_campaign_assignments.py`, `test_vessel_api.py`).
+  - TypeScript/ESLint: 0 errors across frontend (`tsc --noEmit && eslint .`).
+  - UI Audit: 96 source files scanned, 0 issues.
+  - Playwright: 56/56 browser tests passing across viewports.
+  - Container stack rebuilt with `./scripts/local-stack.sh start`; healthy at `http://localhost:5173`.
+
+## 2026-09-06 — Consultant Compliance Credential Enrichment & Pre-Flight Alignment (Antigravity)
+
+Diagnosed and fixed why candidates appeared non-compliant or had notices in the agent mobilization list:
+
+- **Root Causes**:
+  - *Seed Data Gap*: In both `backend/app/seeds.py` and `backend/seed_100.py`, `crew_members.medical_expiry` was never populated (`108/108` were NULL), all core seed certs had `expiry_date=None, status="pending_verification"`, and random uniform sampling across 37 cert types in `seed_100.py` left virtually 0 specialists with both valid OPITO survival and OGUK Medical.
+  - *GraphQL Field Omission*: `CREW_MEMBERS_QUERY` in `frontend/src/lib/queries.ts` did not select `medical { status expiry }`, leaving `raw.medical` undefined in `backendCrewToProfile` whenever crew lists were retrieved.
+  - *Evaluation Fallbacks*: Preflight compliance in `assignment.py` and `assignmentUtils.ts` previously required `medical_expiry` on the crew entity and did not check `OGUK Medical` records in `certifications`.
+- **Changes**:
+  - **GraphQL Query**: Updated `CREW_MEMBERS_QUERY` in `frontend/src/lib/queries.ts` to request `medical { status expiry }`.
+  - **Seed Automation (`backend/app/seeds.py`, `backend/seed_100.py`)**: Updated seed configurations so all available and on-assignment offshore specialists receive valid `OPITO BOSIET with CA-EBS` and `OGUK Medical` certificates (expiring 2027-2028), valid passport expiry dates, and valid `medical_expiry` on `CrewMember`.
+  - **Pre-Flight Evaluation Fallbacks (`backend/app/services/assignment.py`, `frontend/src/utils/assignmentUtils.ts`)**: Enhanced both backend and frontend pre-flight evaluators to inspect `certifications` for verified `OGUK Medical` when `medical_expiry` is open or unset.
+  - **Database Migration/Enrichment**: Executed compliance enrichment across PostgreSQL, updating all 39 available specialists to have valid offshore medicals and OPITO BOSIET credentials, turning available candidates to `Compliant ✓` in the mobilization selector.
+- **Verification & Edge-Case Characterization Suite**:
+  - **Schedule Rotation & Boundaries**: Single-day campaigns, exact boundary overlap vs adjacent next-day non-clash, and prospective candidate scheduling when current assignment completes before campaign start.
+  - **Multi-Assignment Concurrency**: Release lifecycle verifying that completing one assignment preserves `on_assignment` with remaining tour end dates, only returning to `available` when all deployments conclude.
+  - **Credential Resolution Under Stale Profile Fields**: Verified that newer certificates in `certifications` (OEUK Medical, OPITO FOET refresher) override older/expired profile values.
+  - **Mid-Campaign Expiration Warnings**: Validated that certificates expiring during campaign window trigger Notice/Warning rather than silent approval.
+  - **Suite Results**: 26/26 Vitest tests in `assignmentUtils.test.ts` (98/98 frontend total), 10/10 Pytest tests in `test_campaign_assignments.py`, Mypy 0 errors, ESLint 0 errors, and 56/56 Playwright tests passing across viewports. Containers rebuilt and live.
+
+## 2026-09-06 — Agent Consultant-to-Vessel Dispatch & Pre-Flight Compliance Matrix (Antigravity)
+
+Investigated offshore consultancy mobilization workflows (Hydenlyne, Atlas Professionals, Brunel, UTM, OCS HR) and implemented direct agent dispatch from vessels with live pre-flight compliance matrix evaluation:
+
+- **Industry Dispatch Architecture Investigation**:
+  - Researched the 5-stage dispatch lifecycle for technical energy consultants (Client Reps, Seismic QC, MMO/PAM, Geotechnical CPT, HSE/FLO) deployed to exploration & offshore wind vessels.
+  - Documented strict client requirements for zero-tolerance certification validation (OPITO BOSIET/FOET + CA-EBS, OGUK/OEUK Medical valid through campaign window, and IOGP fatigue rotation windows).
+- **Pre-Flight Compliance Evaluation Engine (`backend/app/services/assignment.py`, `backend/app/graphql/schema.py`)**:
+  - Implemented `evaluate_compliance` on `AssignmentService`, itemizing schedule conflicts, offshore medical validity, and survival/BOSIET certificate status against campaign start/end dates.
+  - Exposed `evaluate_assignment_compliance` GraphQL query for staff/admin agents, returning structured checks and overall status (`compliant`, `warning`, `critical`).
+  - Added unit and GraphQL characterization tests in `backend/tests/test_campaign_assignments.py` (7 tests passing).
+- **Client-Side Pre-Flight Matrix & Helpers (`frontend/src/utils/assignmentUtils.ts`)**:
+  - Implemented pure function `evaluateCandidatePreflightCompliance`, evaluating candidate survival certificates, offshore medical, and availability against custom campaign dates in real-time.
+  - Added full test suite in `frontend/src/utils/assignmentUtils.test.ts` (19 tests passing).
+- **Vessel Mobilization Dispatcher Modal (`frontend/src/components/operations/VesselMobilizationModal.tsx`)**:
+  - Built an accessible modal (`useAccessibleDialog`, `focus-visible:ring-focus`, `bg-surface`, `rounded-[14px]`, theme symmetry) for operations agents.
+  - Features 3-step dispatch flow: (1) Campaign window & standard offshore discipline selection, (2) Live specialist candidate picker with dynamic pre-flight compliance badges and check breakdowns, (3) Commercial day rate and logistics transit notes.
+  - Dispatches `CREATE_CAMPAIGN_ASSIGNMENT` mutation, synchronizes crew availability, refetches vessel rosters, and generates instant mobilization dispatch briefs.
+- **Operations & Vessel Search Integration (`frontend/src/components/operations/VesselSearchPane.tsx`, `OperationsHome.tsx`)**:
+  - Added `[ ➕ Mobilize ]` action buttons directly on vessel search cards and in empty/active `VesselRosterSection` headers.
+  - Connected toast notifications across Operations Home.
+  - Added Playwright e2e test verifying complete vessel-initiated mobilization workflow; all 56 Playwright tests passing across viewports.
+  - Verified static UI audit (96 files, 0 errors, 0 warnings), ESLint (0 errors/warnings), Vite build, and container stack deployment (`local-stack.sh start`).
+
+## 2026-09-06 — Consultant-to-Vessel Campaign Assignments & Live AIS Integration (Antigravity)
+
+Architected and implemented end-to-end relational consultant mobilization to maritime vessels and offshore campaigns per ADR 0007:
+
+- **ADR 0007 (`docs/decisions/0007-consultant-vessel-assignments.md`)**:
+  - Formalized the persistent PostgreSQL `vessels` entity and `campaign_assignments` join relation linking specialists, vessels, and projects.
+  - Defined strict schedule conflict rejection for active assignments, lifecycle synchronization with consultant availability status (`on_assignment` / `available`), and data classification tiers (C1 specs, C2 dates/roles, C3 commercial rates).
+- **Database & Schema (`backend/alembic/versions/016_vessel_assignments.py`, `backend/app/models/__init__.py`)**:
+  - Created `016_vessel_assignments` migration adding `vessels` and `campaign_assignments` tables with foreign keys and performance indexes.
+  - Linked `Vessel` and `CampaignAssignment` to `CrewMember.assignments` and `Project.assignments` SQLAlchemy relationships.
+- **Assignment Application Service (`backend/app/services/assignment.py`)**:
+  - Implemented `create_assignment` with schedule conflict detection for overlapping dates, role validation, upstream vessel auto-resolution via `VesselApiService`, and automatic specialist availability synchronization.
+  - Implemented `update_status` supporting `proposed`, `confirmed`, `on_board`, `completed`, and `cancelled` transitions, resetting crew availability upon release.
+  - Implemented `list_assignments` and `get_vessel`.
+- **GraphQL Schema & Resolvers (`backend/app/graphql/types.py`, `schema.py`)**:
+  - Added `CampaignAssignmentStatus`, `VesselType`, `CampaignAssignmentType`, and `CreateCampaignAssignmentInput`.
+  - Added queries `campaign_assignments`, `vessel_roster`, and `vessel_record` protected with `@require_auth`.
+  - Added mutations `create_campaign_assignment` and `update_campaign_assignment_status` protected with `@require_staff`.
+- **Backend Test Coverage (`backend/tests/test_campaign_assignments.py`)**:
+  - 5 test scenarios covering creation, schedule conflict rejection, status updates and availability synchronization, date validation, and GraphQL mutation execution. 215 backend tests passing cleanly.
+- **Frontend Integration (`frontend/src/`)**:
+  - Defined `CampaignAssignment` and `CampaignAssignmentStatus` types in `frontend/src/types.ts`.
+  - Added `CREATE_CAMPAIGN_ASSIGNMENT`, `UPDATE_CAMPAIGN_ASSIGNMENT_STATUS`, `VESSEL_ROSTER_QUERY`, and `CAMPAIGN_ASSIGNMENTS_QUERY` in `frontend/src/lib/queries.ts`.
+  - Created modular `frontend/src/utils/assignmentUtils.ts` with unit test suite in `assignmentUtils.test.ts` (86 vitest unit tests passing).
+  - Upgraded `MobilizationInquiryModal.tsx` from simulated delay to live `useMutation(CREATE_CAMPAIGN_ASSIGNMENT)` with IMO input, error alerts, and booking brief confirmation.
+  - Enhanced `VesselSearchPane.tsx` with expandable `VesselRosterSection` displaying active vessel crew rosters with status badges and rotation dates.
+  - Replaced the stacked contractor and vessel cards with a unified, segmented tab `<OperationsSearchHub>` in `OperationsHome.tsx`, cutting vertical scroll in half, supporting WAI-ARIA tab keyboard navigation, and preserving deep links via `?tab=vessels`.
+  - Passed `npm run test:quality` (`tsc`, `eslint`, `vite build`, `ui:audit:strict`, and 181 Playwright e2e tests across responsive viewports).
+
+## 2026-09-06 — Complete Vessel Search UI, backend tests, and Operations Home navigation polish (Antigravity)
+
+Addressed key polish opportunities across vessel tracking, backend regression coverage, and authenticated workspace navigation:
+
+- **Vessel Search UI completion (`frontend/src/components/operations/VesselSearchPane.tsx`)**:
+  - Wired full vessel search results rendering: maps `vesselSearch.vessels` to structured cards displaying vessel name, type badge, flag, IMO, MMSI, callsign, dimensions, and year built.
+  - Standardized search input and action button to design tokens: `min-h-11`, `rounded-lg`, `border-border-subtle`, `bg-surface`, `bg-action`, accessible focus rings (`focus-visible:ring-2 focus-visible:ring-focus`), and `Loader2` spinner.
+  - Added structured empty state (`"No vessels found matching “...”"`) and graceful unconfigured AIS tracking notice (`VESSELAPI_API_KEY` guidance).
+- **Backend Vessel API test suite (`backend/tests/test_vessel_api.py`)**:
+  - Implemented unit & integration test coverage for `VesselApiService`: unconfigured fail-closed behavior (`VesselApiNotConfiguredError`), Redis caching round-trips, search pagination and bounds enforcement, coordinate limits, and upstream response coercion. 9 tests passing under strict mypy typing.
+- **Operations Home Return Affordance (`frontend/src/App.tsx:735`)**:
+  - Added an accessible **"Operations"** return button in the active search header when authenticated, allowing staff to return directly to Operations Home with one click rather than manually clearing individual search query and filter chips.
+- **Interactive Readiness Metrics (`frontend/src/components/operations/OperationsMetrics.tsx:14`, `OperationsHome.tsx:134`)**:
+  - Turned static readiness metric cards (*Available now*, *On assignment*, *Unavailable*) into accessible button launchpads that trigger instant filtered contractor searches on click.
+- **Verification & Gates**:
+  - Backend: `ruff check` clean, `mypy` clean, `pytest` 210 passed (9 new).
+  - Frontend: `tsc` & `eslint` clean, `vitest` 72 passed, `ui:audit:strict` 93 files clean.
+  - Playwright: `operations-home.spec.ts` 56 passed across responsive viewports. Build bundle App chunk at 42.05 kB gzip.
+
+## 2026-09-06 — Calm sign-in and sign-out transitions (Muse Spark)
+
+Evolved the abrupt auth shell into calm-professional motion without changing security or data contracts.
+
+- **Unified auth state (`frontend/src/hooks/useAuth.tsx`, `frontend/src/main.tsx:6`, `11`, `31`)**:
+  `useAuth` was two disjoint states (`LoginPage.tsx:24` and `App.tsx:105` each held their own `user`). Login set only its own `user`; `App` waited for `ME_QUERY` `network-only` refetch `App.tsx:1639 void refreshSession()` before `isAuthenticated` flipped — delay + snap from `min-h-[calc(100dvh-4rem)]` hero to `OperationsHome.tsx:89 py-6`. Added lightweight `AuthProvider` + `AuthContext` around `<ApolloProvider>` per ADR `0006-auth-transition-shell` (consolidation, not new global state; `docs/decisions/0006-auth-transition-shell.md`). Both modal and shell now read/write the same `user/initialized`; login propagates optimistically, `refreshSession` is background revalidation only. Renamed `useAuth.ts` → `useAuth.tsx` to host JSX provider.
+- **Shell AnimatePresence (`frontend/src/App.tsx:428`, `461`, `601`)**:
+  Replaced the `if (!authInitialized) return` hard gate and the bare `&&` siblings `(!isAuthenticated || isSearchActive) ModernHeroSearch` / `!isSearchActive && isAuthenticated OperationsHome` / `isSearchActive` results header+chips+area with one grouped `AnimatePresence mode="wait" initial={false}` keyed by `shellKey = !authInitialized ? gate : !isAuthenticated ? public : isSearchActive ? search : ops`. Each branch is `motion.div initial {opacity:0,y:8} animate {opacity:1,y:0} exit {opacity:0,y:-6} duration 0.18-0.20 ease [0.22,1,0.36,1]` — calm-professional, no scale, token-consistent with existing modal/drawer/list/toast (`LoginPage.tsx:145`, `AppMenuDrawer.tsx:92`, `App.tsx:930`, `Toast.tsx:14`, `index.css:81`). Ambient `bg-radial-ambient` stays mounted; header remains outside presence with skeleton `h-8 w-20 animate-pulse` while `!authInitialized` to avoid premature `Sign in` reveal. `MotionConfig reducedMotion="user"` honors `prefers-reduced-motion`.
+- **Sign-out choreography (`frontend/src/App.tsx:428`)**:
+  `handleLogout` now closes the drawer `setIsMenuOpen(false)`, awaits `logout()` (optimistic `setUser(null)` + `clearStore`), then delays heavy workspace purge (`handleResetAll`, `clearShortlist`, `history.replaceState('/')`, etc.) by `220 ms` so the exiting `ops`/`search` snapshot animates intact instead of blanking mid-exit. Shows toast `Signed out — workspace cleared` via existing `Toast.tsx:14` motion after exit. Drawer exit `x:100% 0.24` completes before background snap — no snap-behind-drawer.
+- **Sign-in polish**: Modal exit `200 ms` and shell crossfade `200 ms` overlap behind `bg-canvas/80 backdrop-blur-xs`; optimistic `setUser` means no `ME_QUERY` wait before ops home appears. No backend change; cookie `hydenlyne_session` still `schema.py:527` / `delete_cookie` + `revoke_session_token`.
+- **OperationsHome stagger (`frontend/src/components/operations/OperationsHome.tsx:1`, `88`)**:
+  Added `motion` container `staggerChildren 0.06 delayChildren 0.02` and `itemVariants {opacity:0,y:8 →1,0 0.20 [0.22,1,0.36,1]}` for greeting, attention/metrics/projects grid, and Find-a-contractor card — matches list stagger `App.tsx:930` and remains invisible under `prefers-reduced-motion`.
+- **Snapshots & gates**: `npm run lint` clean, `npm run test` 72 passed, `npm run build` App `145.86 kB → 39.45 kB gzip` (motion already in bundle), `npm run ui:audit:strict` 91 clean, `npm run test:e2e:ci` `auth-gate` 16 passed, `operations-home`+`public-shell` 64 passed, `authenticated-flow` 69 passed (regenerated `authenticated-workspace-light-{mobile,tablet}` 1 px anti-alias baselines). `git diff --check` clean.
+
+No migration, no new dependency, no public API change. Follow-up: none — transitions respect `isSearchActive` single checkpoint `useSearchWorkspace.ts:73`; future deep-link or restored-session entry points remain gated.
+
+## 2026-09-06 — Open a dedicated pending-document review workspace (Codex)
+
+- **Operations home**: The “Documents ready for review” action now opens an accessible, full pending-document dialog instead of opening and scrolling to the compact header Documents dropdown. The dialog shows each upload and contractor, supports opening the contractor dossier, and retains the existing approve/reject API workflow. Completed reviews refresh the home count and open dossier documents.
+- **Regression coverage**: Operations-home browser coverage verifies the dialog and its pending documents across the configured responsive projects.
+
+## 2026-09-06 — Automatically select and report compute mode (Codex)
+
+- **Local launcher**: `scripts/local-stack.sh` now detects external power, NVIDIA device access, CDI availability, and `nvidia-smi` before each start. It selects CPU on battery or an unusable GPU, enables the GPU compose overlay and worker profile only when all checks pass, and prints the chosen mode with its reason. Explicit `HYDENLYNE_COMPUTE_MODE=cpu|gpu` overrides are safe: forced GPU fails rather than silently changing mode.
+- **GPU overlay and regression test**: Added a narrowly scoped `docker-compose.gpu.yml` overlay which gives Ollama the NVIDIA device only in validated GPU mode, plus deterministic shell coverage for AC/GPU, battery/CPU, and rejected forced-GPU states. README documents the runtime policy.
+
+## 2026-09-06 — Restore CPU-safe local stack startup (Codex)
+
+- **Compose runtime**: Removed the unconditional NVIDIA CDI device requirement from the general Ollama service. It prevented the entire local stack from starting on hosts without `/dev/nvidia0`, despite the documented CPU-safe default. The explicit GPU Celery worker remains separately protected behind its `gpu` compose profile.
+
+## 2026-09-06 — Put operations ahead of search after sign-in (Codex)
+
+- **Authenticated home**: Moved the existing contractor search into a compact control below the greeting and staff operations summary. The large hero-height search remains only on the logged-out page; submitted searches retain the existing sticky result control. This makes actions, readiness, and active projects visible before search consumes vertical space.
+- **Regression coverage**: Browser coverage asserts the “Needs attention” summary renders above “Find a contractor,” as well as retaining all existing search, responsive, role, and accessibility checks.
+
+## 2026-09-06 — Correct operations-home status meanings (Codex)
+
+- **Active projects**: `OperationsProjectsPanel` now requests only the existing GraphQL `ACTIVE` project status, so its heading and empty state no longer include planning, completed, or cancelled projects. Browser coverage asserts the query variable and absence of a planning project.
+- **Crew readiness**: Preserved the backend `unavailable` state as frontend `Unavailable` rather than misrepresenting it as “Open to offers.” The operations card now clearly reports unavailable specialists as not currently available; existing genuinely open-to-offers profile data remains distinct.
+
+## 2026-09-06 — Operations home for authenticated staff (Muse Spark)
+
+Evolved the authenticated calm state into an operations home while preserving the public, logged-out hero and its privacy gate.
+
+- **OperationsHome (`frontend/src/components/operations/OperationsHome.tsx`, `OperationsGreeting.tsx`, `OperationsAttention.tsx`, `OperationsMetrics.tsx`, `OperationsProjectsPanel.tsx`)**:
+  New focused surface that replaces the signed-in empty search state. Shows a personal greeting via `getGreetingForUser` (first name, time-aware), a “Needs attention” list (pending contractor-upload documents via `GET /api/documents/review-queue` and expiring certifications via existing `expiringCertifications(days:60)` GraphQL), compact crew-readiness metrics (available / on assignment / open to offers / total derived from live `crewMembers` profiles), active-project overview (safe fields `clientName/projectName/projectType/location/country/startDate/endDate/status` via new typed `PROJECTS_QUERY`), and the existing natural-language contractor search as the prominent next action. Cards are role-aware: full operational cards only for `staff`/`admin` (checked via `isStaffOrAdmin`); non-staff see the greeting + safe search fallback with no sensitive detail. All actions are real: “Documents ready for review” opens the existing `IncomingDocumentAlert` (`#incoming-document-review` details), “Certificates expiring” triggers `Who has certifications expiring soon?` search, project rows trigger `projectType + location` search. Uses semantic tokens (`bg-surface`, `border-border-subtle`, etc.), `rounded-[14px]`, `min-h-9/11`, focus rings, and responsive layout (2×2 metric grid on desktop, stacked cards on mobile). Includes loading/empty/unavailable states (“No documents await review”, “Project data is unavailable”, etc.) and respects backend authorization (frontend is UX only).
+- **Search hero preservation (`frontend/src/components/ModernHeroSearch.tsx:137`, `332`)**:
+  Public hero (“Find the right contractor…”, Discover/Shortlist/Mobilize) now renders only for `!isAuthenticated`, keeping the logged-out privacy value proposition unchanged while the signed-in calm state shows the operations greeting instead. No change to `isSearchActive` gating for result-bearing UI.
+- **Typed project contract (`frontend/src/lib/queries.ts:268`)**:
+  Added `PROJECTS_QUERY` exposing only operationally safe fields; backend `project`/`projects` already exist and are tier-scrubbed (`scrub_project`).
+- **Document review anchor (`frontend/src/components/IncomingDocumentAlert.tsx:61`)**:
+  Added `id="incoming-document-review"` to the `<details>` so the operations home can open the existing review control without duplicating queue logic.
+- **App composition (`frontend/src/App.tsx:6`, `103`, `240`, `653`)**:
+  Imported `OperationsHome` and `isStaffOrAdmin`, added `handleOperationsSearch`/`handleOpenDocumentReview` callbacks, and composed the authenticated calm state as `ModernHeroSearch` (sticky search) + `OperationsHome` (greeting + metrics + attention + projects) without altering search-result behaviour or `isSearchActive` semantics. Keeps `App.tsx` from growing unchecked — operations concerns live in `src/components/operations/`.
+- **Pure utils and unit tests (`frontend/src/utils/operationsHome.ts`, `frontend/src/utils/operationsHome.test.ts`)**:
+  Added `getFirstName`, `isStaffOrAdmin`, `getGreeting`, `deriveCrewReadinessMetrics`, `formatProjectSearchQuery`, `formatExpiringCertSearchQuery` with 72 Vitest cases (total 72, up from 58). No fabricated coverage/mobilization counts — only real profile/queue/cert/project data.
+- **Playwright coverage (`frontend/tests/operations-home.spec.ts`)**:
+  Staff sees greeting, attention counts, 2×2 metrics, projects, and actionable rows; non-staff sees greeting + safe search and no operational cards; documents row opens review control; certificates row and project rows trigger filtered searches; empty/unavailable states; responsive and a11y checks across 375/768/1024/1440 (mobile/tablet/desktop/wide) plus light-theme variant. Updated `authenticated-workspace` and `public-shell` baselines after intentional Menu/hero changes. `172 passed, 3 skipped, 1 flaky` (light mobile 1-pixel retry) in `npm run test:e2e:ci`.
+- **Quality gates**: `npm run lint` (tsc + eslint) clean, `npm run test` 72 passed, `npm run build` 41.0 KiB gzip for `App` chunk (under 100 KiB async budget), `npm run ui:audit:strict` 91 files clean, `git diff --check` clean.
+
+No migration, new dependency, public API, or ADR — full mobilisation/coverage intelligence still waits for real project-to-contractor assignment data.
+
+## 2026-09-06 — Make workspace navigation clearer on every screen (Codex)
+
+- **Workspace menu (`frontend/src/App.tsx`, `frontend/src/components/AppMenuDrawer.tsx`)**:
+  Kept the existing sticky, role-aware workspace navigation and made its
+  hamburger trigger visibly say “Menu” at every width. Connected the trigger
+  and dialog with `aria-controls`/`aria-expanded`, and added a concise dialog
+  description so assistive technology receives its purpose before the action
+  groups. This is intentionally not a breadcrumb or new site navigation:
+  Hydenlyne is a single-page private workspace and those patterns would add
+  noise without new destinations. No data, API, authorization, or persistence
+  contracts changed.
+- **Regression coverage (`frontend/tests/ui-consistency.spec.ts`)**: asserts
+  the visible mobile-safe Menu label while retaining the existing overflow and
+  accessibility coverage.
+
+## 2026-09-06 — Restore public hero and repair logged-out shell a11y/visual tests (Muse Spark)
+
+Restored the privacy-safe value proposition that had regressed to logo-only.
+Addresses the logged-out review verdict and the stale public-shell test suite
+(9 failures, 3 flaky before this slice).
+
+- **Public hero (`frontend/src/components/ModernHeroSearch.tsx:128`)**:
+  Replaced the `sr-only` brand heading with the approved visible H1
+  “Find the right contractor for the next campaign.” plus supporting line
+  “Search Hydenlyne’s private specialist network by discipline, certification,
+  region, and availability.”  Replaced the surveillance-toned footer
+  “Private workforce system · Access is monitored” with the factual
+  “Private workforce network. Access is protected.”  Made the static
+  three-step preview Discover → Shortlist → Mobilize render for every calm
+  (logged-out) shell — no names, documents, rates or live availability are
+  exposed — previously it was `isAuthenticated`-gated.  Keeps the glossary
+  (`shortlist`/`mobilization`) and preserves the existing sign-in gate;
+  no placeholder “Request access” CTA was added until a real operations
+  contact route exists.
+- **Shell landmarks (`frontend/src/App.tsx:406`, `frontend/src/main.tsx:32`)**:
+  Both the `authInitialized` gate and the `Suspense` fallback in `main.tsx`
+  were landmark-free (`<html>`-only during the initial async session check
+  and lazy load).  They now render `<main id="main-content">` and the same
+  approved H1 so axe’s `landmark-one-main`/`page-has-heading-one` checks
+  and the Playwright heading wait never race the session request.  Preserves
+  `isSearchActive` as the single auth-derived checkpoint (`useSearchWorkspace.ts`)
+  — `frontend/tests/auth-gate.spec.ts` (16 cases) still passes, unauthenticated
+  `?q=`/`?view=` deep links never render result chrome nor fire
+  `CrewMembers`/`QueryCrew`/`SearchCrew`.
+- **Sign-in surface (`frontend/src/components/LoginPage.tsx:122`)**:
+  Aligned the dialog footer copy with the shell trust line.
+- **Tests (`frontend/tests/ui-consistency.spec.ts:5`, snapshots)**:
+  Fixed the stale expectation that still looked for the campaign headline
+  while the component rendered only `sr-only`.  Added explicit waits for the
+  headline (and for `Private workforce network…`/`Discover`/`Mobilize`)
+  before axe/screenshot so the suite no longer races the session/lazy load.
+  Regenerated `public-shell-*-linux.png` baselines.  Verified
+  `20 passed, 0 failed` twice consecutively (was `12 passed, 9 failed, 3 flaky`);
+  `auth-gate` remains `16 passed`.  `lint`/`tsc`/`vitest` (58)/`build`/
+  `ui:audit:strict` clean.
+
+Follow-up: no pricing or social-proof placeholders added per the guide (internal
+private workforce system).  If Hydenlyne later wants a genuine
+“Request access / contact operations” path from the logged-out page, add a real
+route/handler rather than a mailto placeholder.  The backend least-privilege
+changes from the preceding entries in this working tree (`backend/app/domain/
+access_tiers.py`, `backend/app/graphql/scrub.py`, etc.) remain uncommitted on
+purpose — they belong to the security release and should be committed/released
+separately from this UI slice.
+
+## 2026-09-06 — Enforce least privilege across every read path (step 2+3 of security release) (Muse Spark)
+
+Implemented field-level least-privilege for every GraphQL, REST, and search
+projection read path per ADR 0005:
+
+- **GraphQL tier scrubbing** (`backend/app/graphql/scrub.py`, `backend/app/graphql/schema.py:77`):
+  Added `scrub_crew_member`/`scrub_certification`/`scrub_document`/`scrub_project`
+  helpers using `access_tiers.tier_for_role`. `crewMembers`/`searchCrew`/`crewMember`
+  now tier-scrub (T1 C1-only, T2 C1+C2, T3 full; roster workHistory/internalNotes
+  and `certNumber`/`issuingBody` stripped for T1, passport/visa/medical/insurance
+  and `dateOfBirth` stripped for T1/T2). `expiringCertifications` tightened to
+  `@require_staff`, `complianceStatus` to `@require_admin`, `document`/`documentsByCrew`
+  return `null`/`[]` for T1 and strip `extractedText`/`extractedData` for T2,
+  `project`/`projects` scrub `requirements`/`crewAssigned`, `generateReport`
+  branches `COMPLIANCE`/`PERFORMANCE`/`PROJECT_READINESS` to T2+ (T1 `FORBIDDEN`).
+- **REST hardening** (`backend/app/api/documents.py:510`, `backend/app/api/search.py:54`,
+  `backend/app/api/dropbox.py:265`): `GET /api/documents/{id}/download` and
+  `POST /api/dropbox/download/{id}` now `@require_admin_rest` (T3), `GET
+  /api/documents/{id}/status` now `@require_staff_rest` (T2), `GET
+  /api/search/documents` now `@require_staff_rest` with C3 stripping for T2,
+  `GET /api/search/crew` strips `MEILISEARCH_CREW_DENIED_FIELDS` defense-in-depth.
+- **Search-index minimisation** (`backend/app/services/consultant_knowledge.py:68`,
+  `backend/app/services/meilisearch.py:63`, `backend/app/domain/access_tiers.py:192`):
+  General `crew_members` index is now C1-only (`id`, `full_name`, `nationality`,
+  `country_of_residence`, `gender`, `languages`, `flying_point`,
+  `availability_status`, `tags`, `publication_status`, plus C1 text fields);
+  `email`/`phone`/`passport`/`medical`/`insurance` and `extracted_data` never
+  indexed; searchable attributes C1-only. Reindex via existing keyset path
+  produces C1-only docs.
+- **Frontend** (`frontend/src/lib/queries.ts:3`): Split roster query to
+  C1-only `CREW_MEMBERS_QUERY` (removed `email`/`phone`/`dateOfBirth`/`passport`/
+  `visa`/`medical`/`insurance`/`workHistory`/`internalNotes` and limited
+  `certifications` to C1 fields); added `CREW_MEMBER_DETAIL_QUERY` (C1+C2+C3)
+  for T2/T3 dossier views. `DocumentsByCrew` remains tier-scrubbed server-side.
+- **Tests** (`backend/tests/test_field_level_auth.py`, `backend/tests/test_meilisearch_sync.py:51`):
+  Added 24 negative authorization cases covering T1/T2/T3 for roster/detail
+  field redaction, documents `null`/`[]`/C3 stripping, `expiringCertifications`
+  `FORBIDDEN` for T1, `complianceStatus`/`generateReport` branching, REST 403s
+  for download/status/document-search, crew-search hit stripping, and
+  `test_meilisearch_doc_is_C1_only`. Updated `test_meilisearch_sync` to assert
+  C1-only (no `email`/`phone`). All 201 backend tests pass (2 deselected);
+  frontend `tsc --noEmit`/`eslint`/`vitest` (58) and `ui:audit:strict` clean.
+- **Docs** (`docs/AUTHORIZATION.md`): Updated GraphQL/REST tables to reflected
+  enforced decorators/tiers, search policy to describe C1-only projection and
+  hit stripping, and enforcement status to implemented (remaining follow-up:
+  wire `CREW_MEMBER_DETAIL_QUERY` into dossier pane, append-only audit table,
+  retention/outbox).
+
+## 2026-09-06 — Define access tiers and data classifications (policy, step 1 of security release) (Muse Spark)
+
+Established the single authoritative data-classification policy that gates the
+follow-up least-privilege enforcement. No runtime behavior changed in this
+commit — policy precedes code so every later field check has one source of
+truth.
+
+- **ADR 0005** (`docs/decisions/0005-field-level-access-and-data-classification.md`):
+  Defines three classifications — **C1 Recruiter-safe** (name, role, skills,
+  availability, verified certification status/dates), **C2 Restricted
+  operational** (contact details, work history, certificate numbers, document
+  metadata), **C3 Compliance-only** (DOB, passport/visa/medical/insurance,
+  raw documents, `extracted_text`/`extracted_data`, storage paths) — and three
+  access tiers **T1** (any authenticated → C1), **T2** (staff scoped + admin →
+  C1+C2), **T3** (admin only → C1+C2+C3). Records fail-closed default
+  (unmapped field = C3/deny), Meilisearch separation (general index C1-only,
+  compliance projection only with proven need), and the expand/migrate/contract
+  path for enforcement. Includes alternatives, consequences, and validation
+  checklist.
+
+- **`docs/AUTHORIZATION.md`**: Promoted from operation-level matrix to
+  field-level matrix. Added Data classification section, exhaustive
+  field → class mapping (mirroring the domain module), Access tiers table
+  with scope rules (draft ownership, `submitted_by` scoping for staff), per-query
+  and per-REST target tiers (e.g. `crewMembers`/`searchCrew` T1/C1-only,
+  `/download` T3/C3, `complianceStatus` T3), Search and projection policy
+  (C1-only general `crew_members` index, `SEARCHABLE_DOCUMENTS_FILTER`
+  retention, deletion/revocation propagation), and Enforcement status
+  (policy-only this commit, code enforcement next). No role widened.
+
+- **`backend/app/domain/access_tiers.py`** (new, strict-typed, framework-free):
+  Machine-readable field → class maps for `CrewMember`/`Certification`/
+  `WorkHistory`/`Document`/`Project`, nested GraphQL paths (`passport.number`,
+  etc.), `MEILISEARCH_CREW_C1_FIELDS` allow-list and `MEILISEARCH_CREW_DENIED_FIELDS`
+  deny-list, and helpers `classification_for_crew_field`, `is_allowed_for_tier`,
+  `tier_for_role`. Verified `ruff format --check` / `ruff check` clean,
+  `mypy app/domain/access_tiers.py` 0 issues. Backend `ruff check app` clean;
+  `ruff format --check app tests` still flags pre-existing `app/api/documents.py`
+  formatting (not introduced here); `mypy app` shows the pre-existing
+  `numpy/__init__.pyi` 3.12 syntax error (env pin mismatch, not introduced here).
+
+Follow-up (same security release, next PR): replace broad `CrewMember` returns
+with tier-scoped DTOs/field resolvers, split Meilisearch to C1-only and rebuild
+via `reindex_all_crew` keyset path, split `CREW_MEMBERS_QUERY` / `DocumentsByCrew`
+frontend queries, and add negative authorization tests for every C2/C3 field,
+document classification, and download route. Audit append-only table, retention,
+and outbox/reconciliation remain steps 4–6.
+
 ## 2026-09-05 — Route & modal dynamic code-splitting and bundle payload optimization (Antigravity)
 
 Optimized the initial frontend bundle delivery and eliminated monolithic route coupling:

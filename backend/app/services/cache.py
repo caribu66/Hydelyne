@@ -85,7 +85,7 @@ class CacheService:
         try:
             redis = await self._get_redis()
             ttl_seconds = int((ttl or self.DEFAULT_TTL).total_seconds())
-            await redis.setex(key, ttl_seconds, json.dumps(value, default=str))
+            await redis.set(key, json.dumps(value, default=str), ex=ttl_seconds)
             return True
         except Exception as e:
             logger.warning(f"Cache set failed: {e}")

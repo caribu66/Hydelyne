@@ -10,7 +10,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 
-from app.auth.decorators import get_current_user_rest
+from app.auth.decorators import require_admin_rest
 from app.config import get_settings
 from app.database import get_session_factory
 from app.models import CrewMember
@@ -266,9 +266,9 @@ async def save_dropbox_cursor(account_id: str, cursor: Optional[str]) -> None:
 async def download_dropbox_file(
     document_id: str,
     request: Request,
-    current_user: CrewMember = Depends(get_current_user_rest),
+    current_user: CrewMember = Depends(require_admin_rest),
 ) -> dict[str, Any]:
-    """Download a file from Dropbox by document ID."""
+    """Download a file from Dropbox by document ID. T3 (admin) only — C3 bytes."""
     async with get_session_factory()() as session:
         stmt = select(DocumentModel).where(DocumentModel.id == document_id)
         result = await session.execute(stmt)

@@ -1,6 +1,7 @@
 import { FC, useState, useEffect, useRef, FormEvent } from 'react';
+import { useMutation } from '@apollo/client';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
-import { UserProfile } from '../types';
+import { UserProfile, CampaignAssignment } from '../types';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   X,
@@ -9,7 +10,15 @@ import {
   CheckCircle2,
   Copy,
   Check,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
+import { CREATE_CAMPAIGN_ASSIGNMENT } from '../lib/queries';
+import {
+  buildMobilizationReference,
+  calculateCampaignWindow,
+  validateAssignmentInput,
+} from '../utils/assignmentUtils';
 
 interface MobilizationInquiryModalProps {
   isOpen: boolean;
@@ -25,6 +34,7 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
   onShowToast,
 }) => {
   const [projectName, setProjectName] = useState('');
+  const [vesselImo, setVesselImo] = useState('');
   const [deploymentPort, setDeploymentPort] = useState('Aberdeen, Scotland');
   const [surveyScope, setSurveyScope] = useState('Marine Seismic QC / OBN');
   const [startDate, setStartDate] = useState(
@@ -36,16 +46,22 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
   const [clientEmail, setClientEmail] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  const [submittedAssignment, setSubmittedAssignment] = useState<CampaignAssignment | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   useAccessibleDialog(isOpen && Boolean(profile), dialogRef, onClose);
 
+  const [createAssignmentMutation, { loading: isSubmitting }] = useMutation<{
+    createCampaignAssignment: CampaignAssignment;
+  }>(CREATE_CAMPAIGN_ASSIGNMENT);
+
   useEffect(() => {
     if (isOpen) {
       setSubmittedRef(null);
-      setIsSubmitting(false);
+      setSubmittedAssignment(null);
+      setErrorMessage(null);
     }
   }, [isOpen, profile]);
 
@@ -54,17 +70,60 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
   const estimatedDayRate = profile.dayRate || 850;
   const estimatedTotalRate = estimatedDayRate * durationDays;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setErrorMessage(null);
 
-    setTimeout(() => {
-      const generatedRef = `HYD-MOB-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      setSubmittedRef(generatedRef);
-      setIsSubmitting(false);
-      onShowToast(`Mobilization request ${generatedRef} dispatched to Hydenlyne operations`);
-    }, 600);
+    const validation = validateAssignmentInput({
+      roleOnBoard: surveyScope,
+      startDate,
+      durationDays,
+    });
+    if (!validation.valid && validation.error) {
+      setErrorMessage(validation.error);
+      return;
+    }
+
+    const { endDate: computedEndDate } = calculateCampaignWindow(startDate, durationDays);
+    const effectiveImo = vesselImo.trim() || `IMO-MOB-${Math.floor(1000000 + Math.random() * 9000000)}`;
+    const effectiveVesselName = projectName.trim() || 'Offshore Campaign';
+
+    const notesPayload = [
+      specialInstructions ? `Instructions: ${specialInstructions}` : '',
+      deploymentPort ? `Port: ${deploymentPort}` : '',
+      clientName || clientEmail ? `Client: ${clientName} (${clientCompany || 'Energy Operator'}) <${clientEmail}>` : '',
+    ].filter(Boolean).join('\n');
+
+    try {
+      const res = await createAssignmentMutation({
+        variables: {
+          input: {
+            crewMemberId: profile.id,
+            vesselImo: effectiveImo,
+            vesselName: effectiveVesselName,
+            roleOnBoard: surveyScope,
+            startDate,
+            endDate: computedEndDate,
+            agreedDayRate: estimatedDayRate,
+            notes: notesPayload,
+            status: 'PROPOSED',
+          },
+        },
+      });
+
+      const assignment = res.data?.createCampaignAssignment;
+      if (assignment) {
+        const refCode = buildMobilizationReference(assignment.id);
+        setSubmittedRef(refCode);
+        setSubmittedAssignment(assignment);
+        onShowToast(`Mobilization request ${refCode} dispatched to Hydenlyne operations`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to record campaign assignment';
+      setErrorMessage(msg);
+    }
   };
+
 
   const handleCopySummary = () => {
     const summary = `
@@ -171,27 +230,47 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
               </div>
 
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-primary">Request received</h3>
+                <h3 className="text-base font-bold text-primary">Mobilization scheduled</h3>
                 <p className="text-xs text-secondary max-w-md mx-auto">
-                  Hydenlyne operations will review the details and follow up with availability and next steps within 2 hours.
+                  Campaign assignment has been recorded. Hydenlyne operations has received the booking brief for mobilization dispatch.
                 </p>
               </div>
 
               <div className="p-4 rounded-[10px] bg-canvas/80 border border-border-subtle max-w-md mx-auto text-left space-y-2 text-xs">
                 <div className="flex justify-between border-b border-border-subtle pb-2">
-                  <span className="text-secondary font-mono">Request reference:</span>
+                  <span className="text-secondary font-mono">Assignment reference:</span>
                   <span className="font-bold text-accent font-mono">{submittedRef}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-secondary">Campaign:</span>
-                  <span className="text-primary font-medium">{projectName || 'Offshore Campaign'}</span>
+                  <span className="text-secondary">Specialist:</span>
+                  <span className="text-primary font-medium">{profile.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-secondary">Duration:</span>
-                  <span className="text-primary font-medium">{durationDays} Days ({startDate})</span>
+                  <span className="text-secondary">Campaign / Vessel:</span>
+                  <span className="text-primary font-medium">{submittedAssignment?.vesselName || projectName || 'Offshore Campaign'}</span>
+                </div>
+                {submittedAssignment?.vesselImo && (
+                  <div className="flex justify-between">
+                    <span className="text-secondary font-mono">Vessel IMO:</span>
+                    <span className="text-primary font-mono">{submittedAssignment.vesselImo}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-secondary">Role on board:</span>
+                  <span className="text-primary font-medium">{submittedAssignment?.roleOnBoard || surveyScope}</span>
                 </div>
                 <div className="flex justify-between">
-                      <span className="text-secondary">Estimated base rate:</span>
+                  <span className="text-secondary">Window:</span>
+                  <span className="text-primary font-medium">
+                    {startDate} → {submittedAssignment?.endDate || `${durationDays} Days`}
+                  </span>
+                </div>
+                <div className="flex justify-between border-t border-border-subtle pt-2">
+                  <span className="text-secondary">Personnel day rate:</span>
+                  <span className="text-primary font-bold font-mono">£{estimatedDayRate}/day</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-secondary">Estimated base rate:</span>
                   <span className="text-primary font-bold font-mono">£{estimatedTotalRate.toLocaleString()}</span>
                 </div>
               </div>
@@ -200,7 +279,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 <button
                   type="button"
                   onClick={handleCopySummary}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-xs font-semibold text-primary hover:text-primary transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-surface-raised hover:bg-surface-selected text-xs font-semibold text-primary hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer"
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-positive" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{isCopied ? 'Copied Summary' : 'Copy Booking Brief'}</span>
@@ -208,7 +287,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 <button
                   type="button"
                   onClick={onClose}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover text-xs font-semibold text-on-action transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover text-xs font-semibold text-on-action transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer"
                 >
                   <span>Done</span>
                 </button>
@@ -216,7 +295,20 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Campaign / Vessel Name & Deployment Hub */}
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2.5 rounded-[10px] border border-negative-border bg-negative-soft p-3 text-xs text-negative"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">Unable to record assignment</p>
+                    <p className="mt-0.5">{errorMessage}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Campaign / Vessel Name & IMO */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label htmlFor="mobilization-campaign" className="block text-xs font-medium text-secondary mb-1">
@@ -229,10 +321,28 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
                     placeholder="e.g. Dogger Bank C / MV Deep Arctic"
-                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong transition-colors"
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
                   />
                 </div>
 
+                <div>
+                  <label htmlFor="mobilization-imo" className="block text-xs font-medium text-secondary mb-1">
+                    Vessel IMO <span className="text-muted text-xs font-normal">(Optional / 7 digits)</span>
+                  </label>
+                  <input
+                    id="mobilization-imo"
+                    type="text"
+                    value={vesselImo}
+                    onChange={(e) => setVesselImo(e.target.value)}
+                    placeholder="e.g. 9683934"
+                    maxLength={20}
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Deployment Port & Survey Scope */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label htmlFor="mobilization-port" className="block text-xs font-medium text-secondary mb-1">
                     Deployment port <span className="text-accent">*</span>
@@ -241,7 +351,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     id="mobilization-port"
                     value={deploymentPort}
                     onChange={(e) => setDeploymentPort(e.target.value)}
-                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus:outline-none focus:border-border-strong transition-colors"
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
                   >
                     <option value="Aberdeen, Scotland">Aberdeen, Scotland (UK)</option>
                     <option value="Bergen / Stavanger, Norway">Bergen / Stavanger, Norway</option>
@@ -254,27 +364,26 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     <option value="Other Offshore Location">Other Offshore Location</option>
                   </select>
                 </div>
-              </div>
 
-              {/* Survey Discipline Scope */}
-              <div>
-                <label htmlFor="mobilization-scope" className="block text-xs font-medium text-secondary mb-1">
-                  Work required
-                </label>
-                <select
-                  id="mobilization-scope"
-                  value={surveyScope}
-                  onChange={(e) => setSurveyScope(e.target.value)}
-                  className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus:outline-none focus:border-border-strong transition-colors"
-                >
-                  <option value="Marine Seismic QC / OBN">2D/3D/4D Marine Seismic & OBN QC</option>
-                  <option value="PAM & MMO Environmental Mitigation">PAM & MMO Passive Acoustic Monitoring</option>
-                  <option value="Geotechnical CPT & Coring">Geotechnical CPT Testing & Seabed Coring</option>
-                  <option value="Offshore Wind Array Cable Route">Offshore Wind Array & Inter-Array Cable Route</option>
-                  <option value="UXO Clearance & Identification">Subsea UXO Survey & Target Clearance</option>
-                  <option value="Client Offshore Representative">Client Offshore Representative (IOGP / IMCA)</option>
-                  <option value="Offshore HSE & FLO Advisory">Offshore HSE & Fisheries Liaison (FLO)</option>
-                </select>
+                <div>
+                  <label htmlFor="mobilization-scope" className="block text-xs font-medium text-secondary mb-1">
+                    Work required <span className="text-accent">*</span>
+                  </label>
+                  <select
+                    id="mobilization-scope"
+                    value={surveyScope}
+                    onChange={(e) => setSurveyScope(e.target.value)}
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
+                  >
+                    <option value="Marine Seismic QC / OBN">2D/3D/4D Marine Seismic & OBN QC</option>
+                    <option value="PAM & MMO Environmental Mitigation">PAM & MMO Passive Acoustic Monitoring</option>
+                    <option value="Geotechnical CPT & Coring">Geotechnical CPT Testing & Seabed Coring</option>
+                    <option value="Offshore Wind Array Cable Route">Offshore Wind Array & Inter-Array Cable Route</option>
+                    <option value="UXO Clearance & Identification">Subsea UXO Survey & Target Clearance</option>
+                    <option value="Client Offshore Representative">Client Offshore Representative (IOGP / IMCA)</option>
+                    <option value="Offshore HSE & FLO Advisory">Offshore HSE & Fisheries Liaison (FLO)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Start Date & Duration */}
@@ -288,7 +397,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus:outline-none focus:border-border-strong transition-colors"
+                    className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
                   />
                 </div>
 
@@ -310,14 +419,14 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     value={durationDays}
                     onChange={(e) => setDurationDays(parseInt(e.target.value, 10))}
                     aria-valuetext={`${durationDays} days`}
-                    className="w-full h-1.5 bg-surface-raised rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    className="w-full h-1.5 bg-surface-raised rounded-lg appearance-none cursor-pointer accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   />
                 </div>
               </div>
 
               {/* Client Contact Info */}
               <div className="p-3.5 rounded-[10px] bg-canvas/50 border border-border-subtle space-y-3">
-                  <span className="text-xs font-mono text-secondary font-medium uppercase tracking-wider block">
+                <span className="text-xs font-mono text-secondary font-medium uppercase tracking-wider block">
                   Your contact details
                 </span>
 
@@ -332,7 +441,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                       onChange={(e) => setClientName(e.target.value)}
                       placeholder="Your full name"
                       autoComplete="name"
-                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong"
+                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     />
                   </div>
                   <div>
@@ -345,7 +454,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                       onChange={(e) => setClientEmail(e.target.value)}
                       placeholder="work@operator.com"
                       autoComplete="email"
-                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong"
+                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     />
                   </div>
                   <div>
@@ -358,7 +467,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                       onChange={(e) => setClientCompany(e.target.value)}
                       placeholder="Operator / Company"
                       autoComplete="organization"
-                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong"
+                      className="min-h-11 w-full px-3 py-1.5 rounded-lg bg-surface border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     />
                   </div>
                 </div>
@@ -375,7 +484,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                   value={specialInstructions}
                   onChange={(e) => setSpecialInstructions(e.target.value)}
                   placeholder="e.g. 12-hour night shifts, 4-week back-to-back rotation, high-pressure airgun array experience required..."
-                  className="w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder-zinc-400 focus:outline-none focus:border-border-strong resize-none transition-colors"
+                  className="w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus resize-none transition-colors"
                 />
               </div>
 
@@ -395,17 +504,26 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                   <button
                     type="button"
                     onClick={onClose}
-                    className="min-h-11 px-3 py-2 rounded-[10px] text-secondary hover:text-primary text-xs font-medium transition-colors cursor-pointer"
+                    className="min-h-11 px-3 py-2 rounded-[10px] text-secondary hover:text-primary text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover disabled:opacity-50 text-on-action font-semibold text-xs transition-all shadow-md shadow-black/30 cursor-pointer"
+                    className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover disabled:opacity-50 text-on-action font-semibold text-xs transition-all shadow-md shadow-black/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer"
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{isSubmitting ? 'Sending…' : 'Send request'}</span>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-on-action" />
+                        <span>Recording…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send request</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

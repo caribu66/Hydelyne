@@ -37,7 +37,7 @@ function mapAvailability(status?: string): AvailabilityStatus {
     case 'on_assignment':
       return 'Employed (Not looking)'
     case 'unavailable':
-      return 'Open to offers'
+      return 'Unavailable'
     default:
       return 'Available immediately'
   }
@@ -232,6 +232,7 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
       (tags.length ? `Core: ${tags.slice(0, 3).join(', ')}.` : 'No skills recorded.'),
     professionalSummary: raw.professionalSummary || undefined,
     availability,
+    availabilityDate: raw.availabilityDate || undefined,
     education: raw.education || 'Education not recorded',
     nationality: raw.nationality || undefined,
     countryOfResidence: raw.countryOfResidence || undefined,
@@ -283,6 +284,12 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
     isHighlyRecommended: false,
     dateAdded: raw.createdAt ? raw.createdAt.slice(0, 10) : undefined,
     documents: [],
+    medical: raw.medical
+      ? {
+          status: raw.medical.status || undefined,
+          expiry: raw.medical.expiry || undefined,
+        }
+      : undefined,
   }
 }
 

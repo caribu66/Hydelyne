@@ -58,16 +58,9 @@ services:
       # Read-only, so the container serves them but never mutates the store.
       - ${OLLAMA_MODELS_PATH:-${HOME}/.ollama/models}:/models:ro
       - ollama_data:/root/.ollama
-    devices:
-      # CDI passthrough (see /etc/cdi/nvidia.yaml). Requires a host with an
-      # NVIDIA GPU and CDI configured; without it, container creation fails
-      # rather than falling back to CPU, so machines without a GPU must
-      # comment this line out.
-      - nvidia.com/gpu=all
     security_opt:
-      # The NVIDIA device nodes and the large read-only model bind mount are not
-      # SELinux-relabelled; disabling the label check is the standard approach
-      # and avoids relabelling 28GB of blobs.
+      # The large read-only model bind mount is not SELinux-relabelled; disabling
+      # the label check avoids relabelling the existing model store.
       - label=disable
     healthcheck:
       test: ["CMD", "ollama", "list"]
