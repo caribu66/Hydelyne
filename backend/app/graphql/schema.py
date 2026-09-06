@@ -233,6 +233,39 @@ def _model_to_graphql_vessel(model: VesselModel) -> VesselType:
 
 
 def _model_to_graphql_assignment(model: CampaignAssignmentModel) -> CampaignAssignmentType:
+    from sqlalchemy.inspection import inspect as sa_inspect
+
+    state = sa_inspect(model)
+    crew_name = None
+    if "crew_member" in state.dict and model.crew_member is not None:
+        crew_name = model.crew_member.full_name
+    elif "crew_member" not in state.unloaded:
+        try:
+            if model.crew_member:
+                crew_name = model.crew_member.full_name
+        except Exception:
+            crew_name = None
+
+    vessel_name = None
+    if "vessel" in state.dict and model.vessel is not None:
+        vessel_name = model.vessel.name
+    elif "vessel" not in state.unloaded:
+        try:
+            if model.vessel:
+                vessel_name = model.vessel.name
+        except Exception:
+            vessel_name = None
+
+    project_name = None
+    if "project" in state.dict and model.project is not None:
+        project_name = model.project.project_name
+    elif "project" not in state.unloaded:
+        try:
+            if model.project:
+                project_name = model.project.project_name
+        except Exception:
+            project_name = None
+
     return CampaignAssignmentType(
         id=model.id,
         crew_member_id=model.crew_member_id,
@@ -246,9 +279,9 @@ def _model_to_graphql_assignment(model: CampaignAssignmentModel) -> CampaignAssi
         notes=model.notes,
         created_at=str(model.created_at),
         updated_at=str(model.updated_at),
-        crew_name=model.crew_member.full_name if model.crew_member else None,
-        vessel_name=model.vessel.name if model.vessel else None,
-        project_name=model.project.project_name if model.project else None,
+        crew_name=crew_name,
+        vessel_name=vessel_name,
+        project_name=project_name,
     )
 
 

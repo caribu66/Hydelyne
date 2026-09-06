@@ -560,5 +560,50 @@ async def test_assignment_single_day_mobilization(db_session: Any) -> None:
         assert assignment.start_date == assignment.end_date
 
 
+def test_detached_assignment_graphql_mapping_does_not_fail() -> None:
+    """_model_to_graphql_assignment must safely map detached models without triggering DetachedInstanceError."""
+    from app.graphql.schema import _model_to_graphql_assignment
+    from app.models import CampaignAssignment
 
+    # Create a detached CampaignAssignment model without an active session
+    detached = CampaignAssignment(
+        id=str(uuid.uuid4()),
+        crew_member_id=str(uuid.uuid4()),
+        vessel_imo="9111111",
+        role_on_board="Chief Scientist",
+        start_date=date(2026, 10, 1),
+        end_date=date(2026, 10, 28),
+        status="confirmed",
+        agreed_day_rate=950.0,
+    )
+
+    gql_type = _model_to_graphql_assignment(detached)
+    assert gql_type.id == detached.id
+    assert gql_type.crew_name is None
+    assert gql_type.vessel_name is None
+    assert gql_type.role_on_board == "Chief Scientist"
+
+
+@pytest.mark.asyncio
+async def test_created_assignment_has_relations_loaded_and_graphql_mapped(db_session: Any) -> None:
+    """Creating an assignment eagerly loads crew_member, vessel, and maps to GraphQL with names."""
+    from app.graphql.schema import _model_to_graphql_assignment
+
+    crew = await _create_test_crew(db_session, "Eager Loaded Specialist")
+    with patch("app.services.assignment.get_session_factory", return_value=lambda: db_session):
+        assignment = await assignment_service.create_assignment(
+            crew_member_id=crew.id,
+            vessel_imo="9888888",
+            vessel_name="Ocean Pioneer",
+            role_on_board="Survey Lead",
+            start_date=date(2026, 11, 1),
+            end_date=date(2026, 11, 20),
+            status="confirmed",
+        )
+
+        # Mapping to GraphQL must successfully populate crew_name and vessel_name
+        gql_type = _model_to_graphql_assignment(assignment)
+        assert gql_type.crew_name == "Eager Loaded Specialist"
+        assert gql_type.vessel_name == "Ocean Pioneer"
+        assert gql_type.role_on_board == "Survey Lead"
 

@@ -8,6 +8,7 @@ from datetime import date
 from typing import Any, Optional
 
 from sqlalchemy import and_, select
+from sqlalchemy.orm import selectinload
 
 from app.database import get_session_factory
 from app.models import CampaignAssignment, CrewMember, Project, Vessel
@@ -15,6 +16,15 @@ from app.models import CampaignAssignment, CrewMember, Project, Vessel
 logger = logging.getLogger(__name__)
 
 ACTIVE_ASSIGNMENT_STATUSES = {"confirmed", "on_board"}
+
+
+def _assignment_query_options():
+    """Eagerly load related models to prevent async greenlet lazy-load errors outside session."""
+    return (
+        selectinload(CampaignAssignment.crew_member),
+        selectinload(CampaignAssignment.vessel),
+        selectinload(CampaignAssignment.project),
+    )
 
 
 class AssignmentService:
@@ -118,13 +128,22 @@ class AssignmentService:
                 crew.availability_date = end_date
 
             await session.commit()
-            await session.refresh(assignment)
-            return assignment
+            reloaded_stmt = (
+                select(CampaignAssignment)
+                .options(*_assignment_query_options())
+                .where(CampaignAssignment.id == assignment.id)
+            )
+            reloaded_res = await session.execute(reloaded_stmt)
+            return reloaded_res.scalar_one()
 
     async def get_assignment(self, assignment_id: str) -> Optional[CampaignAssignment]:
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(CampaignAssignment).where(CampaignAssignment.id == assignment_id)
+            stmt = (
+                select(CampaignAssignment)
+                .options(*_assignment_query_options())
+                .where(CampaignAssignment.id == assignment_id)
+            )
             res = await session.execute(stmt)
             return res.scalar_one_or_none()
 
@@ -138,7 +157,7 @@ class AssignmentService:
     ) -> list[CampaignAssignment]:
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(CampaignAssignment)
+            stmt = select(CampaignAssignment).options(*_assignment_query_options())
             if vessel_imo:
                 stmt = stmt.where(CampaignAssignment.vessel_imo == vessel_imo.strip())
             if project_id:
@@ -193,8 +212,13 @@ class AssignmentService:
                         crew.availability_date = max(a.end_date for a in remaining)
 
             await session.commit()
-            await session.refresh(assignment)
-            return assignment
+            reloaded_stmt = (
+                select(CampaignAssignment)
+                .options(*_assignment_query_options())
+                .where(CampaignAssignment.id == assignment_id)
+            )
+            reloaded_res = await session.execute(reloaded_stmt)
+            return reloaded_res.scalar_one()
 
     async def get_vessel(self, imo: str) -> Optional[Vessel]:
         factory = get_session_factory()

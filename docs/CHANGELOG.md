@@ -10,6 +10,21 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Campaign Assignment Eager Loading & Detached Session Fix (Antigravity)
+
+Resolved an async SQLAlchemy `DetachedInstanceError` occurring when `CampaignAssignment` instances (returned after transaction commit) had their relationships (`crew_member`, `vessel`, `project`) accessed outside the active session or in GraphQL resolvers:
+
+- **Eager Loading in Service Layer (`backend/app/services/assignment.py`)**:
+  - Added `_assignment_query_options()` helper combining `selectinload(CampaignAssignment.crew_member)`, `selectinload(CampaignAssignment.vessel)`, and `selectinload(CampaignAssignment.project)`.
+  - Applied `_assignment_query_options()` to `create_assignment` and `update_status` by reloading the committed record with explicit options instead of `session.refresh(assignment)` (which does not refresh unloaded relationships in async SQLAlchemy).
+  - Applied `_assignment_query_options()` to `get_assignment` and `list_assignments` queries.
+- **Defensive Inspection in GraphQL Mapping (`backend/app/graphql/schema.py`)**:
+  - Hardened `_model_to_graphql_assignment` using SQLAlchemy's inspection API (`sa_inspect(model)`).
+  - Verified presence in `state.dict` before reading relationship attributes to avoid triggering any implicit lazy loading on detached model instances.
+- **Regression Tests Added (`backend/tests/test_campaign_assignments.py`)**:
+  - `test_detached_assignment_graphql_mapping_does_not_fail`: Confirms detached models map gracefully without throwing `DetachedInstanceError`.
+  - `test_created_assignment_has_relations_loaded_and_graphql_mapped`: Verifies newly created assignments eagerly load relation objects and accurately populate GraphQL fields (`crew_name`, `vessel_name`).
+
 ## 2026-09-06 — End-to-End Hardening Test Suites & Edge-Case Characterization (Antigravity)
 
 Implemented comprehensive hardening tests across backend services, frontend compliance engines, and end-to-end browser interactions:
