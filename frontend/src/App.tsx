@@ -180,7 +180,7 @@ export default function App() {
   }, [aiQueryData]);
 
   // Live backend profiles (falls back to MOCK_PROFILES only when demo mode enabled)
-  const { profiles: liveProfiles, isLive, demoActive, loading: profilesLoading, error: profilesError, refetch: refetchProfiles } = useCrewProfiles({ skip: !isAuthenticated })
+  const { profiles: liveProfiles, isLive, demoActive, loading: profilesLoading, error: profilesError, refetch: refetchProfiles, loadMore: _loadMoreProfiles, hasMore: _profilesHasMore } = useCrewProfiles({ skip: !isAuthenticated })
   const allProfiles = liveProfiles
 
   const requestLogin = useCallback(() => {

@@ -255,7 +255,6 @@ class CrewService:
         await cache_service.delete(cache_service._make_key("crew", crew_id))
         await cache_service.delete(cache_service._make_key("summary", crew_id))
         await cache_service.delete(cache_service._make_key("compliance", crew_id))
-        await cache_service.invalidate_pattern("hydenlyne:crew_list:*")
         await consultant_knowledge_service.remove_from_index(crew_id)
         return True
 
@@ -367,7 +366,6 @@ class CrewService:
 
             cache_key = cache_service._make_key("crew", crew_id)
             await cache_service.delete(cache_key)
-            await cache_service.invalidate_pattern("hydenlyne:crew_list:*")
 
             return crew
 
@@ -482,11 +480,12 @@ class CertificationService:
 
             cache_key = cache_service._make_key("compliance", cert.crew_member_id)
             await cache_service.delete(cache_key)
-            await cache_service.invalidate_pattern("hydenlyne:compliance:*")
 
             return cert
 
-    async def get_expiring_certifications(self, days: int = 30) -> list[Certification]:
+    async def get_expiring_certifications(
+        self, days: int = 30, limit: int = 100, offset: int = 0
+    ) -> list[Certification]:
         """Get certifications expiring within the specified number of days."""
         factory = get_session_factory()
         async with factory() as session:
@@ -500,47 +499,61 @@ class CertificationService:
                     )
                 )
                 .options(selectinload(Certification.crew_member))
+                .limit(limit)
+                .offset(offset)
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
     async def check_and_update_expiration_status(self) -> int:
-        """Update status of certifications based on expiration dates."""
+        """Update status of certifications based on expiration dates in bounded batches."""
         factory = get_session_factory()
         async with factory() as session:
             today = date.today()
-
-            stmt = (
-                select(Certification)
-                .where(Certification.expiry_date.isnot(None))
-                .options(selectinload(Certification.crew_member))
-            )
-            result = await session.execute(stmt)
-            certs = result.scalars().all()
-
             updated = 0
-            for cert in certs:
-                if cert.expiry_date is None:
-                    continue
-                old_status = cert.status
-                new_status: Optional[str] = None
-                if cert.expiry_date < today:
-                    if cert.status != "expired":
-                        new_status = "expired"
-                elif cert.expiry_date <= today + timedelta(days=30):
-                    if cert.status == "valid":
-                        new_status = "expiring_soon"
+            affected_crew_ids: set[str] = set()
+            last_id = ""
 
-                if new_status and new_status != old_status:
-                    cert.status = new_status
-                    if "medical" in cert.cert_type.lower() and cert.crew_member:
-                        cert.crew_member.medical_status = new_status
-                    updated += 1
+            batch_size = 200
+            while True:
+                stmt = (
+                    select(Certification)
+                    .where(Certification.expiry_date.isnot(None), Certification.id > last_id)
+                    .options(selectinload(Certification.crew_member))
+                    .order_by(Certification.id)
+                    .limit(batch_size)
+                )
+                result = await session.execute(stmt)
+                certs = result.scalars().all()
+                if not certs:
+                    break
 
-            await session.commit()
+                for cert in certs:
+                    if cert.expiry_date is None:
+                        continue
+                    old_status = cert.status
+                    new_status: Optional[str] = None
+                    if cert.expiry_date < today:
+                        if cert.status != "expired":
+                            new_status = "expired"
+                    elif cert.expiry_date <= today + timedelta(days=30):
+                        if cert.status == "valid":
+                            new_status = "expiring_soon"
 
-            if updated > 0:
-                await cache_service.invalidate_pattern("hydenlyne:compliance:*")
+                    if new_status and new_status != old_status:
+                        cert.status = new_status
+                        if "medical" in cert.cert_type.lower() and cert.crew_member:
+                            cert.crew_member.medical_status = new_status
+                        updated += 1
+                        if cert.crew_member:
+                            affected_crew_ids.add(cert.crew_member.id)
+
+                await session.commit()
+                last_id = certs[-1].id
+
+            for crew_id in affected_crew_ids:
+                cache_key = cache_service._make_key("compliance", crew_id)
+                await cache_service.delete(cache_key)
 
             return updated
 
@@ -708,7 +721,6 @@ class CertificationService:
 
             cache_key = cache_service._make_key("compliance", crew_id)
             await cache_service.delete(cache_key)
-            await cache_service.invalidate_pattern("hydenlyne:compliance:*")
 
             return target_cert
 

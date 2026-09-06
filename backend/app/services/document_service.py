@@ -57,11 +57,11 @@ class DocumentService:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_documents_by_crew(self, crew_id: str) -> list[DocumentModel]:
+    async def get_documents_by_crew(self, crew_id: str, limit: int = 50, offset: int = 0) -> list[DocumentModel]:
         """Get all documents belonging to a crew member."""
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(DocumentModel).where(DocumentModel.crew_member_id == crew_id)
+            stmt = select(DocumentModel).where(DocumentModel.crew_member_id == crew_id).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
@@ -79,12 +79,15 @@ class DocumentService:
             await session.refresh(doc)
             return doc
 
-    async def get_pending_documents(self) -> list[DocumentModel]:
+    async def get_pending_documents(self, limit: int = 50, offset: int = 0) -> list[DocumentModel]:
         """Get all documents pending extraction."""
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(DocumentModel).where(
-                DocumentModel.extraction_status.in_(["pending", "failed", "needs_review"])
+            stmt = (
+                select(DocumentModel)
+                .where(DocumentModel.extraction_status.in_(["pending", "failed", "needs_review"]))
+                .limit(limit)
+                .offset(offset)
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())

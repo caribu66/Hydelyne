@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import date, datetime, timezone
@@ -121,13 +122,6 @@ class ComplianceAlertService:
         ref_date = reference_date or date.today()
         logger.info(f"Running compliance evaluation for reference date: {ref_date}")
 
-        stmt = (
-            select(Certification)
-            .where(Certification.expiry_date.isnot(None))
-            .options(selectinload(Certification.crew_member))
-        )
-        certs = list(session.execute(stmt).scalars().all())
-
         alerts: dict[str, list[dict[str, Any]]] = {
             ALERT_WINDOW_EXPIRED: [],
             ALERT_WINDOW_30D: [],
@@ -137,118 +131,127 @@ class ComplianceAlertService:
 
         updated_count = 0
         affected_crew_ids: set[str] = set()
+        last_id = ""
+        batch_size = 200
 
-        for cert in certs:
-            if cert.expiry_date is None:
-                continue
+        while True:
+            stmt = (
+                select(Certification)
+                .where(Certification.expiry_date.isnot(None), Certification.id > last_id)
+                .options(selectinload(Certification.crew_member))
+                .order_by(Certification.id)
+                .limit(batch_size)
+            )
+            batch = list(session.execute(stmt).scalars().all())
+            if not batch:
+                break
 
-            classification = classify_certification_expiry(cert.expiry_date, ref_date)
-            window = classification["window"]
-            days_remaining = classification["days_remaining"]
-            urgency = classification["urgency"]
+            for cert in batch:
+                if cert.expiry_date is None:
+                    continue
 
-            crew: Optional[CrewMember] = cert.crew_member
-            crew_name = crew.full_name if crew else "Unknown"
-            crew_email = crew.email if crew else None
+                classification = classify_certification_expiry(cert.expiry_date, ref_date)
+                window = classification["window"]
+                days_remaining = classification["days_remaining"]
+                urgency = classification["urgency"]
 
-            # 1. Check if lifecycle status needs updating
-            old_status = cert.status
-            new_status: Optional[str] = None
+                crew: Optional[CrewMember] = cert.crew_member
+                crew_name = crew.full_name if crew else "Unknown"
+                crew_email = crew.email if crew else None
 
-            if days_remaining is not None and days_remaining < 0:
-                if cert.status != "expired":
-                    new_status = "expired"
-            elif days_remaining is not None and days_remaining <= 30:
-                if cert.status == "valid":
-                    new_status = "expiring_soon"
+                old_status = cert.status
+                new_status: Optional[str] = None
 
-            if new_status and new_status != old_status:
-                cert.status = new_status
-                updated_count += 1
-                affected_crew_ids.add(cert.crew_member_id)
+                if days_remaining is not None and days_remaining < 0:
+                    if cert.status != "expired":
+                        new_status = "expired"
+                elif days_remaining is not None and days_remaining <= 30:
+                    if cert.status == "valid":
+                        new_status = "expiring_soon"
 
-                # Keep CrewMember root medical fields aligned
-                if "medical" in cert.cert_type.lower() and crew:
-                    crew.medical_status = new_status
+                if new_status and new_status != old_status:
+                    cert.status = new_status
+                    updated_count += 1
+                    affected_crew_ids.add(cert.crew_member_id)
 
-                # Record compliance transition in backing document's audit log
-                if cert.document_ref:
-                    doc = session.get(DocumentModel, cert.document_ref)
-                    if doc:
-                        access_log = list(doc.access_log or [])
-                        access_log.append(
-                            {
-                                "event": "compliance_status_transition",
-                                "action": "status_changed",
-                                "cert_type": cert.cert_type,
-                                "from_status": old_status,
-                                "to_status": new_status,
-                                "days_remaining": days_remaining,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                                "reason": "periodic_compliance_check",
-                            }
+                    if "medical" in cert.cert_type.lower() and crew:
+                        crew.medical_status = new_status
+
+                    if cert.document_ref:
+                        doc = session.get(DocumentModel, cert.document_ref)
+                        if doc:
+                            access_log = list(doc.access_log or [])
+                            access_log.append(
+                                {
+                                    "event": "compliance_status_transition",
+                                    "action": "status_changed",
+                                    "cert_type": cert.cert_type,
+                                    "from_status": old_status,
+                                    "to_status": new_status,
+                                    "days_remaining": days_remaining,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    "reason": "periodic_compliance_check",
+                                }
+                            )
+                            doc.access_log = access_log
+                            flag_modified(doc, "access_log")
+
+                if window in alerts:
+                    alert_item = {
+                        "certification_id": cert.id,
+                        "crew_member_id": cert.crew_member_id,
+                        "crew_name": crew_name,
+                        "crew_email": crew_email,
+                        "cert_type": cert.cert_type,
+                        "cert_number": cert.cert_number,
+                        "document_ref": cert.document_ref,
+                        "expiry_date": cert.expiry_date.isoformat(),
+                        "days_remaining": days_remaining,
+                        "urgency": urgency,
+                        "status": cert.status,
+                    }
+                    alerts[window].append(alert_item)
+
+                    if urgency == "critical":
+                        logger.warning(
+                            "COMPLIANCE ALERT [CRITICAL/EXPIRED]: %s (%s) - %s expired on %s (%d days ago)",
+                            crew_name,
+                            cert.crew_member_id,
+                            cert.cert_type,
+                            cert.expiry_date.isoformat(),
+                            abs(days_remaining or 0),
                         )
-                        doc.access_log = access_log
-                        flag_modified(doc, "access_log")
+                    elif urgency == "urgent":
+                        logger.warning(
+                            "COMPLIANCE ALERT [URGENT/30-DAY]: %s (%s) - %s expires in %d days (%s)",
+                            crew_name,
+                            cert.crew_member_id,
+                            cert.cert_type,
+                            days_remaining,
+                            cert.expiry_date.isoformat(),
+                        )
+                    elif urgency == "warning":
+                        logger.info(
+                            "COMPLIANCE ALERT [WARNING/60-DAY]: %s (%s) - %s expires in %d days (%s)",
+                            crew_name,
+                            cert.crew_member_id,
+                            cert.cert_type,
+                            days_remaining,
+                            cert.expiry_date.isoformat(),
+                        )
+                    elif urgency == "notice":
+                        logger.info(
+                            "COMPLIANCE ALERT [NOTICE/90-DAY]: %s (%s) - %s expires in %d days (%s)",
+                            crew_name,
+                            cert.crew_member_id,
+                            cert.cert_type,
+                            days_remaining,
+                            cert.expiry_date.isoformat(),
+                        )
 
-            # 2. Build alert payload if in one of the 4 alert windows
-            if window in alerts:
-                alert_item = {
-                    "certification_id": cert.id,
-                    "crew_member_id": cert.crew_member_id,
-                    "crew_name": crew_name,
-                    "crew_email": crew_email,
-                    "cert_type": cert.cert_type,
-                    "cert_number": cert.cert_number,
-                    "document_ref": cert.document_ref,
-                    "expiry_date": cert.expiry_date.isoformat(),
-                    "days_remaining": days_remaining,
-                    "urgency": urgency,
-                    "status": cert.status,
-                }
-                alerts[window].append(alert_item)
-
-                if urgency == "critical":
-                    logger.warning(
-                        "COMPLIANCE ALERT [CRITICAL/EXPIRED]: %s (%s) - %s expired on %s (%d days ago)",
-                        crew_name,
-                        cert.crew_member_id,
-                        cert.cert_type,
-                        cert.expiry_date.isoformat(),
-                        abs(days_remaining or 0),
-                    )
-                elif urgency == "urgent":
-                    logger.warning(
-                        "COMPLIANCE ALERT [URGENT/30-DAY]: %s (%s) - %s expires in %d days (%s)",
-                        crew_name,
-                        cert.crew_member_id,
-                        cert.cert_type,
-                        days_remaining,
-                        cert.expiry_date.isoformat(),
-                    )
-                elif urgency == "warning":
-                    logger.info(
-                        "COMPLIANCE ALERT [WARNING/60-DAY]: %s (%s) - %s expires in %d days (%s)",
-                        crew_name,
-                        cert.crew_member_id,
-                        cert.cert_type,
-                        days_remaining,
-                        cert.expiry_date.isoformat(),
-                    )
-                elif urgency == "notice":
-                    logger.info(
-                        "COMPLIANCE ALERT [NOTICE/90-DAY]: %s (%s) - %s expires in %d days (%s)",
-                        crew_name,
-                        cert.crew_member_id,
-                        cert.cert_type,
-                        days_remaining,
-                        cert.expiry_date.isoformat(),
-                    )
-
-        if updated_count > 0:
             session.commit()
+            last_id = batch[-1].id
 
-        # Invalidate caches and publish events via Redis
         self._invalidate_caches_sync(affected_crew_ids)
 
         total_alerts = sum(len(items) for items in alerts.values())
@@ -279,10 +282,9 @@ class ComplianceAlertService:
         try:
             client = _get_sync_redis_client()
             for crew_id in crew_ids:
-                for key in client.scan_iter(match=f"hydenlyne:compliance:*{crew_id}*"):
-                    client.delete(key)
-            for key in client.scan_iter(match="hydenlyne:crew_list:*"):
-                client.delete(key)
+                key_data = f"compliance:{crew_id}:{{}}"
+                hashed = hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
+                client.delete(f"hydenlyne:compliance:{hashed}")
             client.close()
         except Exception as e:
             logger.debug(f"Redis compliance cache invalidation skipped or failed: {e}")

@@ -108,23 +108,19 @@ def index_document_embeddings(document_id: str) -> dict:
             if not doc:
                 return {"document_id": document_id, "status": "failed", "error": "not found"}
 
-            import asyncio
-
             from app.services.qdrant import document_indexable_text, qdrant_service
 
             indexable_text = document_indexable_text(doc)
 
-            ok = asyncio.run(
-                qdrant_service.index_document(
-                    doc.id,
-                    indexable_text,
-                    metadata={
-                        "file_name": doc.file_name,
-                        "classification": doc.classification,
-                        "crew_member_id": doc.crew_member_id,
-                        "extraction_status": doc.extraction_status,
-                    },
-                )
+            ok = qdrant_service.index_document_sync(
+                doc.id,
+                indexable_text,
+                metadata={
+                    "file_name": doc.file_name,
+                    "classification": doc.classification,
+                    "crew_member_id": doc.crew_member_id,
+                    "extraction_status": doc.extraction_status,
+                },
             )
             return {
                 "document_id": document_id,

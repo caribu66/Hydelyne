@@ -76,7 +76,9 @@ Format the report as JSON:
 class ReportService:
     """Service for generating formatted reports using LLM."""
 
-    async def build_report_data(self, report_type: str, session: AsyncSession) -> dict[str, Any]:
+    async def build_report_data(
+        self, report_type: str, session: AsyncSession, limit: int = 100, offset: int = 0
+    ) -> dict[str, Any]:
         """Deterministically gather the raw data a report is built from.
 
         Runs before any LLM enrichment so a report always has a factual
@@ -84,7 +86,12 @@ class ReportService:
         the LLM is unavailable.
         """
         if report_type == "availability":
-            crew_stmt = select(CrewMember).where(CrewMember.availability_status == "available")
+            crew_stmt = (
+                select(CrewMember)
+                .where(CrewMember.availability_status == "available")
+                .limit(limit)
+                .offset(offset)
+            )
             crew_result = await session.execute(crew_stmt)
             crew_list = crew_result.scalars().all()
             return {
@@ -92,8 +99,11 @@ class ReportService:
                 "crew": [{"id": c.id, "name": c.full_name} for c in crew_list],
             }
         if report_type == "compliance":
-            cert_stmt = select(Certification).where(
-                Certification.status.in_(["expired", "expiring_soon"])
+            cert_stmt = (
+                select(Certification)
+                .where(Certification.status.in_(["expired", "expiring_soon"]))
+                .limit(limit)
+                .offset(offset)
             )
             cert_result = await session.execute(cert_stmt)
             certs = cert_result.scalars().all()
@@ -110,7 +120,11 @@ class ReportService:
                 ],
             }
         if report_type == "project_readiness":
-            project_stmt = select(Project)
+            project_stmt = (
+                select(Project)
+                .limit(limit)
+                .offset(offset)
+            )
             project_result = await session.execute(project_stmt)
             projects = project_result.scalars().all()
             return {
@@ -127,7 +141,12 @@ class ReportService:
                 ],
             }
         # performance: performance data lives in document extracted_data; summarize what we have
-        doc_stmt = select(Document).where(Document.classification == "performance")
+        doc_stmt = (
+            select(Document)
+            .where(Document.classification == "performance")
+            .limit(limit)
+            .offset(offset)
+        )
         doc_result = await session.execute(doc_stmt)
         perf_docs = doc_result.scalars().all()
         return {

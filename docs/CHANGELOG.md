@@ -7,8 +7,55 @@ context needs to be re-explained, and append to it before finishing any work
 that changes committed code, running data, or infrastructure state.
 
 Newest entries first. Each entry: date, who/what did it, what changed, why,
-and any follow-up the next session should know about. Keep entries short —
+and any follow-up the next session needs to know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
+
+## 2026-09-06 — Performance Optimization Pass (Kilo)
+
+Addressed unbounded queries, missing indexes, cache invalidation scaling,
+sync-in-async bridges, and frontend fetch-all pattern.
+
+**What changed:**
+- `backend/alembic/versions/017_performance_indexes.py` — New migration adding
+  composite index on `campaign_assignments(crew_member_id, status, start_date, end_date)`
+  and GIN trigram indexes on `crew_members.full_name`, `professional_summary`,
+  `nationality`, and `email`.
+- `backend/app/services/assignment.py` — `list_assignments` now accepts
+  `limit`/`offset` (defaults 100/0).
+- `backend/app/services/crew.py` — `get_expiring_certifications` accepts
+  `limit`/`offset`. `check_and_update_expiration_status` processes certifications
+  in bounded batches of 200 using keyset pagination. Replaced O(N) Redis
+  `SCAN`-based pattern invalidation with explicit per-entity cache key deletion
+  for compliance and crew list caches.
+- `backend/app/services/reports.py` — `build_report_data` accepts `limit`/`offset`
+  for all report-type queries.
+- `backend/app/services/document_service.py` — `get_documents_by_crew` and
+  `get_pending_documents` accept `limit`/`offset`.
+- `backend/app/services/compliance.py` — `evaluate_and_update_compliance_sync`
+  processes certifications in bounded batches. `_invalidate_caches_sync` now
+  deletes specific compliance cache keys instead of scanning Redis.
+- `backend/app/services/cache.py` — Removed unused `type: ignore`.
+- `backend/app/services/upload.py` — Replaced deprecated
+  `asyncio.get_event_loop()` with `asyncio.run()` in `_download_from_dropbox_sync`.
+- `backend/app/services/qdrant.py` — Added `index_document_sync` for
+  synchronous Qdrant indexing.
+- `backend/app/tasks/document_tasks.py` — `index_document_embeddings` now uses
+  `qdrant_service.index_document_sync` instead of `asyncio.run()`.
+- `backend/app/graphql/schema.py` — Exposed `limit`/`offset` on
+  `campaign_assignments`, `vessel_roster`, `expiring_certifications`,
+  `documents_by_crew`, and `pending_reviews` resolvers.
+- `frontend/src/hooks/useCrewProfiles.ts` — Reduced `PAGE_SIZE` from 100 to 50,
+  removed hidden auto-pagination side effect, added `loadMore` and `hasMore`
+  to the hook interface.
+- `frontend/src/App.tsx` — Consumed new `loadMore`/`hasMore` exports from
+  `useCrewProfiles`.
+
+**Why:** Eliminate unbounded memory/transaction risks, reduce sequential
+scans, remove O(N) Redis blocking operations, and make async/sync boundaries
+explicit and future-proof.
+
+**Follow-up:** For datasets exceeding ~500 crew, migrate client-side search/filter
+to server-side GraphQL queries to avoid downloading the full roster.
 
 ## 2026-09-06 — Code Correctness Checklist (Kilo)
 

@@ -154,6 +154,8 @@ class AssignmentService:
         project_id: Optional[str] = None,
         crew_member_id: Optional[str] = None,
         status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[CampaignAssignment]:
         factory = get_session_factory()
         async with factory() as session:
@@ -166,7 +168,7 @@ class AssignmentService:
                 stmt = stmt.where(CampaignAssignment.crew_member_id == crew_member_id)
             if status:
                 stmt = stmt.where(CampaignAssignment.status == status)
-            stmt = stmt.order_by(CampaignAssignment.start_date.desc())
+            stmt = stmt.order_by(CampaignAssignment.start_date.desc()).limit(limit).offset(offset)
             res = await session.execute(stmt)
             return list(res.scalars().all())
 

@@ -388,19 +388,7 @@ class DocumentUploadService:
         """Synchronous Dropbox download (for use in sync context)."""
         import asyncio
 
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        if loop.is_running():
-            # We're in an async context, can't use run_until_complete
-            # Return None and let the caller handle async download
-            logger.debug("Cannot sync download in async context, skipping")
-            return None
-
-        return loop.run_until_complete(self._download_from_dropbox(dropbox_path))
+        return asyncio.run(self._download_from_dropbox(dropbox_path))
 
     async def download_from_dropbox(self, dropbox_path: str) -> Optional[bytes]:
         """Async Dropbox download with caching."""

@@ -73,9 +73,16 @@ class QdrantService:
         metadata: Optional[dict[str, Any]] = None,
     ) -> bool:
         """Index a document embedding in Qdrant."""
-        import asyncio
+        return self.index_document_sync(document_id, text, metadata)
 
-        def _sync() -> bool:
+    def index_document_sync(
+        self,
+        document_id: str,
+        text: str,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        """Synchronous index a document embedding in Qdrant."""
+        try:
             embedding = self._generate_embedding(text)
             point = PointStruct(
                 id=document_id,
@@ -83,10 +90,6 @@ class QdrantService:
                 payload=metadata or {},
             )
             self.client.upsert(collection_name=QDRANT_COLLECTION, points=[point])
-            return True
-
-        try:
-            await asyncio.to_thread(_sync)
             logger.info(f"Indexed document {document_id} in Qdrant")
             return True
         except Exception as e:

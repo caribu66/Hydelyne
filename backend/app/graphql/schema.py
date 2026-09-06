@@ -387,8 +387,10 @@ class Query:
         self,
         info: Info,
         days: int = 30,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[Certification]:
-        certs = await certification_service.get_expiring_certifications(days)
+        certs = await certification_service.get_expiring_certifications(days, limit=limit, offset=offset)
         actor = info.context["current_user"]
         tier = tier_for_role(actor.role)
         # Expiring certs carry cert_number/issuing_body (C2) — T2+ only.
@@ -442,7 +444,7 @@ class Query:
 
     @strawberry.field
     @require_auth
-    async def documents_by_crew(self, info: Info, crew_id: str) -> list[DocumentType]:
+    async def documents_by_crew(self, info: Info, crew_id: str, limit: int = 50, offset: int = 0) -> list[DocumentType]:
         actor = info.context["current_user"]
         if not await crew_service.can_access_profile(
             crew_id, actor_id=actor.id, actor_role=actor.role
@@ -451,13 +453,13 @@ class Query:
         tier = tier_for_role(actor.role)
         if tier == "T1":
             return []
-        docs = await document_service.get_documents_by_crew(crew_id)
+        docs = await document_service.get_documents_by_crew(crew_id, limit=limit, offset=offset)
         return [scrub_document(_model_to_graphql_document(d), tier) for d in docs]
 
     @strawberry.field
     @require_admin
-    async def pending_reviews(self, info: Info) -> list[DocumentType]:
-        docs = await document_service.get_pending_documents()
+    async def pending_reviews(self, info: Info, limit: int = 50, offset: int = 0) -> list[DocumentType]:
+        docs = await document_service.get_pending_documents(limit=limit, offset=offset)
         return [_model_to_graphql_document(d) for d in docs]
 
     @strawberry.field
@@ -625,6 +627,8 @@ class Query:
         project_id: Optional[str] = None,
         crew_id: Optional[str] = None,
         status: Optional[CampaignAssignmentStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[CampaignAssignmentType]:
         from app.services.assignment import assignment_service
 
@@ -634,6 +638,8 @@ class Query:
             project_id=project_id,
             crew_member_id=crew_id,
             status=status_val,
+            limit=limit,
+            offset=offset,
         )
         return [_model_to_graphql_assignment(m) for m in models]
 
@@ -643,10 +649,12 @@ class Query:
         self,
         info: Info,
         imo: str,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[CampaignAssignmentType]:
         from app.services.assignment import assignment_service
 
-        models = await assignment_service.list_assignments(vessel_imo=imo)
+        models = await assignment_service.list_assignments(vessel_imo=imo, limit=limit, offset=offset)
         return [_model_to_graphql_assignment(m) for m in models]
 
     @strawberry.field

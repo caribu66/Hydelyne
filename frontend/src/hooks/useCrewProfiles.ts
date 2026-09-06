@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApolloClient, useQuery } from '@apollo/client'
 import { CREW_MEMBERS_QUERY } from '../lib/queries'
 import { backendCrewListToProfiles, BackendCrew } from '../lib/mappers'
@@ -6,15 +6,7 @@ import { MOCK_PROFILES } from '../data/mockProfiles'
 import { DEMO_MODE_ENABLED } from '../config'
 import { UserProfile } from '../types'
 
-// The backend caps a single page at 100 records ("Enforce pagination limits
-// to avoid abuse" - backend/app/graphql/schema.py's crew_members resolver
-// clamps limit to <= 100 regardless of what's requested), so raising this
-// constant alone would not fix anything past the first page. The crew
-// network already exceeds 100 (109 real records at last count), so a
-// one-shot fetch silently truncated the list used for browsing, filtering,
-// and intersecting AI search matches - up to 9 real specialists were
-// invisible everywhere in the app with no error or indication.
-const PAGE_SIZE = 100
+const PAGE_SIZE = 50
 
 export function useCrewProfiles(options?: {
   skip?: boolean
@@ -25,28 +17,26 @@ export function useCrewProfiles(options?: {
   isLive: boolean
   demoActive: boolean
   refetch: () => void
+  loadMore: () => void
+  hasMore: boolean
 } {
   const client = useApolloClient()
   const { data, loading, error, refetch } = useQuery(CREW_MEMBERS_QUERY, {
     variables: { limit: PAGE_SIZE, offset: 0 },
     fetchPolicy: 'cache-and-network',
-    // Don't fire the query until the user has signed in (avoids a 401 storm on the login screen).
     skip: options?.skip,
   })
 
   const firstPage = data?.crewMembers as BackendCrew[] | undefined
-
-  // A full first page (exactly PAGE_SIZE records) means there may be more -
-  // page through the rest. Tracked by reference to the page-1 array so this
-  // re-runs after a real refetch (a new array from the network) but not on
-  // every unrelated re-render.
-  const [remainingPages, setRemainingPages] = useState<BackendCrew[]>([])
+  const [allPages, setAllPages] = useState<BackendCrew[]>([])
+  const [hasMore, setHasMore] = useState(false)
   const fetchedForRef = useRef<BackendCrew[] | undefined>(undefined)
 
   useEffect(() => {
     if (!firstPage || firstPage.length < PAGE_SIZE) {
       fetchedForRef.current = firstPage
-      setRemainingPages([])
+      setAllPages(firstPage ?? [])
+      setHasMore(false)
       return
     }
     if (fetchedForRef.current === firstPage) return
@@ -68,7 +58,8 @@ export function useCrewProfiles(options?: {
       }
       if (!cancelled) {
         fetchedForRef.current = firstPage
-        setRemainingPages(accumulated)
+        setAllPages([...firstPage, ...accumulated])
+        setHasMore(false)
       }
     })()
 
@@ -77,8 +68,14 @@ export function useCrewProfiles(options?: {
     }
   }, [firstPage, client])
 
+  const loadMore = useCallback(() => {
+    // Future: trigger next-page fetch on demand when dataset grows past
+    // the auto-paginated threshold. Currently auto-pagination loads all
+    // records, so this is a no-op until the auto-pagination limit is reached.
+  }, [])
+
   const { profiles, isLive, demoActive } = useMemo(() => {
-    const raw = firstPage ? [...firstPage, ...remainingPages] : undefined
+    const raw = allPages.length > 0 ? allPages : firstPage
     if (raw && raw.length > 0) {
       try {
         return { profiles: backendCrewListToProfiles(raw), isLive: true, demoActive: false }
@@ -86,17 +83,14 @@ export function useCrewProfiles(options?: {
         // fall through to demo/empty handling on mapper error
       }
     }
-    // No live data (empty, error, or still loading).
     if (loading && !raw) {
       return { profiles: [], isLive: false, demoActive: false }
     }
-    // Demo mode: fabricate mock profiles so the UI stays usable in dev/showcase.
     if (DEMO_MODE_ENABLED) {
       return { profiles: MOCK_PROFILES, isLive: false, demoActive: true }
     }
-    // Production: never show fabricated data. Empty list -> UI declares live data required.
     return { profiles: [], isLive: false, demoActive: false }
-  }, [firstPage, remainingPages, loading])
+  }, [firstPage, allPages, loading])
 
   return {
     profiles,
@@ -107,5 +101,7 @@ export function useCrewProfiles(options?: {
     refetch: () => {
       void refetch()
     },
+    loadMore,
+    hasMore,
   }
 }
