@@ -392,6 +392,7 @@ export const ContractorSearchPane: FC<ContractorSearchPaneProps> = ({
                     totalProfiles={filteredProfiles.length}
                     onPrevProfile={handlePrevProfile}
                     onNextProfile={handleNextProfile}
+                    onToggleFocusMode={() => activeSplitProfile && onSelectProfile?.(activeSplitProfile)}
                   />
                 </Suspense>
               </div>
