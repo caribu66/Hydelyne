@@ -10,6 +10,28 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Operations Command Center Modernization & Search Elevation (Antigravity)
+
+Redesigned and elevated the Operations Panel searches from an awkward bottom-of-page widget into a top-level Command Center:
+
+- **Search-First Command Center (`frontend/src/components/operations/OperationsHome.tsx`)**:
+  - Elevated the Operations Search & Mobilization Hub to the primary hero position directly below the greeting, completely removing vertical scroll fatigue.
+  - Reorganized operational telemetry: condensed `OperationsMetrics` into a crisp 4-column responsive KPI ribbon (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`) with semantic status indicator dots.
+  - Positioned `OperationsAttention` and `OperationsProjectsPanel` side-by-side in a balanced 2-column lower deck.
+  - Preserved non-staff safe greeting view with guidance messaging.
+- **Inline Specialist Discovery & Dispatch (`frontend/src/components/operations/ContractorSearchPane.tsx`)**:
+  - Replaced the redirect-heavy contractor input with an in-place specialist discovery pane with real-time text matching across name, discipline, and skills.
+  - Added quick discipline filter chips (`All specialists`, `Available now`, `MMO / PAM`, `Hydrography`, `Seismic QC`, `Client Rep`, `Geotech`, `HSE / Safety`) styled with WCAG AAA contrast tokens (`bg-accent-soft text-accent border-border-strong`).
+  - Added instant specialist preview cards with full name, title, department, location, day rate, and 1-click **Mobilize** / **View** actions.
+- **High-Velocity Vessel Explorer (`frontend/src/components/operations/VesselSearchPane.tsx`)**:
+  - Added quick vessel filter chips (`All vessels`, `Survey & Research`, `Offshore & Supply`, `Support & Tug`).
+  - Added an instant clear (`X`) button to the search input with automatic empty query refetch.
+  - Enhanced vessel cards and crew roster drawer with accessible semantic tokens and smooth interactions.
+- **App Integration & Testing (`frontend/src/App.tsx`, `frontend/tests/operations-home.spec.ts`)**:
+  - Wired `onSelectProfile` (opens dossier) and `onMobilizeProfile` (opens mobilization inquiry) from the Operations home.
+  - Updated bounding-box layout test to assert the search hub sits above operational telemetry.
+  - Verified 100% pass rate: 60/60 Playwright tests across all viewports (`desktop`, `tablet`, `mobile`, `wide`) including `@axe-core/playwright` accessibility audits and light/dark theme symmetry.
+
 ## 2026-09-06 — Campaign Assignment Eager Loading & Detached Session Fix (Antigravity)
 
 Resolved an async SQLAlchemy `DetachedInstanceError` occurring when `CampaignAssignment` instances (returned after transaction commit) had their relationships (`crew_member`, `vessel`, `project`) accessed outside the active session or in GraphQL resolvers:

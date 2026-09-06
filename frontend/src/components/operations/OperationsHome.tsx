@@ -7,6 +7,7 @@ import { OperationsAttention } from './OperationsAttention'
 import { OperationsMetrics } from './OperationsMetrics'
 import { OperationsProjectsPanel } from './OperationsProjectsPanel'
 import { VesselSearchPane } from './VesselSearchPane'
+import { ContractorSearchPane } from './ContractorSearchPane'
 import { deriveCrewReadinessMetrics, formatExpiringCertSearchQuery } from '../../utils/operationsHome'
 import { UserProfile } from '../../types'
 import { EXPIRING_CERTS_QUERY } from '../../lib/queries'
@@ -23,6 +24,8 @@ interface OperationsHomeProps {
   isStaff: boolean
   searchControl: ReactNode
   onShowToast?: (message: string) => void
+  onSelectProfile?: (profile: UserProfile) => void
+  onMobilizeProfile?: (profile: UserProfile) => void
 }
 
 export const OperationsHome: FC<OperationsHomeProps> = ({
@@ -36,6 +39,8 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
   isStaff,
   searchControl,
   onShowToast,
+  onSelectProfile,
+  onMobilizeProfile,
 }) => {
   const metrics = deriveCrewReadinessMetrics(profiles)
 
@@ -128,32 +133,7 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
         <OperationsGreeting fullName={fullName} />
       </motion.div>
 
-      {isStaff ? (
-        <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-4">
-            <OperationsAttention
-              documents={{ count: docCount, loading: docLoading, error: docError }}
-              expiring={{ count: expiringCount, loading: expiringLoading, error: expiringErrorMessage }}
-              onOpenDocuments={onOpenDocumentReview}
-              onOpenExpiring={handleOpenExpiring}
-            />
-            <OperationsMetrics
-              available={metrics.available}
-              onAssignment={metrics.onAssignment}
-              unavailable={metrics.unavailable}
-              total={metrics.total}
-              loading={profilesLoading}
-              error={profilesError}
-              onSelectStatus={onSearch}
-            />
-          </div>
-          <OperationsProjectsPanel
-            onSelectProject={(query) => {
-              onSearch(query)
-            }}
-          />
-        </motion.div>
-      ) : (
+      {!isStaff && (
         <motion.p
           variants={itemVariants}
           className="rounded-[14px] border border-border-subtle bg-surface/40 px-4 py-6 text-center text-sm text-muted"
@@ -162,10 +142,11 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
         </motion.p>
       )}
 
+      {/* Primary Operations Command Center: Search & Mobilization Hub */}
       <motion.section
         variants={itemVariants}
         aria-label="Operations search and tracking hub"
-        className="rounded-[14px] border border-border-subtle bg-surface p-4 sm:p-5"
+        className="rounded-[14px] border border-border-subtle bg-surface p-4 sm:p-5 shadow-xs"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-subtle/80 pb-3.5 mb-4">
           <div
@@ -216,7 +197,7 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
           <div className="flex items-center gap-2 text-xs font-mono text-muted">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-positive" aria-hidden="true" />
             <span>
-              {searchTab === 'contractors' ? 'Natural language & semantic search' : 'Live AIS tracking & rosters'}
+              {searchTab === 'contractors' ? 'Specialist network & live mobilization' : 'Live AIS tracking & rosters'}
             </span>
           </div>
         </div>
@@ -233,13 +214,20 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
               <h2 id="find-contractor-heading" className="text-sm font-semibold text-primary">
                 Find a contractor
               </h2>
-              <span className="font-mono text-xs text-muted">Natural language</span>
+              <span className="font-mono text-xs text-muted">Specialist network</span>
             </div>
             <p className="mt-1 text-sm text-secondary">
               Search by discipline, certification, region, and availability — try "Available hydrography surveyors
               with BOSIET in the North Sea".
             </p>
-            <div className="mt-3">{searchControl}</div>
+            <ContractorSearchPane
+              profiles={profiles}
+              loading={profilesLoading}
+              searchControl={searchControl}
+              onSelectProfile={onSelectProfile}
+              onMobilize={onMobilizeProfile}
+              onSearchFull={onSearch}
+            />
           </div>
         ) : (
           <div
@@ -253,7 +241,7 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
               <h2 id="find-vessel-heading" className="text-sm font-semibold text-primary">
                 Find a vessel
               </h2>
-              <span className="font-mono text-xs text-muted">AIS tracking</span>
+              <span className="font-mono text-xs text-muted">AIS tracking & mobilization</span>
             </div>
             <p className="mt-1 text-sm text-secondary">
               Search by vessel name, IMO, MMSI, or callsign — live AIS data via VesselAPI with active mobilization rosters.
@@ -262,6 +250,37 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
           </div>
         )}
       </motion.section>
+
+      {/* Operations Telemetry: Metrics ribbon & operational action boards */}
+      {isStaff ? (
+        <>
+          <motion.div variants={itemVariants}>
+            <OperationsMetrics
+              available={metrics.available}
+              onAssignment={metrics.onAssignment}
+              unavailable={metrics.unavailable}
+              total={metrics.total}
+              loading={profilesLoading}
+              error={profilesError}
+              onSelectStatus={onSearch}
+            />
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <OperationsAttention
+              documents={{ count: docCount, loading: docLoading, error: docError }}
+              expiring={{ count: expiringCount, loading: expiringLoading, error: expiringErrorMessage }}
+              onOpenDocuments={onOpenDocumentReview}
+              onOpenExpiring={handleOpenExpiring}
+            />
+            <OperationsProjectsPanel
+              onSelectProject={(query) => {
+                onSearch(query)
+              }}
+            />
+          </motion.div>
+        </>
+      ) : null}
 
     </motion.div>
   )

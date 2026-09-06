@@ -1,6 +1,6 @@
-import { FC, FormEvent, useState } from 'react'
+import { FC, FormEvent, useMemo, useState } from 'react'
 import { useQuery } from '@apollo/client'
-import { ChevronDown, ChevronUp, Loader2, Search, Ship, UserPlus, Users } from 'lucide-react'
+import { ChevronDown, ChevronUp, Filter, Loader2, Search, Ship, UserPlus, Users, X } from 'lucide-react'
 import { SEARCH_VESSELS_QUERY, VESSEL_ROSTER_QUERY } from '../../lib/queries'
 import { CampaignAssignment } from '../../types'
 import { formatAssignmentStatus } from '../../utils/assignmentUtils'
@@ -166,6 +166,19 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
   const vessels = data?.vesselSearch?.vessels ?? []
   const isCached = data?.vesselSearch?.cached ?? false
 
+  const [typeFilter, setTypeFilter] = useState<'all' | 'survey' | 'offshore' | 'support'>('all')
+
+  const displayedVessels = useMemo(() => {
+    if (typeFilter === 'all') return vessels
+    return vessels.filter((v) => {
+      const t = (v.vesselType || '').toLowerCase()
+      if (typeFilter === 'survey') return t.includes('survey') || t.includes('research') || t.includes('seismic')
+      if (typeFilter === 'offshore') return t.includes('offshore') || t.includes('supply') || t.includes('platform')
+      if (typeFilter === 'support') return t.includes('tug') || t.includes('support') || t.includes('utility')
+      return true
+    })
+  }, [vessels, typeFilter])
+
   const handleSearch = async (term: string) => {
     const trimmed = term.trim()
     if (!trimmed) return
@@ -184,6 +197,36 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
 
   return (
     <div className="mt-3 flex flex-col gap-3">
+      {/* Quick filter chips */}
+      <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
+        <span className="text-xs text-muted flex items-center gap-1 mr-1">
+          <Filter className="h-3 w-3" aria-hidden="true" />
+          Filter:
+        </span>
+        {[
+          { id: 'all', label: 'All vessels' },
+          { id: 'survey', label: 'Survey & Research' },
+          { id: 'offshore', label: 'Offshore & Supply' },
+          { id: 'support', label: 'Support & Tug' },
+        ].map((chip) => {
+          const isActive = typeFilter === chip.id
+          return (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setTypeFilter(chip.id as typeof typeFilter)}
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+                isActive
+                  ? 'bg-accent-soft border border-border-strong text-accent font-semibold shadow-xs'
+                  : 'bg-surface-raised border border-border-subtle text-secondary hover:text-primary hover:bg-surface-selected'
+              }`}
+            >
+              {chip.label}
+            </button>
+          )
+        })}
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <label htmlFor="vessel-search-input" className="sr-only">
@@ -193,10 +236,24 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
             id="vessel-search-input"
             type="search"
             placeholder="Search vessel name, IMO, MMSI, or callsign…"
-            className="w-full min-h-11 rounded-lg border border-border-subtle bg-surface px-3.5 py-2 text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
+            className="w-full min-h-11 rounded-lg border border-border-subtle bg-surface px-3.5 pr-9 py-2 text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('')
+                setSearchedQuery('')
+                void refetch({ name: '', limit: 20 })
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-primary transition-colors cursor-pointer rounded-full"
+              aria-label="Clear vessel search"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
         <button
           type="submit"
@@ -239,17 +296,17 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
         </p>
       )}
 
-      {searchedQuery && !loading && isConfigured && !error && vessels.length === 0 && (
+      {searchedQuery && !loading && isConfigured && !error && displayedVessels.length === 0 && (
         <p className="rounded-[10px] border border-border-subtle bg-surface-raised/30 p-4 text-center text-xs text-muted">
           No vessels found matching “{searchedQuery}”.
         </p>
       )}
 
-      {vessels.length > 0 && (
+      {displayedVessels.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between px-1 text-xs text-secondary">
             <span>
-              Found <strong className="font-semibold text-primary">{vessels.length}</strong> {vessels.length === 1 ? 'vessel' : 'vessels'}
+              Found <strong className="font-semibold text-primary">{displayedVessels.length}</strong> {displayedVessels.length === 1 ? 'vessel' : 'vessels'}
             </span>
             {isCached && (
               <span className="badge-neutral rounded-md px-1.5 py-0.5 font-mono text-xs">
@@ -263,7 +320,7 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
             role="region"
             aria-label="Vessel search results"
           >
-            {vessels.map((vessel) => (
+            {displayedVessels.map((vessel) => (
               <div
                 key={vessel.id || vessel.imo || vessel.mmsi || vessel.name}
                 className="flex flex-col gap-1.5 p-3 hover:bg-surface-raised/40 transition-colors"

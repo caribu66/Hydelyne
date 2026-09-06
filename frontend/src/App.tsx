@@ -678,6 +678,8 @@ export default function App() {
                 documentReviewVersion={documentReviewVersion}
                 isStaff={isStaffOrAdmin(user?.role)}
                 onShowToast={showToast}
+                onSelectProfile={(p) => setModalProfile(p)}
+                onMobilizeProfile={handleRequestMobilization}
                 searchControl={
                   <ModernHeroSearch
                     query={query}
