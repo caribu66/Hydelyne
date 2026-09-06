@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from app.config import get_settings
 
@@ -178,7 +178,7 @@ class MeilisearchClient:
             search_params["filter"] = (
                 f"{APPROVED_CREW_FILTER} AND {filters}" if filters else APPROVED_CREW_FILTER
             )
-            return index.search(query, search_params)
+            return cast(dict[str, Any], index.search(query, search_params))  # meilisearch client returns dict[str, Any] shape
 
         try:
             results = await asyncio.to_thread(_sync)
@@ -256,7 +256,7 @@ class MeilisearchClient:
             }
             if filters:
                 search_params["filter"] = filters
-            return index.search(query, search_params)
+            return cast(dict[str, Any], index.search(query, search_params))  # meilisearch client returns dict[str, Any] shape
 
         try:
             results = await asyncio.to_thread(_sync)

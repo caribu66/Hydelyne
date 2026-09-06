@@ -10,6 +10,22 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session should know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-06 — Code Correctness Checklist (Kilo)
+
+Created a 20-point pre-flight checklist documenting the gates to run before
+requesting review or merging.
+
+**What changed:**
+- `docs/CODE_CORRECTNESS.md` — New file with 20 items covering type safety,
+  linting, testing, dead code, boundaries, naming, file-size limits,
+  authorization, secrets, network safety, migrations, git hygiene, UI tokens,
+  dependency discipline, and API compatibility.
+
+**Why:** Provide a single reference for the team and CI agents that maps each
+best-practice category to a runnable command or concrete artifact check.
+
+**Follow-up:** None.
+
 ## 2026-09-06 — Unified Operations + Search Workspace (Antigravity)
 
 Merged the Operations dashboard and the Search Workspace into a single authenticated shell so the same Split / Cards / Matrix views never appear in two places simultaneously.

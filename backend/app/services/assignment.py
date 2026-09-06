@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 ACTIVE_ASSIGNMENT_STATUSES = {"confirmed", "on_board"}
 
 
-def _assignment_query_options():
+def _assignment_query_options() -> tuple[Any, ...]:
     """Eagerly load related models to prevent async greenlet lazy-load errors outside session."""
     return (
         selectinload(CampaignAssignment.crew_member),

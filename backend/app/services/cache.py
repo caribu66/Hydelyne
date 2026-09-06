@@ -25,7 +25,7 @@ async def get_redis() -> aioredis.Redis:
         # one call is genuinely unclassifiable by mypy — not a stub gap we
         # can route around. The module-level annotation above is what gives
         # every *caller* of get_redis() a real `Redis` type regardless.
-        _redis_pool = aioredis.from_url(  # type: ignore[no-untyped-call]
+        _redis_pool = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
