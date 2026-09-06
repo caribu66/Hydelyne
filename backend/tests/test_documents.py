@@ -191,7 +191,9 @@ async def test_contractor_upload_link_creates_a_review_queue_item(client, db_ses
 
 
 @pytest.mark.asyncio
-async def test_staff_cannot_create_request_for_another_staff_members_draft(client, db_session, monkeypatch):
+async def test_staff_cannot_create_request_for_another_staff_members_draft(
+    client, db_session, monkeypatch
+):
     """Staff must not be able to generate upload requests for another staff member's draft."""
     from app.services.crew import auth_service
 
@@ -725,7 +727,9 @@ async def test_resolve_document_review_by_document_id(client, db_session):
     crew_id = str(uuid.uuid4())
     doc_id = str(uuid.uuid4())
     db_session.add(
-        CrewMember(id=crew_id, full_name="Direct Doc Review Specialist", publication_status="approved")
+        CrewMember(
+            id=crew_id, full_name="Direct Doc Review Specialist", publication_status="approved"
+        )
     )
     doc = Document(
         id=doc_id,

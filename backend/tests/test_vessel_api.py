@@ -86,7 +86,10 @@ def test_coerce_position() -> None:
 @pytest.mark.asyncio
 async def test_unconfigured_service_fails_closed() -> None:
     svc = VesselApiService()
-    with patch("app.services.vessel_api._settings_snapshot", return_value=("", "https://api.vesselapi.com", 5.0, 120)):
+    with patch(
+        "app.services.vessel_api._settings_snapshot",
+        return_value=("", "https://api.vesselapi.com", 5.0, 120),
+    ):
         assert not svc.is_configured()
         with pytest.raises(VesselApiNotConfiguredError):
             await svc.search_vessels("Surveyor")
@@ -112,11 +115,15 @@ async def test_search_vessels_success_and_caching() -> None:
             }
         ]
     }
-    with patch("app.services.vessel_api._settings_snapshot", return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120)), \
-         patch.object(svc, "_get_cached", new_callable=AsyncMock, return_value=None), \
-         patch.object(svc, "_set_cached", new_callable=AsyncMock) as mock_set_cache, \
-         patch.object(svc, "_request", new_callable=AsyncMock, return_value=fake_response):
-
+    with (
+        patch(
+            "app.services.vessel_api._settings_snapshot",
+            return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120),
+        ),
+        patch.object(svc, "_get_cached", new_callable=AsyncMock, return_value=None),
+        patch.object(svc, "_set_cached", new_callable=AsyncMock) as mock_set_cache,
+        patch.object(svc, "_request", new_callable=AsyncMock, return_value=fake_response),
+    ):
         result = await svc.search_vessels("Fugro Pioneer", limit=10)
         assert len(result.vessels) == 1
         assert result.vessels[0].name == "Fugro Pioneer"
@@ -141,10 +148,14 @@ async def test_search_vessels_from_cache() -> None:
         ],
         "upstream_count": 1,
     }
-    with patch("app.services.vessel_api._settings_snapshot", return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120)), \
-         patch.object(svc, "_get_cached", new_callable=AsyncMock, return_value=cached_payload), \
-         patch.object(svc, "_request", new_callable=AsyncMock) as mock_request:
-
+    with (
+        patch(
+            "app.services.vessel_api._settings_snapshot",
+            return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120),
+        ),
+        patch.object(svc, "_get_cached", new_callable=AsyncMock, return_value=cached_payload),
+        patch.object(svc, "_request", new_callable=AsyncMock) as mock_request,
+    ):
         result = await svc.search_vessels("Fugro Pioneer", limit=10)
         assert len(result.vessels) == 1
         assert result.cached is True
@@ -154,7 +165,10 @@ async def test_search_vessels_from_cache() -> None:
 @pytest.mark.asyncio
 async def test_search_vessels_validation_bounds() -> None:
     svc = VesselApiService()
-    with patch("app.services.vessel_api._settings_snapshot", return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120)):
+    with patch(
+        "app.services.vessel_api._settings_snapshot",
+        return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120),
+    ):
         with pytest.raises(ValueError, match="limit must be between 1 and 50"):
             await svc.search_vessels("Test", limit=0)
         with pytest.raises(ValueError, match="limit must be between 1 and 50"):
@@ -164,7 +178,10 @@ async def test_search_vessels_validation_bounds() -> None:
 @pytest.mark.asyncio
 async def test_vessels_in_radius_bounds() -> None:
     svc = VesselApiService()
-    with patch("app.services.vessel_api._settings_snapshot", return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120)):
+    with patch(
+        "app.services.vessel_api._settings_snapshot",
+        return_value=("mock-key", "https://api.vesselapi.com", 5.0, 120),
+    ):
         with pytest.raises(ValueError, match="latitude out of range"):
             await svc.vessels_in_radius(latitude=95.0, longitude=0.0, radius_m=1000)
         with pytest.raises(ValueError, match="longitude out of range"):

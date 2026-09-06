@@ -14,7 +14,9 @@ from app.models import CrewMember, Project, Vessel
 from app.services.assignment import assignment_service
 
 
-async def _create_test_crew(db_session: Any, name: str = "Morgan Reed", availability: str = "available") -> CrewMember:
+async def _create_test_crew(
+    db_session: Any, name: str = "Morgan Reed", availability: str = "available"
+) -> CrewMember:
     crew = CrewMember(
         id=str(uuid.uuid4()),
         full_name=name,
@@ -77,7 +79,9 @@ async def test_create_assignment_persists_vessel_and_assignment(db_session: Any)
         assert vessel.name == "Fugro Pioneer"
 
         # Verify crew availability synchronized to on_assignment
-        crew_row = (await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))).scalar_one()
+        crew_row = (
+            await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))
+        ).scalar_one()
         assert crew_row.availability_status == "on_assignment"
         assert crew_row.availability_date == end
 
@@ -131,14 +135,18 @@ async def test_update_status_resets_availability(db_session: Any) -> None:
             end_date=end,
             status="confirmed",
         )
-        crew_row = (await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))).scalar_one()
+        crew_row = (
+            await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))
+        ).scalar_one()
         assert crew_row.availability_status == "on_assignment"
 
         # Complete assignment
         updated = await assignment_service.update_status(assignment.id, "completed")
         assert updated.status == "completed"
 
-        crew_row_done = (await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))).scalar_one()
+        crew_row_done = (
+            await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))
+        ).scalar_one()
         assert crew_row_done.availability_status == "available"
         assert crew_row_done.availability_date is None
 
@@ -321,13 +329,17 @@ async def test_multi_assignment_lifecycle_and_remaining_date(db_session: Any) ->
 
         # Complete first assignment — should NOT set available, should preserve end date of a2
         await assignment_service.update_status(a1.id, "completed")
-        c_row = (await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))).scalar_one()
+        c_row = (
+            await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))
+        ).scalar_one()
         assert c_row.availability_status == "on_assignment"
         assert c_row.availability_date == end2
 
         # Complete second assignment — now should be available
         await assignment_service.update_status(a2.id, "completed")
-        c_row_done = (await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))).scalar_one()
+        c_row_done = (
+            await db_session.execute(select(CrewMember).where(CrewMember.id == crew.id))
+        ).scalar_one()
         assert c_row_done.availability_status == "available"
         assert c_row_done.availability_date is None
 
@@ -606,4 +618,3 @@ async def test_created_assignment_has_relations_loaded_and_graphql_mapped(db_ses
         assert gql_type.crew_name == "Eager Loaded Specialist"
         assert gql_type.vessel_name == "Ocean Pioneer"
         assert gql_type.role_on_board == "Survey Lead"
-

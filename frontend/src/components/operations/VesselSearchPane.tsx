@@ -163,7 +163,7 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
   )
 
   const isConfigured = data?.vesselSearch?.configured !== false
-  const vessels = data?.vesselSearch?.vessels ?? []
+  const vessels = useMemo(() => data?.vesselSearch?.vessels ?? [], [data?.vesselSearch?.vessels])
   const isCached = data?.vesselSearch?.cached ?? false
 
   const [typeFilter, setTypeFilter] = useState<'all' | 'survey' | 'offshore' | 'support'>('all')

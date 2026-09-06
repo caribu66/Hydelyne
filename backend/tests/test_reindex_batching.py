@@ -26,22 +26,25 @@ async def test_reindex_all_crew_keyset_batching():
         await session.commit()
 
     # Mock meilisearch client batch methods
-    with patch(
-        "app.services.consultant_knowledge.meilisearch_client.index_crew_members",
-        new_callable=AsyncMock,
-    ) as mock_index_batch, patch(
-        "app.services.consultant_knowledge.meilisearch_client.delete_crew_members",
-        new_callable=AsyncMock,
-    ) as mock_delete_batch:
+    with (
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.index_crew_members",
+            new_callable=AsyncMock,
+        ) as mock_index_batch,
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.delete_crew_members",
+            new_callable=AsyncMock,
+        ) as mock_delete_batch,
+    ):
         mock_index_batch.return_value = {"task_uid": 123}
         mock_delete_batch.return_value = True
 
         # Run with batch_size=2 to force multi-chunk keyset pagination
-        total_approved, total_indexed, total_removed = (
-            await consultant_knowledge_service.reindex_all_crew(
-                test_session_factory, batch_size=2
-            )
-        )
+        (
+            total_approved,
+            total_indexed,
+            total_removed,
+        ) = await consultant_knowledge_service.reindex_all_crew(test_session_factory, batch_size=2)
 
         assert total_approved >= 3
         assert total_indexed >= 3

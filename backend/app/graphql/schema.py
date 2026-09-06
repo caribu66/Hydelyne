@@ -671,14 +671,18 @@ class Query:
         end_date: str,
     ) -> AssignmentComplianceReportType:
         from datetime import date
+
         from graphql import GraphQLError
+
         from app.services.assignment import assignment_service
 
         try:
             start = date.fromisoformat(start_date)
             end = date.fromisoformat(end_date)
         except Exception as exc:
-            raise GraphQLError(f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}) from exc
+            raise GraphQLError(
+                f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}
+            ) from exc
 
         try:
             report = await assignment_service.evaluate_compliance(
@@ -1180,7 +1184,9 @@ class Mutation:
             start = date.fromisoformat(input.start_date)
             end = date.fromisoformat(input.end_date)
         except Exception as exc:
-            raise GraphQLError(f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}) from exc
+            raise GraphQLError(
+                f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}
+            ) from exc
 
         status_val = input.status.value if input.status else "proposed"
 

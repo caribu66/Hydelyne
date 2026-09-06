@@ -17,7 +17,6 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import select
 
 from app.models import Certification, CrewMember, WorkHistory
 from app.services.crew import CrewService
@@ -89,7 +88,7 @@ async def test_search_handles_sql_injection_payloads(db_session: Any) -> None:
             "' OR '1'='1",
             "'; DROP TABLE crew_members; --",
             "admin' --",
-            "\" OR \"\"=\"",
+            '" OR ""="',
             "1' UNION SELECT NULL, NULL, NULL--",
             "'; WAITFOR DELAY '0:0:5'--",
             "1 AND 1=1",
@@ -105,7 +104,7 @@ async def test_search_handles_sql_injection_payloads(db_session: Any) -> None:
 @pytest.mark.asyncio
 async def test_search_handles_wildcard_characters_safely(db_session: Any) -> None:
     """Special LIKE wildcards must not cause server errors."""
-    crew = await _create_test_crew_member(
+    await _create_test_crew_member(
         db_session,
         full_name="Percent%Special",
         email="percent@example.com",
@@ -122,7 +121,7 @@ async def test_search_handles_wildcard_characters_safely(db_session: Any) -> Non
 @pytest.mark.asyncio
 async def test_search_handles_extremely_long_strings(db_session: Any) -> None:
     """Very large search payloads must not crash or cause unbounded resource spikes."""
-    crew = await _create_test_crew_member(
+    await _create_test_crew_member(
         db_session,
         full_name="Standard Specialist",
         email="standard@example.com",

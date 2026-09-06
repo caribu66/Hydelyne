@@ -150,7 +150,7 @@ export function useSearchWorkspace({
 
     const aiMatchedIds = aiQueryData?.results?.map((r) => r.id) || []
     return sortProfiles(list, sortBy, committedQuery, aiMatchedIds)
-  }, [isSearchActive, committedQuery, showSavedOnly, isBookmarked, sortBy, filters, allProfiles, aiQueryData, aiQueryActive])
+  }, [committedQuery, showSavedOnly, isBookmarked, sortBy, filters, allProfiles, aiQueryData, aiQueryActive])
 
   // Keep first result selected in split-view if current selection is invalid
   useEffect(() => {

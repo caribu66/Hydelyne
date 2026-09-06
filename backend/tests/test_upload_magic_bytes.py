@@ -115,7 +115,9 @@ async def test_upload_exe_rejected_by_extension(client):
 @pytest.mark.asyncio
 async def test_upload_eml_with_rfc5322_headers_accepted(client):
     """Standard RFC 5322 .eml files starting with From: or Date: must be accepted."""
-    eml_content = b"From: operations@hydenlyne.com\nTo: crew@example.com\nSubject: Mobilization\n\nDetails"
+    eml_content = (
+        b"From: operations@hydenlyne.com\nTo: crew@example.com\nSubject: Mobilization\n\nDetails"
+    )
     response = await client.post(
         "/api/documents/upload",
         data={"crew_id": "test-crew-id"},

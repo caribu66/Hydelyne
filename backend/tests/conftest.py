@@ -14,9 +14,7 @@ DEFAULT_TEST_DATABASE_URL = f"sqlite+aiosqlite:////tmp/hydenlyne-test-{os.getpid
 # ``app.auth.session``; without these overrides the test would inherit whatever
 # the host environment happens to have.
 os.environ.setdefault("APP_ENV", "development")
-os.environ.setdefault(
-    "DATABASE_URL", os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
-)
+os.environ.setdefault("DATABASE_URL", os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("SESSION_SECRET_KEY", "test_secret_key_at_least_32_chars_long_xx")
 

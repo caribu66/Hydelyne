@@ -173,7 +173,9 @@ class AssignmentService:
     async def update_status(self, assignment_id: str, new_status: str) -> CampaignAssignment:
         valid_statuses = {"proposed", "confirmed", "on_board", "completed", "cancelled"}
         if new_status not in valid_statuses:
-            raise ValueError(f"Invalid assignment status {new_status}; expected one of {sorted(valid_statuses)}")
+            raise ValueError(
+                f"Invalid assignment status {new_status}; expected one of {sorted(valid_statuses)}"
+            )
 
         factory = get_session_factory()
         async with factory() as session:
@@ -268,125 +270,189 @@ class AssignmentService:
 
             # Check 1: Schedule Conflicts
             if conflicts:
-                overlap_desc = ", ".join(f"IMO {a.vessel_imo} ({a.start_date} to {a.end_date})" for a in conflicts)
-                issues.append(f"Schedule conflict: specialist has active assignment on {overlap_desc}")
-                checks.append({
-                    "item": "Schedule Conflict",
-                    "status": "fail",
-                    "detail": f"Active assignment overlaps: {overlap_desc}",
-                })
+                overlap_desc = ", ".join(
+                    f"IMO {a.vessel_imo} ({a.start_date} to {a.end_date})" for a in conflicts
+                )
+                issues.append(
+                    f"Schedule conflict: specialist has active assignment on {overlap_desc}"
+                )
+                checks.append(
+                    {
+                        "item": "Schedule Conflict",
+                        "status": "fail",
+                        "detail": f"Active assignment overlaps: {overlap_desc}",
+                    }
+                )
             else:
-                checks.append({
-                    "item": "Schedule Conflict",
-                    "status": "pass",
-                    "detail": "No overlapping vessel assignments",
-                })
+                checks.append(
+                    {
+                        "item": "Schedule Conflict",
+                        "status": "pass",
+                        "detail": "No overlapping vessel assignments",
+                    }
+                )
 
             # Check 2: Offshore Medical Expiry
             med_expiry = crew.medical_expiry
             med_name = "Offshore Medical"
             med_certs = [
-                c for c in certs
+                c
+                for c in certs
                 if any(k in (c.cert_type or "").lower() for k in ("medical", "oguk", "oeuk"))
             ]
             if med_certs:
                 dated_meds = [c for c in med_certs if c.expiry_date]
                 if dated_meds:
                     best_med = max(dated_meds, key=lambda c: c.expiry_date or date.min)
-                    if not med_expiry or (best_med.expiry_date and best_med.expiry_date > med_expiry):
+                    if not med_expiry or (
+                        best_med.expiry_date and best_med.expiry_date > med_expiry
+                    ):
                         med_expiry = best_med.expiry_date
                         med_name = best_med.cert_type
-                elif not med_expiry and any(c.status == "valid" or c.verification_status == "verified" for c in med_certs):
+                elif not med_expiry and any(
+                    c.status == "valid" or c.verification_status == "verified" for c in med_certs
+                ):
                     med_name = med_certs[0].cert_type
 
             if not med_expiry:
-                if med_certs and any(c.status == "valid" or c.verification_status == "verified" for c in med_certs):
-                    checks.append({
-                        "item": "Offshore Medical",
-                        "status": "pass",
-                        "detail": f"{med_name} verified on file",
-                    })
+                if med_certs and any(
+                    c.status == "valid" or c.verification_status == "verified" for c in med_certs
+                ):
+                    checks.append(
+                        {
+                            "item": "Offshore Medical",
+                            "status": "pass",
+                            "detail": f"{med_name} verified on file",
+                        }
+                    )
                 else:
                     issues.append("No offshore medical certificate expiry on record")
-                    checks.append({
-                        "item": "Offshore Medical",
-                        "status": "warn",
-                        "detail": "Medical expiry date missing or not verified",
-                    })
+                    checks.append(
+                        {
+                            "item": "Offshore Medical",
+                            "status": "warn",
+                            "detail": "Medical expiry date missing or not verified",
+                        }
+                    )
             elif med_expiry < start_date:
                 issues.append(f"Medical expired on {med_expiry.isoformat()} prior to mobilization")
-                checks.append({
-                    "item": "Offshore Medical",
-                    "status": "fail",
-                    "detail": f"Expired {med_expiry.isoformat()}",
-                })
+                checks.append(
+                    {
+                        "item": "Offshore Medical",
+                        "status": "fail",
+                        "detail": f"Expired {med_expiry.isoformat()}",
+                    }
+                )
             elif med_expiry <= end_date:
                 issues.append(f"Medical expires during campaign on {med_expiry.isoformat()}")
-                checks.append({
-                    "item": "Offshore Medical",
-                    "status": "warn",
-                    "detail": f"Expires during campaign on {med_expiry.isoformat()}",
-                })
+                checks.append(
+                    {
+                        "item": "Offshore Medical",
+                        "status": "warn",
+                        "detail": f"Expires during campaign on {med_expiry.isoformat()}",
+                    }
+                )
             else:
-                checks.append({
-                    "item": "Offshore Medical",
-                    "status": "pass",
-                    "detail": f"Valid through {med_expiry.isoformat()}",
-                })
+                checks.append(
+                    {
+                        "item": "Offshore Medical",
+                        "status": "pass",
+                        "detail": f"Valid through {med_expiry.isoformat()}",
+                    }
+                )
 
             # Check 3: Offshore Survival (BOSIET / FOET)
             survival_certs = [
-                c for c in certs
-                if any(k in (c.cert_type or "").lower() for k in ("bosiet", "foet", "survival", "opito", "ca-ebs"))
+                c
+                for c in certs
+                if any(
+                    k in (c.cert_type or "").lower()
+                    for k in ("bosiet", "foet", "survival", "opito", "ca-ebs")
+                )
             ]
             if not survival_certs:
                 issues.append("No BOSIET/FOET offshore survival certificate recorded")
-                checks.append({
-                    "item": "Survival / BOSIET",
-                    "status": "warn",
-                    "detail": "No OPITO survival certificate found in records",
-                })
+                checks.append(
+                    {
+                        "item": "Survival / BOSIET",
+                        "status": "warn",
+                        "detail": "No OPITO survival certificate found in records",
+                    }
+                )
             else:
-                valid_survival = [c for c in survival_certs if c.expiry_date and c.expiry_date >= end_date]
-                expiring_survival = [c for c in survival_certs if c.expiry_date and start_date <= c.expiry_date < end_date]
-                expired_survival = [c for c in survival_certs if c.expiry_date and c.expiry_date < start_date]
+                valid_survival = [
+                    c for c in survival_certs if c.expiry_date and c.expiry_date >= end_date
+                ]
+                expiring_survival = [
+                    c
+                    for c in survival_certs
+                    if c.expiry_date and start_date <= c.expiry_date < end_date
+                ]
+                expired_survival = [
+                    c for c in survival_certs if c.expiry_date and c.expiry_date < start_date
+                ]
 
                 if valid_survival:
                     best = max(valid_survival, key=lambda c: c.expiry_date or date.min)
                     best_expiry = best.expiry_date.isoformat() if best.expiry_date else "valid"
-                    checks.append({
-                        "item": "Survival / BOSIET",
-                        "status": "pass",
-                        "detail": f"{best.cert_type} valid through {best_expiry}",
-                    })
+                    checks.append(
+                        {
+                            "item": "Survival / BOSIET",
+                            "status": "pass",
+                            "detail": f"{best.cert_type} valid through {best_expiry}",
+                        }
+                    )
                 elif expiring_survival:
-                    exp_date = expiring_survival[0].expiry_date.isoformat() if expiring_survival[0].expiry_date else "soon"
-                    issues.append(f"Survival certificate {expiring_survival[0].cert_type} expires during campaign on {exp_date}")
-                    checks.append({
-                        "item": "Survival / BOSIET",
-                        "status": "warn",
-                        "detail": f"Expires during campaign on {exp_date}",
-                    })
+                    exp_date = (
+                        expiring_survival[0].expiry_date.isoformat()
+                        if expiring_survival[0].expiry_date
+                        else "soon"
+                    )
+                    issues.append(
+                        f"Survival certificate {expiring_survival[0].cert_type} expires during campaign on {exp_date}"
+                    )
+                    checks.append(
+                        {
+                            "item": "Survival / BOSIET",
+                            "status": "warn",
+                            "detail": f"Expires during campaign on {exp_date}",
+                        }
+                    )
                 elif expired_survival:
-                    exp_date = expired_survival[0].expiry_date.isoformat() if expired_survival[0].expiry_date else "past"
-                    issues.append(f"Survival certificate {expired_survival[0].cert_type} expired on {exp_date}")
-                    checks.append({
-                        "item": "Survival / BOSIET",
-                        "status": "fail",
-                        "detail": f"Expired on {exp_date}",
-                    })
-                elif any(c.status == "valid" or c.verification_status == "verified" for c in survival_certs):
-                    checks.append({
-                        "item": "Survival / BOSIET",
-                        "status": "pass",
-                        "detail": f"{survival_certs[0].cert_type} verified on file",
-                    })
+                    exp_date = (
+                        expired_survival[0].expiry_date.isoformat()
+                        if expired_survival[0].expiry_date
+                        else "past"
+                    )
+                    issues.append(
+                        f"Survival certificate {expired_survival[0].cert_type} expired on {exp_date}"
+                    )
+                    checks.append(
+                        {
+                            "item": "Survival / BOSIET",
+                            "status": "fail",
+                            "detail": f"Expired on {exp_date}",
+                        }
+                    )
+                elif any(
+                    c.status == "valid" or c.verification_status == "verified"
+                    for c in survival_certs
+                ):
+                    checks.append(
+                        {
+                            "item": "Survival / BOSIET",
+                            "status": "pass",
+                            "detail": f"{survival_certs[0].cert_type} verified on file",
+                        }
+                    )
                 else:
-                    checks.append({
-                        "item": "Survival / BOSIET",
-                        "status": "warn",
-                        "detail": "Survival certificate recorded with open expiry",
-                    })
+                    checks.append(
+                        {
+                            "item": "Survival / BOSIET",
+                            "status": "warn",
+                            "detail": "Survival certificate recorded with open expiry",
+                        }
+                    )
 
             if any(c["status"] == "fail" for c in checks):
                 verdict = "critical"
@@ -406,4 +472,3 @@ class AssignmentService:
 
 
 assignment_service = AssignmentService()
-

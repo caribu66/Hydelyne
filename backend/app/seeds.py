@@ -12,8 +12,9 @@ Only runs when APP_ENV != "production" to avoid contaminating real data.
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+import logging
 import uuid
+from datetime import date
 
 from sqlalchemy import select
 
@@ -239,12 +240,15 @@ async def seed_user(
         return user
 
 
+logger = logging.getLogger(__name__)
+
+
 async def main() -> None:
     from app.config import get_settings
 
     settings = get_settings()
     if settings.APP_ENV == "production":
-        print("Refusing to seed in production (APP_ENV=production).")
+        logger.warning("Refusing to seed in production (APP_ENV=production).")
         return
 
     # Ensure tables exist for the dev sqlite path (create_all), same as init_db
@@ -253,17 +257,16 @@ async def main() -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     except Exception as e:  # pragma: no cover
-        print(f"Table init skipped: {e}")
+        logger.warning("Table init skipped: %s", e)
 
     n = await seed_all()
-    print(f"Seeded {n} crew members (idempotent).")
+    logger.info("Seeded %d crew members (idempotent).", n)
 
     admin = await bootstrap_admin()
-    # Non-admin ops user for testing RBAC (non-default password)
     ops = await seed_user("ops@hydenlyne.com", "OpsPass_123!x", "Ops User", "user")
-    print(f"Admin bootstrapped: {admin.email if admin else '(none configured)'}")
-    print(f"Ops user ready: {ops.email} (role={ops.role})")
-    print("Login accounts: admin (ADMIN_EMAIL) / ops@hydenlyne.com / OpsPass_123!x")
+    logger.info("Admin bootstrapped: %s", admin.email if admin else "(none configured)")
+    logger.info("Ops user ready: %s (role=%s)", ops.email, ops.role)
+    logger.info("Login accounts: admin (ADMIN_EMAIL) / ops@hydenlyne.com / OpsPass_123!x")
 
 
 if __name__ == "__main__":
