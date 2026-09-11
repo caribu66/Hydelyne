@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy import and_, or_, select
@@ -19,6 +19,103 @@ from app.models import WorkHistory as WorkHistoryModel
 from app.services.ollama import ollama_client
 
 logger = logging.getLogger(__name__)
+
+
+class CrewQueryEntities(TypedDict, total=False):
+    certifications: list[str]
+    skills: list[str]
+    location: str | None
+    nationality: str | None
+    certification_keywords: list[str]
+    min_experience_years: float | None
+    max_experience_years: float | None
+    availability: str | None
+    availability_by: str | None
+    project_type: str | None
+    crew_name: str | None
+    medical_required: bool | None
+    medical_valid: bool | None
+    certifications_valid: bool | None
+
+
+class CrewQueryLLMResponse(TypedDict, total=False):
+    intent: str
+    entities: CrewQueryEntities
+    confidence: float | None
+
+
+_INTENT_VALUES = {"search", "summarize", "compliance", "matching", "general"}
+_AVAILABILITY_VALUES = {"available immediately", "available", "unavailable", "on assignment"}
+
+
+def _validate_llm_response(raw: dict[str, Any]) -> CrewQueryLLMResponse:
+    """Validate and sanitize the LLM classification payload.
+
+    The local Ollama model is instructed to return a fixed JSON shape, but
+    LLM output is untrusted input. This function enforces the expected types
+    and drops malformed values rather than propagating them into database
+    filters.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError("Intent classifier returned a non-object response")
+
+    intent = raw.get("intent", "general")
+    if not isinstance(intent, str) or intent not in _INTENT_VALUES:
+        intent = "general"
+
+    entities = raw.get("entities", {})
+    if not isinstance(entities, dict):
+        entities = {}
+
+    certified: CrewQueryEntities = {}
+    for field in (
+        "certifications",
+        "skills",
+        "certification_keywords",
+    ):
+        value = entities.get(field)
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            certified[field] = value  # type: ignore[literal-required]
+        elif value is not None:
+            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+
+    for field in (
+        "location",
+        "nationality",
+        "project_type",
+        "crew_name",
+        "availability",
+        "availability_by",
+    ):
+        value = entities.get(field)
+        if isinstance(value, str):
+            certified[field] = value  # type: ignore[literal-required]
+        elif value is not None:
+            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+
+    for field in ("min_experience_years", "max_experience_years"):
+        value = entities.get(field)
+        if isinstance(value, (int, float)):
+            certified[field] = float(value)  # type: ignore[literal-required]
+        elif value is not None:
+            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+
+    for field in ("medical_required", "medical_valid", "certifications_valid"):
+        value = entities.get(field)
+        if isinstance(value, bool):
+            certified[field] = value  # type: ignore[literal-required]
+        elif value is not None:
+            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+
+    if certified.get("availability") not in _AVAILABILITY_VALUES:
+        certified.pop("availability", None)
+
+    confidence = raw.get("confidence")
+    if not isinstance(confidence, (int, float)) or not (0.0 <= float(confidence) <= 1.0):
+        confidence = None
+
+    return CrewQueryLLMResponse(intent=intent, entities=certified, confidence=confidence)
+
 
 CREW_QUERY_PROMPTS = {
     "intent_classification": """Classify the user's query about crew members into one of these intents:
@@ -148,9 +245,8 @@ class CrewQueryService:
             result = await ollama_client.extract(prompt)
             response_text = result.get("response", "")
             classified = json.loads(response_text)
-            if not isinstance(classified, dict):
-                raise ValueError("Intent classifier returned a non-object response")
-            return apply_deterministic_query_rules(query, classified)
+            validated = _validate_llm_response(classified)
+            return apply_deterministic_query_rules(query, dict(validated))
         except Exception as e:
             logger.error(f"Intent classification failed: {e}")
             # Search remains useful when the local model is unavailable.
@@ -356,21 +452,15 @@ class CrewQueryService:
         if filters:
             stmt = stmt.where(and_(*filters))
 
+        # Rank in SQL before the limit so the top-20 are the global
+        # best, not the best of an arbitrary first-20 slice.
+        stmt = stmt.order_by(
+            (CrewMemberModel.availability_status == "available").desc(),
+            CrewMemberModel.experience_months.desc().nulls_last(),
+            CrewMemberModel.profile_completeness_score.desc().nulls_last(),
+        )
         result = await db_session.execute(stmt.limit(20))
         crew_list = list(result.scalars().unique().all())
-
-        # Once every hard requirement is met, rank deterministically on the
-        # information agents actually care about: ready to mobilize first,
-        # then the most audited experience. Never let incidental keyword hits
-        # decide the top candidate.
-        crew_list.sort(
-            key=lambda crew: (
-                crew.availability_status == "available",
-                crew.experience_months or 0,
-                crew.profile_completeness_score or 0,
-            ),
-            reverse=True,
-        )
 
         if not crew_list:
             return {

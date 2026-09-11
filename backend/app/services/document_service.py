@@ -57,11 +57,18 @@ class DocumentService:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_documents_by_crew(self, crew_id: str, limit: int = 50, offset: int = 0) -> list[DocumentModel]:
+    async def get_documents_by_crew(
+        self, crew_id: str, limit: int = 50, offset: int = 0
+    ) -> list[DocumentModel]:
         """Get all documents belonging to a crew member."""
         factory = get_session_factory()
         async with factory() as session:
-            stmt = select(DocumentModel).where(DocumentModel.crew_member_id == crew_id).limit(limit).offset(offset)
+            stmt = (
+                select(DocumentModel)
+                .where(DocumentModel.crew_member_id == crew_id)
+                .limit(limit)
+                .offset(offset)
+            )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
@@ -119,7 +126,7 @@ class DocumentService:
             # Ensure file is available locally (download from Dropbox if needed)
             local_path = doc.storage_path
             if doc.storage_type == "dropbox" and doc.dropbox_path:
-                local_content = document_upload_service.get_file(doc.dropbox_path)
+                local_content = await document_upload_service.get_file_async(doc.dropbox_path)
                 if local_content is None:
                     local_content = await document_upload_service.download_from_dropbox(
                         doc.dropbox_path

@@ -140,14 +140,18 @@ class CacheService:
             return False
 
     async def increment_rate_limit(self, key: str, window_seconds: int) -> Optional[int]:
-        """Increment rate limit counter and return current count."""
+        """Increment rate limit counter and return current count.
+
+        Fixed window: TTL is set only when the counter is first created so
+        sustained traffic cannot extend the window indefinitely.
+        Returns None when Redis is unavailable (caller decides fail-open/closed).
+        """
         try:
             redis = await self._get_redis()
-            pipe = redis.pipeline()
-            pipe.incr(key)
-            pipe.expire(key, window_seconds)
-            results = await pipe.execute()
-            return int(results[0])
+            count = int(await redis.incr(key))
+            if count == 1:
+                await redis.expire(key, window_seconds)
+            return count
         except Exception as e:
             logger.warning(f"Rate limit increment failed: {e}")
             return None

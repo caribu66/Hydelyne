@@ -120,6 +120,34 @@ async def test_create_assignment_schedule_conflict_rejected(db_session: Any) -> 
 
 
 @pytest.mark.asyncio
+async def test_update_status_to_active_rejects_overlap(db_session: Any) -> None:
+    """Proposed overlapping bookings must not escalate to active via update_status."""
+    crew = await _create_test_crew(db_session, "Frank Poole")
+
+    with patch("app.services.assignment.get_session_factory", return_value=lambda: db_session):
+        active = await assignment_service.create_assignment(
+            crew_member_id=crew.id,
+            vessel_imo="9683934",
+            role_on_board="Party Chief",
+            start_date=date(2026, 11, 1),
+            end_date=date(2026, 11, 20),
+            status="confirmed",
+        )
+        assert active.status == "confirmed"
+
+        overlapping = await assignment_service.create_assignment(
+            crew_member_id=crew.id,
+            vessel_imo="9700000",
+            role_on_board="Client Rep",
+            start_date=date(2026, 11, 10),
+            end_date=date(2026, 11, 30),
+            status="proposed",
+        )
+        with pytest.raises(ValueError, match="already has an active assignment overlapping"):
+            await assignment_service.update_status(overlapping.id, "confirmed")
+
+
+@pytest.mark.asyncio
 async def test_update_status_resets_availability(db_session: Any) -> None:
     crew = await _create_test_crew(db_session, "Ellen Ripley")
 

@@ -282,7 +282,9 @@ class ComplianceAlertService:
         try:
             client = _get_sync_redis_client()
             for crew_id in crew_ids:
-                key_data = f"compliance:{crew_id}:{{}}"
+                # Must match CacheService._make_key("compliance", crew_id):
+                # f"compliance:{json.dumps([crew_id])}:{{}}"
+                key_data = f"compliance:{json.dumps([crew_id], sort_keys=True, default=str)}:{json.dumps({}, sort_keys=True, default=str)}"
                 hashed = hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
                 client.delete(f"hydenlyne:compliance:{hashed}")
             client.close()

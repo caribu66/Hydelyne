@@ -10,6 +10,94 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session needs to know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-11 — High-Severity Hidden-Bug Fixes (Muse Spark)
+
+Fixed 11 verified high-severity bugs across auth, booking, cache, queries,
+reports, and prod ops: `useAuth` now persists the login token via
+`setAuthToken`; `update_status` rejects escalation to active on overlapping
+windows (+ regression test); compliance cache invalidation now matches
+`CacheService._make_key`; Dockerfile entrypoint uses `set -e` so failed
+migrations block startup; `backup.sh` strips `+asyncpg` for `pg_dump` and no
+longer logs `DATABASE_URL`; async doc path uses new `get_file_async`;
+`crew_query` ranks in SQL before `LIMIT 20`; `build_report_data` accepts
+filters and returns `COUNT(*)` totals; login rate limit uses a fixed window
+with explicit Redis-down warning; unknown availability maps fail-closed to
+`Unavailable`; prod overlay uses `!reset []` to actually clear ports/volumes.
+
+**Why:** Close session loss, double-booking, stale compliance, silent
+migration/backup failure, event-loop crash, ranking truncation, unfiltered
+reports, and prod port/volume leakage.
+
+**Follow-up:** Verify prod overlay with `docker compose config`; confirm
+`requirements-prod.txt` + `scripts/backup.sh` are tracked; consider
+mappers/frontend regression test and remaining medium-severity leads.
+
+## 2026-09-06 — Natural Language Search Accuracy Hardening (Kilo)
+
+Improved the reliability and correctness of natural language search by adding
+LLM output validation, fixing a frontend result-truncation bug, and expanding
+test coverage.
+
+**What changed:**
+- `backend/app/services/crew_query.py` — Added `_validate_llm_response()` which
+  validates the Ollama JSON payload against a typed schema before it reaches
+  database filters. Malformed types are dropped with a warning instead of
+  causing silent query corruption.
+- `frontend/src/hooks/useSearchWorkspace.ts` — Fixed AI result merging: when
+  the backend AI search matches the current query, the workspace now trusts the
+  AI result set as the source of truth and synthesizes minimal profiles for
+  specialists not present in the local roster, instead of silently dropping
+  them.
+- `frontend/src/hooks/useCrewQuery.ts` — Exported `isNaturalLanguage()` and
+  `shouldShowSummary()` for unit testing.
+- `frontend/src/hooks/useCrewQuery.test.ts` — New test file covering NL
+  detection heuristics and summary display rules.
+- `backend/tests/test_crew_query.py` — Added 5 regression tests for LLM
+  payload validation (valid payload, malformed types, invalid intent,
+  non-dict input, out-of-range availability).
+
+**Why:** The previous implementation trusted raw `json.loads()` output from the
+local LLM and silently truncated AI search results to the currently loaded
+client-side roster, causing valid specialists to disappear from search results.
+
+**Follow-up:** Consider adding a labeled precision/recall benchmark set for NL
+queries and expanding `isNaturalLanguage()` heuristics to cover more concise
+query patterns.
+
+## 2026-09-06 — Production Readiness Hardening (Kilo)
+
+Prepared the application for production deployment by hardening operational
+controls, container configuration, and deployment documentation.
+
+**What changed:**
+- `docker-compose.prod.yml` — Set `APP_ENV=production` on every service,
+  added `restart: unless-stopped`, memory/CPU resource limits, removed internal
+  port publishes, and excluded Flower and dev volume mounts from the production
+  override.
+- `backend/Dockerfile` — Added `--graceful-timeout 30` and
+  `--timeout-graceful-shutdown 30` to the uvicorn command for clean container
+  termination.
+- `backend/app/main.py` — Tightened CORS: localhost origins are now only
+  included in non-production environments so a missing `CORS_ORIGINS` cannot
+  silently leave dev origins open in production.
+- `frontend/nginx.conf.template` — Restricted `/health` to `GET` requests
+  using `limit_except` to prevent method-based abuse.
+- `backend/requirements-prod.txt` — New production-optimised dependency list
+  (runtime deps only, Flower moved to dev).
+- `backend/scripts/backup.sh` — New PostgreSQL backup script producing
+  compressed, timestamped dumps with 7-day retention.
+- `README.md` — Added a Production Deployment section covering environment
+  variables, backup strategy, observability, and restart/resource policies.
+  Fixed outdated test instructions and service references.
+
+**Why:** Close operational gaps identified during production readiness review:
+  uncontrolled dev-mode exposure, unbounded container restarts, missing backup
+  strategy, and oversized production images.
+
+**Follow-up:** Consider adding a Prometheus metrics endpoint and automated
+  backup cron service inside the Compose network for fully self-hosted
+  deployments.
+
 ## 2026-09-06 — Performance Optimization Pass (Kilo)
 
 Addressed unbounded queries, missing indexes, cache invalidation scaling,

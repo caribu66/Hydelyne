@@ -70,7 +70,7 @@ export interface UseCrewQueryReturn {
 
 const QUESTION_WORDS = ['who', 'what', 'where', 'when', 'why', 'how', 'find', 'show', 'list', 'get', 'available', 'with', 'having'];
 
-function isNaturalLanguage(query: string): boolean {
+export function isNaturalLanguage(query: string): boolean {
   const trimmed = query.trim();
   if (!trimmed) return false;
 
@@ -105,7 +105,7 @@ function isNaturalLanguage(query: string): boolean {
   return false;
 }
 
-function shouldShowSummary(query: string): boolean {
+export function shouldShowSummary(query: string): boolean {
   const trimmed = query.trim();
   if (!trimmed) return false;
   const words = trimmed.toLowerCase().split(/\s+/);

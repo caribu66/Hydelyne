@@ -390,7 +390,9 @@ class Query:
         limit: int = 100,
         offset: int = 0,
     ) -> list[Certification]:
-        certs = await certification_service.get_expiring_certifications(days, limit=limit, offset=offset)
+        certs = await certification_service.get_expiring_certifications(
+            days, limit=limit, offset=offset
+        )
         actor = info.context["current_user"]
         tier = tier_for_role(actor.role)
         # Expiring certs carry cert_number/issuing_body (C2) — T2+ only.
@@ -444,7 +446,9 @@ class Query:
 
     @strawberry.field
     @require_auth
-    async def documents_by_crew(self, info: Info, crew_id: str, limit: int = 50, offset: int = 0) -> list[DocumentType]:
+    async def documents_by_crew(
+        self, info: Info, crew_id: str, limit: int = 50, offset: int = 0
+    ) -> list[DocumentType]:
         actor = info.context["current_user"]
         if not await crew_service.can_access_profile(
             crew_id, actor_id=actor.id, actor_role=actor.role
@@ -458,7 +462,9 @@ class Query:
 
     @strawberry.field
     @require_admin
-    async def pending_reviews(self, info: Info, limit: int = 50, offset: int = 0) -> list[DocumentType]:
+    async def pending_reviews(
+        self, info: Info, limit: int = 50, offset: int = 0
+    ) -> list[DocumentType]:
         docs = await document_service.get_pending_documents(limit=limit, offset=offset)
         return [_model_to_graphql_document(d) for d in docs]
 
@@ -654,7 +660,9 @@ class Query:
     ) -> list[CampaignAssignmentType]:
         from app.services.assignment import assignment_service
 
-        models = await assignment_service.list_assignments(vessel_imo=imo, limit=limit, offset=offset)
+        models = await assignment_service.list_assignments(
+            vessel_imo=imo, limit=limit, offset=offset
+        )
         return [_model_to_graphql_assignment(m) for m in models]
 
     @strawberry.field
@@ -744,7 +752,9 @@ class Query:
 
         factory = get_session_factory()
         async with factory() as session:
-            data = await report_service.build_report_data(report_type.value, session)
+            data = await report_service.build_report_data(
+                report_type.value, session, filters=filter_dict
+            )
 
         # Optionally enrich with LLM via report_service; fall back to deterministic summary
         try:
@@ -791,13 +801,18 @@ class Mutation:
         try:
             if await cache_service.is_redis_available():
                 login_count = await cache_service.increment_rate_limit(login_key, 300)
-                if login_count and login_count > 5:
+                if login_count is not None and login_count > 5:
                     from graphql import GraphQLError
 
                     raise GraphQLError(
                         "Too many login attempts. Please try again later.",
                         extensions={"code": "RATE_LIMITED"},
                     )
+            else:
+                # Fail-open for availability, but observable: Redis outage
+                # must not silently disable brute-force protection.
+                logger = logging.getLogger(__name__)
+                logger.warning("Login rate limit skipped: redis unavailable")
         except GraphQLError:
             raise
         except Exception as e:

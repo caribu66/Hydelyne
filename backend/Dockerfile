@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+COPY requirements-prod.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements-prod.txt
 
 # --- Runtime stage ---
 FROM python:3.11-slim AS runtime
@@ -46,5 +46,5 @@ USER appuser
 # API never serves traffic against an out-of-date schema. The worker, beat,
 # and flower services do not need migrations, so they set RUN_MIGRATIONS=false
 # (see docker-compose.yml).
-ENTRYPOINT ["sh", "-c", "if [ \"${RUN_MIGRATIONS:-true}\" = \"true\" ]; then alembic upgrade head; fi; exec \"$@\"", "--"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["sh", "-c", "set -e; if [ \"${RUN_MIGRATIONS:-true}\" = \"true\" ]; then alembic upgrade head; fi; exec \"$@\"", "--"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "30"]

@@ -58,11 +58,14 @@ schema is out of date.
 | Meilisearch | 7700 | Keyword search index |
 | Ollama | — | LLM inference; internal to the compose network |
 | Backend | 8000 | FastAPI + GraphQL |
-| Celery Worker | — | Async task processing (`default` queue) |
-| Celery GPU Worker | — | Async task processing (`gpu` queue) |
+| Celery Worker | — | Async task processing (`high_priority`, `default` queues) |
+| Celery Compute Worker | — | Async task processing (`heavy_compute`, `indexing` queues) |
 | Celery Beat | — | Scheduled tasks |
-| Flower | 5555 | Celery monitoring |
 | Frontend | 5173 | React + Vite, served by nginx |
+
+> Flower (Celery monitoring) and the GPU worker are excluded from
+> `docker-compose.prod.yml` by default. Enable them only from a trusted network
+> and when GPU hardware is available.
 
 ## How This Fits Together
 
@@ -73,7 +76,7 @@ look at two of them.
 |---|---|---|
 | The app | `frontend`, `backend` | Yes — the two URLs above |
 | Data stores | `db`, `redis`, `qdrant`, `meilisearch` | No, they just have to be up |
-| Background work | `celery_worker`, `celery_gpu_worker`, `celery_beat`, `flower` | Only when an upload does not process |
+| Background work | `celery_worker`, `celery_compute_worker`, `celery_beat` | Only when an upload does not process |
 | Inference | `ollama` | No |
 
 The Celery workers are what make document uploads process on their own. Without
@@ -82,14 +85,14 @@ them an upload is accepted and then simply never extracted.
 ### Always build every service, never one
 
 `podman-compose` builds a **separate image per service**. `backend`,
-`celery_worker`, `celery_gpu_worker`, `celery_beat`, and `flower` are five
+`celery_worker`, `celery_compute_worker`, and `celery_beat` are four
 images produced from the same `backend/Dockerfile`. Building one of them leaves
-the other four on stale code, which shows up as a change that works through the
+the other three on stale code, which shows up as a change that works through the
 API but not through a background task:
 
 ```bash
 podman-compose build          # correct
-podman-compose build backend  # rebuilds 1 of 5 — the workers keep the old code
+podman-compose build backend  # rebuilds 1 of 4 — the workers keep the old code
 ```
 
 ### There are two .env files and they are not interchangeable
@@ -119,7 +122,7 @@ read from the bind mount:
 
 ```bash
 podman-compose build backend
-podman-compose up -d --force-recreate backend celery_worker celery_gpu_worker celery_beat flower
+podman-compose up -d --force-recreate backend celery_worker celery_compute_worker celery_beat
 ```
 
 The frontend is compiled into an nginx image at build time (the dev bind mount
@@ -157,6 +160,73 @@ curl -s localhost:8000/health/all | python3 -m json.tool
 All five entries should read `healthy`. A `degraded` result names the failing
 dependency, and `podman-compose logs <service>` explains why.
 
+## Production Deployment
+
+Production uses `docker-compose.prod.yml` as an override on top of the base
+`docker-compose.yml`. It removes internal port publishes, sets `APP_ENV=production`
+on every service, adds restart policies, and applies resource limits.
+
+```bash
+# Build production images
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+
+# Deploy
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Verify
+curl -s http://localhost:8000/health/
+curl -s http://localhost:5173/health
+```
+
+### Production environment variables
+
+At minimum, override these from their development defaults before deploying:
+
+| Variable | Requirement |
+|----------|-------------|
+| `APP_ENV` | `production` (the override sets this, but verify) |
+| `SESSION_SECRET_KEY` | >= 32 chars, never the default |
+| `POSTGRES_PASSWORD` | Strong random value |
+| `REDIS_PASSWORD` | Strong random value |
+| `MEILI_MASTER_KEY` | Strong random value |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap admin credentials |
+| `CORS_ORIGINS` | Comma-separated list of allowed frontend origins |
+| `SENTRY_DSN` | Error tracking (leave empty to disable) |
+
+The backend validates critical secrets on startup and refuses to start if a
+default or missing value would weaken security.
+
+### Backups
+
+Database backups are handled by `backend/scripts/backup.sh`. The script produces
+a compressed, timestamped `pg_dump` and retains the last 7 daily backups.
+
+**Host cron example** (run from any host with network access to Postgres and
+`pg_dump` installed):
+
+```cron
+0 2 * * * DATABASE_URL=postgresql://hydenlyne:${POSTGRES_PASSWORD}@db:5432/hydenlyne BACKUP_DIR=/backups /path/to/repo/backend/scripts/backup.sh
+```
+
+For cloud deployments, prefer the provider's automated snapshot feature (RDS
+automated backups, managed PostgreSQL continuous archiving, etc.) and treat the
+script as a manual recovery option.
+
+### Observability
+
+- **Health checks**: `/health/` (public liveness), `/health/all` (admin-only
+  readiness with dependency details)
+- **Logging**: JSON-structured logs on stdout in production
+- **Error tracking**: Sentry (enable with `SENTRY_DSN`)
+- **Task monitoring**: Flower is excluded from `docker-compose.prod.yml` by
+  default; enable it only from a trusted network if needed
+
+### Restart and resource policies
+
+`docker-compose.prod.yml` applies `restart: unless-stopped` and memory/CPU
+limits to every service. Adjust the `deploy.resources.limits` blocks to match
+your host capacity.
+
 ## Project Structure
 
 ```
@@ -169,7 +239,9 @@ hydenlyne-crew-dms/
 │   │   ├── tasks/          # Celery async tasks
 │   │   └── auth/           # Session management
 │   ├── tests/              # Test suite
-│   └── requirements.txt
+│   ├── requirements.txt    # Runtime dependencies
+│   ├── requirements-dev.txt # Development and test dependencies
+│   └── requirements-prod.txt # Production-optimised runtime dependencies
 ├── frontend/                  # React + Vite, served by nginx (part of this repo)
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
@@ -178,6 +250,7 @@ hydenlyne-crew-dms/
 │   │   └── App.tsx
 │   └── package.json
 ├── docker-compose.yml
+├── docker-compose.prod.yml  # Production overrides
 └── .env.example
 ```
 
@@ -234,15 +307,12 @@ npm run dev
 ```
 
 ### Tests
-
-The backend test suite runs against SQLite via `aiosqlite`. That package is not
-listed in `requirements.txt` and there is no dev-requirements file, so the tests
-only run where it happens to be installed — `pip install aiosqlite` first, and
-run them on the host rather than inside a container.
+The backend test suite runs against SQLite via `aiosqlite`. Install development
+dependencies and run them on the host or in CI:
 
 ```bash
-cd backend && python -m pytest tests -q
-cd frontend && npm run lint && npm run build
+cd backend && pip install -r requirements-dev.txt && python -m pytest tests -q
+cd frontend && npm run lint && npm run test && npm run build
 ```
 
 ## Documentation

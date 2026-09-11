@@ -178,7 +178,9 @@ class MeilisearchClient:
             search_params["filter"] = (
                 f"{APPROVED_CREW_FILTER} AND {filters}" if filters else APPROVED_CREW_FILTER
             )
-            return cast(dict[str, Any], index.search(query, search_params))  # meilisearch client returns dict[str, Any] shape
+            return cast(
+                dict[str, Any], index.search(query, search_params)
+            )  # meilisearch client returns dict[str, Any] shape
 
         try:
             results = await asyncio.to_thread(_sync)
@@ -256,7 +258,9 @@ class MeilisearchClient:
             }
             if filters:
                 search_params["filter"] = filters
-            return cast(dict[str, Any], index.search(query, search_params))  # meilisearch client returns dict[str, Any] shape
+            return cast(
+                dict[str, Any], index.search(query, search_params)
+            )  # meilisearch client returns dict[str, Any] shape
 
         try:
             results = await asyncio.to_thread(_sync)

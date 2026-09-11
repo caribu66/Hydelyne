@@ -34,7 +34,10 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 
-    location /health {
+    location = /health {
+        limit_except GET {
+            deny all;
+        }
         return 200 "ok";
         add_header Content-Type text/plain;
     }

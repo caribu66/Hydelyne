@@ -129,13 +129,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS: allow localhost dev + configured frontend/app URLs + explicit list
-    cors_origins = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ]
+    # CORS: localhost origins are safe for dev; in production only explicitly
+    # configured origins are allowed so a missing/leaked FRONTEND_URL cannot
+    # silently leave dev origins open.
+    cors_origins: list[str] = []
+    if settings.APP_ENV != "production":
+        cors_origins.extend(
+            [
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:5173",
+            ]
+        )
     for url in [
         settings.APP_URL,
         getattr(settings, "FRONTEND_URL", ""),
@@ -143,7 +149,6 @@ def create_app() -> FastAPI:
     ]:
         if not url:
             continue
-        # Support comma-separated lists (e.g., CORS_ORIGINS="https://a.com,https://b.com")
         for part in str(url).split(","):
             part = part.strip().rstrip("/")
             if part and part not in cors_origins:

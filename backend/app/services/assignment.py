@@ -187,6 +187,23 @@ class AssignmentService:
             if not assignment:
                 raise ValueError(f"Campaign assignment {assignment_id} not found")
 
+            if new_status in ACTIVE_ASSIGNMENT_STATUSES:
+                overlap_stmt = select(CampaignAssignment).where(
+                    and_(
+                        CampaignAssignment.crew_member_id == assignment.crew_member_id,
+                        CampaignAssignment.id != assignment.id,
+                        CampaignAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+                        CampaignAssignment.start_date <= assignment.end_date,
+                        CampaignAssignment.end_date >= assignment.start_date,
+                    )
+                )
+                overlap_res = await session.execute(overlap_stmt)
+                if overlap_res.scalar_one_or_none() is not None:
+                    raise ValueError(
+                        "Specialist already has an active assignment overlapping "
+                        f"{assignment.start_date} to {assignment.end_date}"
+                    )
+
             assignment.status = new_status
 
             # Re-sync crew availability

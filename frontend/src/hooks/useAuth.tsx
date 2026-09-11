@@ -61,6 +61,7 @@ function useAuthState(): AuthContextValue {
             email: result.user?.email ?? email,
             role: result.user?.role ?? 'user',
           }
+          setAuthToken(result.token, _remember)
           setUser(u)
           return { ok: true }
         }

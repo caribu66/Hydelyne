@@ -7,7 +7,7 @@ import pytest
 
 from app.domain.crew_query_rules import apply_deterministic_query_rules
 from app.models import Certification, CrewMember, WorkHistory
-from app.services.crew_query import CrewQueryService
+from app.services.crew_query import CrewQueryService, _validate_llm_response
 
 
 def test_medical_query_rule_is_a_candidate_search():
@@ -248,3 +248,75 @@ def test_current_offshore_medical_query_rule():
     assert result["entities"]["medical_valid"] is True
     assert "OGUK Medical" in result["entities"]["certifications"]
     assert "skills" not in result["entities"] or "offshore" not in result["entities"]["skills"]
+
+
+def test_validate_llm_response_accepts_valid_payload():
+    raw = {
+        "intent": "search",
+        "entities": {
+            "certifications": ["BOSIET"],
+            "skills": ["offshore"],
+            "nationality": "Spanish",
+            "min_experience_years": 3.0,
+            "medical_required": True,
+            "medical_valid": False,
+            "availability": "available immediately",
+        },
+        "confidence": 0.95,
+    }
+    validated = _validate_llm_response(raw)
+
+    assert validated["intent"] == "search"
+    assert validated["entities"]["certifications"] == ["BOSIET"]
+    assert validated["entities"]["nationality"] == "Spanish"
+    assert validated["entities"]["min_experience_years"] == 3.0
+    assert validated["entities"]["medical_required"] is True
+    assert validated["entities"]["medical_valid"] is False
+    assert validated["confidence"] == 0.95
+
+
+def test_validate_llm_response_rejects_malformed_types():
+    raw = {
+        "intent": "search",
+        "entities": {
+            "certifications": "BOSIET",
+            "skills": "offshore",
+            "nationality": 123,
+            "min_experience_years": "three",
+            "medical_required": "yes",
+            "availability": "maybe",
+        },
+        "confidence": 2.0,
+    }
+    validated = _validate_llm_response(raw)
+
+    assert validated["intent"] == "search"
+    assert validated["entities"].get("certifications") is None
+    assert validated["entities"].get("skills") is None
+    assert validated["entities"].get("nationality") is None
+    assert validated["entities"].get("min_experience_years") is None
+    assert validated["entities"].get("medical_required") is None
+    assert validated["entities"].get("availability") is None
+    assert validated["confidence"] is None
+
+
+def test_validate_llm_response_falls_back_to_general_on_invalid_intent():
+    raw = {"intent": "unknown_intent", "entities": {}}
+    validated = _validate_llm_response(raw)
+
+    assert validated["intent"] == "general"
+
+
+def test_validate_llm_response_handles_non_dict_input():
+    with pytest.raises(ValueError, match="non-object response"):
+        _validate_llm_response("not a dict")  # type: ignore[arg-type]
+
+
+def test_validate_llm_response_drops_out_of_range_availability():
+    raw = {
+        "intent": "search",
+        "entities": {"availability": "maybe"},
+    }
+    validated = _validate_llm_response(raw)
+
+    assert "availability" not in validated["entities"]

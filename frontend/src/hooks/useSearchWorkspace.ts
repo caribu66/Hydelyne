@@ -123,11 +123,48 @@ export function useSearchWorkspace({
       const aiMatchedIds = aiQueryData?.results?.map((result) => result.id) ?? []
       const aiMatchesCurrentQuery = aiQueryActive
         && aiQueryData?.query.trim().toLowerCase() === committedQuery.trim().toLowerCase()
-      const hasVisibleAIMatches = aiMatchedIds.some((id) => list.some((profile) => profile.id === id))
 
-      if (aiMatchesCurrentQuery && hasVisibleAIMatches) {
-        list = list.filter((profile) => aiMatchedIds.includes(profile.id))
-      } else {
+        if (aiMatchesCurrentQuery && aiMatchedIds.length > 0) {
+          // Trust the backend AI result set as the source of truth. If a
+          // matched specialist is not in the currently loaded local roster,
+          // synthesize a minimal profile from the AI payload so the result is
+          // not silently dropped.
+          const localMap = new Map(allProfiles.map((p) => [p.id, p]))
+          list = aiMatchedIds
+            .map((id) => localMap.get(id))
+            .filter((profile): profile is UserProfile => profile !== undefined)
+          const missingIds = aiMatchedIds.filter((id) => !localMap.has(id))
+          if (missingIds.length > 0) {
+            const aiResultMap = new Map(aiQueryData.results.map((r) => [r.id, r]))
+            const synthesized: UserProfile[] = []
+            for (const id of missingIds) {
+              const ai = aiResultMap.get(id)
+              if (!ai) continue
+              const availability = (ai.availability ?? 'Unavailable') as UserProfile['availability']
+              synthesized.push({
+                id: ai.id,
+                name: ai.name,
+                title: ai.name,
+                avatar: '',
+                company: '',
+                department: '',
+                location: availability === 'Available immediately' ? 'Available' : 'Unavailable',
+                remoteType: 'On-site',
+                yearsOfExperience: Math.round((ai.experience_months ?? 0) / 12),
+                skills: ai.certifications ?? [],
+                bio: '',
+                availability,
+                education: '',
+                nationality: undefined,
+                countryOfResidence: undefined,
+                email: ai.email ?? '',
+                certifications: ai.certifications ?? [],
+                workHistory: [],
+              })
+            }
+            list = [...list, ...synthesized]
+          }
+        } else {
         list = filterProfiles(list, {
           keyword: committedQuery.trim(),
           locations: [],

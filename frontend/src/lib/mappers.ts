@@ -39,7 +39,8 @@ function mapAvailability(status?: string): AvailabilityStatus {
     case 'unavailable':
       return 'Unavailable'
     default:
-      return 'Available immediately'
+      // Fail-closed: unknown status must never present as mobilizable.
+      return 'Unavailable'
   }
 }
 

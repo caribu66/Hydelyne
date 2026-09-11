@@ -1,54 +1,121 @@
-# Production override: drop internal port publishes.
-# Internal services (db, redis, qdrant, meilisearch, flower) must NOT be
-# reachable from the host — only `backend` and `frontend` are exposed behind
-# the reverse proxy.
+# Production override: drop internal port publishes, enforce production mode,
+# add restart policies and resource limits.
 #
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 services:
   db:
-    ports: []
+    ports: !reset []
     environment:
       APP_ENV: production
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
 
   redis:
-    ports: []
+    ports: !reset []
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   qdrant:
-    ports: []
+    ports: !reset []
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   meilisearch:
-    ports: []
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   flower:
-    ports: []
+    ports: !reset []
     environment:
       RUN_MIGRATIONS: "false"
+    restart: unless-stopped
 
   backend:
     ports:
       - "8000:8000"
     # No dev volume mounts in prod — use baked image
-    volumes: []
+    volumes: !reset []
     environment:
       APP_ENV: production
+      RUN_MIGRATIONS: "true"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
 
   celery_worker:
-    volumes: []
+    volumes: !reset []
     environment:
       APP_ENV: production
       RUN_MIGRATIONS: "false"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+
+  celery_compute_worker:
+    volumes: !reset []
+    environment:
+      APP_ENV: production
+      RUN_MIGRATIONS: "false"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
 
   celery_gpu_worker:
-    volumes: []
+    volumes: !reset []
     environment:
       APP_ENV: production
       RUN_MIGRATIONS: "false"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
 
   celery_beat:
     environment:
       APP_ENV: production
       RUN_MIGRATIONS: "false"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   frontend:
     ports:
       - "5173:80"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"

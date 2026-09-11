@@ -291,8 +291,32 @@ class DocumentUploadService:
             return local_path.read_bytes()
 
         # Try to download from Dropbox and cache locally
+        # NOTE: sync context only — async callers must use get_file_async
+        # (asyncio.run() fails inside a running event loop).
         if self.dropbox_available and storage_path.startswith("/hydenlyne/"):
             content = self._download_from_dropbox_sync(storage_path)
+            if content:
+                if local_path:
+                    resolved = local_path.resolve()
+                    if str(resolved).startswith(str(self.cache_path.resolve())):
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                        local_path.write_bytes(content)
+                return content
+
+        return None
+
+    async def get_file_async(self, storage_path: str) -> Optional[bytes]:
+        """Async variant of get_file for use inside a running event loop."""
+        local_path = self._get_local_cache_path(storage_path)
+        if local_path and local_path.exists():
+            resolved = local_path.resolve()
+            if not str(resolved).startswith(str(self.cache_path.resolve())):
+                logger.warning("Refusing out-of-cache document read")
+                return None
+            return local_path.read_bytes()
+
+        if self.dropbox_available and storage_path.startswith("/hydenlyne/"):
+            content = await self._download_from_dropbox(storage_path)
             if content:
                 if local_path:
                     resolved = local_path.resolve()

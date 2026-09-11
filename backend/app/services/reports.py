@@ -77,38 +77,51 @@ class ReportService:
     """Service for generating formatted reports using LLM."""
 
     async def build_report_data(
-        self, report_type: str, session: AsyncSession, limit: int = 100, offset: int = 0
+        self,
+        report_type: str,
+        session: AsyncSession,
+        limit: int = 100,
+        offset: int = 0,
+        filters: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Deterministically gather the raw data a report is built from.
 
         Runs before any LLM enrichment so a report always has a factual
         basis, and so build_fallback_summary has something to summarize if
-        the LLM is unavailable.
+        the LLM is unavailable. Counts are totals (COUNT(*)), not page sizes.
         """
+        from sqlalchemy import func
+
+        applied = filters or {}
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
         if report_type == "availability":
-            crew_stmt = (
-                select(CrewMember)
-                .where(CrewMember.availability_status == "available")
-                .limit(limit)
-                .offset(offset)
-            )
-            crew_result = await session.execute(crew_stmt)
+            status_filter = str(applied.get("availability_status", "available"))
+            crew_base = select(CrewMember).where(CrewMember.availability_status == status_filter)
+            total = (
+                await session.execute(select(func.count()).select_from(crew_base.subquery()))
+            ).scalar_one()
+            crew_result = await session.execute(crew_base.limit(limit).offset(offset))
             crew_list = crew_result.scalars().all()
             return {
-                "available_count": len(crew_list),
+                "available_count": int(total),
                 "crew": [{"id": c.id, "name": c.full_name} for c in crew_list],
             }
         if report_type == "compliance":
-            cert_stmt = (
-                select(Certification)
-                .where(Certification.status.in_(["expired", "expiring_soon"]))
-                .limit(limit)
-                .offset(offset)
+            statuses = (
+                applied.get("status") or applied.get("cert_status") or ["expired", "expiring_soon"]
             )
-            cert_result = await session.execute(cert_stmt)
+            if isinstance(statuses, str):
+                statuses = [statuses]
+            cert_base = select(Certification).where(Certification.status.in_(list(statuses)))
+            total = (
+                await session.execute(select(func.count()).select_from(cert_base.subquery()))
+            ).scalar_one()
+            cert_result = await session.execute(cert_base.limit(limit).offset(offset))
             certs = cert_result.scalars().all()
             return {
-                "non_compliant_count": len(certs),
+                "non_compliant_count": int(total),
                 "certifications": [
                     {
                         "id": c.id,
@@ -120,15 +133,16 @@ class ReportService:
                 ],
             }
         if report_type == "project_readiness":
-            project_stmt = (
-                select(Project)
-                .limit(limit)
-                .offset(offset)
-            )
-            project_result = await session.execute(project_stmt)
+            proj_base = select(Project)
+            if applied.get("status"):
+                proj_base = proj_base.where(Project.status == str(applied["status"]))
+            total = (
+                await session.execute(select(func.count()).select_from(proj_base.subquery()))
+            ).scalar_one()
+            project_result = await session.execute(proj_base.limit(limit).offset(offset))
             projects = project_result.scalars().all()
             return {
-                "project_count": len(projects),
+                "project_count": int(total),
                 "projects": [
                     {
                         "id": p.id,
@@ -141,16 +155,14 @@ class ReportService:
                 ],
             }
         # performance: performance data lives in document extracted_data; summarize what we have
-        doc_stmt = (
-            select(Document)
-            .where(Document.classification == "performance")
-            .limit(limit)
-            .offset(offset)
-        )
-        doc_result = await session.execute(doc_stmt)
+        doc_base = select(Document).where(Document.classification == "performance")
+        total = (
+            await session.execute(select(func.count()).select_from(doc_base.subquery()))
+        ).scalar_one()
+        doc_result = await session.execute(doc_base.limit(limit).offset(offset))
         perf_docs = doc_result.scalars().all()
         return {
-            "performance_document_count": len(perf_docs),
+            "performance_document_count": int(total),
             "documents": [
                 {
                     "id": d.id,
