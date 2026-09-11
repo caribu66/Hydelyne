@@ -773,3 +773,51 @@ def test_vision_extraction_rejects_oversize_image(tmp_path):
     big.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * (MAX_IMAGE_BYTES + 1))
     with pytest.raises(ValueError, match="exceeds"):
         extraction_service.extract_from_image_sync(str(big), "certificate")
+
+
+@pytest.mark.asyncio
+async def test_agent_upload_rejects_unknown_crew_and_dedupes_retries(
+    client, db_session, monkeypatch
+):
+    """Agent path: 404 on unknown crew; same idempotency key returns one row."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "API_KEY", "test-agent-key")
+    headers = {"X-API-Key": "test-agent-key"}
+
+    missing = await client.post(
+        "/api/documents/agent/upload",
+        data={"crew_id": str(uuid.uuid4()), "classification": "certificate"},
+        files={"file": ("ghost.pdf", io.BytesIO(b"%PDF-1.4\nghost\n%%EOF"), "application/pdf")},
+        headers=headers,
+    )
+    assert missing.status_code == 404
+
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="Agent Retry Contractor"))
+    await db_session.commit()
+    form = {"crew_id": crew_id, "classification": "cert", "idempotency_key": "agent-retry-1"}
+    payload = {"file": ("a.pdf", io.BytesIO(b"%PDF-1.4\nagent\n%%EOF"), "application/pdf")}
+    first = await client.post(
+        "/api/documents/agent/upload", data=form, files=payload, headers=headers
+    )
+    second = await client.post(
+        "/api/documents/agent/upload",
+        data=form,
+        files={"file": ("a.pdf", io.BytesIO(b"%PDF-1.4\nagent\n%%EOF"), "application/pdf")},
+        headers=headers,
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    # Stored classification is the normalized canonical value, not "cert".
+    docs = (
+        (await db_session.execute(select(Document).where(Document.crew_member_id == crew_id)))
+        .scalars()
+        .all()
+    )
+    assert len(docs) == 1
+    assert docs[0].classification == "certificate"
+    assert docs[0].upload_key == "agent-retry-1"
+    assert (await client.delete(f"/api/documents/{first.json()['id']}")).status_code == 204

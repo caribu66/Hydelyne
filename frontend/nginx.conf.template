@@ -22,23 +22,42 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # NOTE: any add_header inside a location discards ALL server-level
+    # headers for that location (nginx inheritance rule), so locations
+    # below repeat the security set instead of relying on inheritance.
     # Cache immutable Vite build assets (JS, CSS, images with content hashes)
     location ~* \.(?:css|js|woff2?|png|jpe?g|gif|ico|svg|webp)$ {
         expires 1y;
-        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         access_log off;
     }
 
     # Ensure index.html and root are never aggressively cached
     location = /index.html {
-        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+        add_header Cross-Origin-Opener-Policy "same-origin" always;
+        add_header Cross-Origin-Resource-Policy "same-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     }
 
     location = /health {
         limit_except GET {
             deny all;
         }
+        default_type text/plain;
         return 200 "ok";
-        add_header Content-Type text/plain;
     }
 }

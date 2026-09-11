@@ -32,6 +32,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
+def _content_disposition(filename: str | None) -> str:
+    """Build a header-safe Content-Disposition value (RFC 6266/5987).
+
+    Stored file names are raw client input: quotes, semicolons, or newlines
+    would break out of `filename="..."`. Emit a sanitized ASCII fallback
+    plus the RFC 5987 `filename*` UTF-8 form.
+    """
+    from urllib.parse import quote
+
+    original = filename or "download"
+    safe = re.sub(r"[^\w.\- ]", "_", original).strip()[:100] or "download"
+    return f"attachment; filename=\"{safe}\"; filename*=UTF-8''{quote(original)}"
+
+
 @router.get("/request/{token}")
 async def get_document_request(token: str) -> dict[str, str]:
     """Return a deliberately minimal public upload-request description."""
@@ -554,7 +568,7 @@ async def download_document(
         return StreamingResponse(
             iter([content]),
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{doc.file_name}"'},
+            headers={"Content-Disposition": _content_disposition(doc.file_name)},
         )
 
 
@@ -627,6 +641,7 @@ async def agent_upload_document(
     crew_id: str = Form(...),
     file: UploadFile = File(...),
     classification: Optional[str] = Form(None),
+    idempotency_key: Optional[str] = Form(None),
     api_key: bool = Depends(require_api_key),
 ) -> dict[str, Any]:
     """Upload a document for a crew member (agent access via API key)."""
@@ -639,6 +654,8 @@ async def agent_upload_document(
             status_code=403,
             detail="CVs must use the staff upload and administrator review workflow",
         )
+    if idempotency_key is not None and not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", idempotency_key):
+        raise HTTPException(status_code=400, detail="Invalid upload idempotency key")
 
     async with get_session_factory()() as _crew_sess:
         crew_exists = (
@@ -646,6 +663,23 @@ async def agent_upload_document(
         ).scalar_one_or_none()
         if crew_exists is None:
             raise HTTPException(status_code=404, detail="Crew member not found")
+        if idempotency_key:
+            existing = (
+                await _crew_sess.execute(
+                    select(DocumentModel).where(DocumentModel.upload_key == idempotency_key)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                if existing.crew_member_id != crew_id:
+                    raise HTTPException(status_code=409, detail="Upload key already used")
+                return {
+                    "id": existing.id,
+                    "file_name": existing.file_name,
+                    "file_type": existing.file_type,
+                    "file_size": existing.file_size,
+                    "status": existing.extraction_status,
+                    "storage_type": existing.storage_type,
+                }
 
     try:
         document_id, storage_path, file_size = await document_upload_service.save_file(
@@ -668,6 +702,7 @@ async def agent_upload_document(
                 dropbox_path=dropbox_path,
                 classification=classification,
                 extraction_status="pending",
+                upload_key=idempotency_key,
                 uploaded_by="agent",
             )
             session.add(doc)

@@ -79,6 +79,35 @@ from app.services.project import project_service
 from app.services.reports import report_service
 
 
+def _parse_json_object(raw: str, *, field: str) -> dict:
+    """Parse client JSON, mapping malformed input to BAD_USER_INPUT (not 500)."""
+    from graphql import GraphQLError
+
+    try:
+        parsed = json.loads(raw)
+    except Exception as exc:
+        raise GraphQLError(
+            f"Invalid JSON for {field}: {exc}", extensions={"code": "BAD_USER_INPUT"}
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise GraphQLError(f"{field} must be a JSON object", extensions={"code": "BAD_USER_INPUT"})
+    return parsed
+
+
+def _parse_date(value: str | None, *, field: str) -> date | None:
+    """Parse an optional ISO date, mapping malformed input to BAD_USER_INPUT."""
+    if not value:
+        return None
+    from graphql import GraphQLError
+
+    try:
+        return date.fromisoformat(value)
+    except Exception as exc:
+        raise GraphQLError(
+            f"Invalid date for {field}: {exc}", extensions={"code": "BAD_USER_INPUT"}
+        ) from exc
+
+
 def _dto_to_graphql_crew_member(dto: CrewMemberCreateDTO) -> CrewMember:
     """Helper for login response - minimal crew member."""
     return CrewMember(
@@ -764,7 +793,7 @@ class Query:
 
                 raise GraphQLError("Admin access required", extensions={"code": "FORBIDDEN"})
 
-        filter_dict = json.loads(filters) if filters else {}
+        filter_dict = _parse_json_object(filters, field="filters") if filters else {}
 
         factory = get_session_factory()
         async with factory() as session:
@@ -912,7 +941,7 @@ class Mutation:
             phone=phone,
             nationality=nationality,
             country_of_residence=country_of_residence,
-            date_of_birth=date.fromisoformat(date_of_birth) if date_of_birth else None,
+            date_of_birth=_parse_date(date_of_birth, field="date_of_birth"),
             gender=gender,
             languages=languages,
             flying_point=flying_point,
@@ -950,9 +979,7 @@ class Mutation:
         approved_data: str,
         note: Optional[str] = None,
     ) -> bool:
-        parsed = json.loads(approved_data)
-        if not isinstance(parsed, dict):
-            raise ValueError("Approved CV data must be an object")
+        parsed = _parse_json_object(approved_data, field="approved_data")
         actor = info.context["current_user"]
         await cv_review_service.approve(
             review_id, approved_data=parsed, reviewer_id=actor.id, note=note
@@ -995,7 +1022,7 @@ class Mutation:
             phone=phone,
             nationality=nationality,
             country_of_residence=country_of_residence,
-            date_of_birth=date.fromisoformat(date_of_birth) if date_of_birth else None,
+            date_of_birth=_parse_date(date_of_birth, field="date_of_birth"),
             gender=gender,
             languages=languages,
             flying_point=flying_point,
@@ -1065,7 +1092,9 @@ class Mutation:
         document_id: str,
         data: str,
     ) -> DocumentType:
-        confirmed = await document_service.confirm_extraction(document_id, json.loads(data))
+        confirmed = await document_service.confirm_extraction(
+            document_id, _parse_json_object(data, field="data")
+        )
         if not confirmed:
             raise ValueError(f"Document {document_id} not found")
         return _model_to_graphql_document(confirmed)
@@ -1106,8 +1135,8 @@ class Mutation:
             cert_type=cert_type.value,
             cert_number=cert_number,
             issuing_body=issuing_body,
-            issue_date=date.fromisoformat(issue_date) if issue_date else None,
-            expiry_date=date.fromisoformat(expiry_date) if expiry_date else None,
+            issue_date=_parse_date(issue_date, field="issue_date"),
+            expiry_date=_parse_date(expiry_date, field="expiry_date"),
         )
         cert = await certification_service.add_certification(
             crew_id=dto.crew_member_id,

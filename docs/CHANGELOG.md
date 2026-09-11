@@ -10,6 +10,40 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session needs to know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-11 — Ops & Migration Fixes (Muse Spark)
+
+Closed four remaining pass-3 items: 017 builds GIN indexes `CONCURRENTLY`
+with `IF NOT EXISTS` (env.py runs each revision in its own transaction so
+this is legal; single head intact); backups default to `/app/data/backups`
+on the persisted volume with portable nullglob retention (no `xargs -r`,
+no empty-glob failure) and prod keeps a single 8000 mapping — verified via
+merged compose config; `seed_100` refuses `APP_ENV=production` like
+`seeds.py`; nginx locations repeat security headers (inheritance wipe
+fixed), `/health` uses `default_type`, and the CSP `sed` escapes the origin.
+
+**Why:** Deploy without write locks, backups that survive recreation,
+no fake crew in prod, security headers on every response.
+
+**Follow-up:** `CREATE EXTENSION pg_trgm` still needs a privileged role on
+managed PG; Gemini CSP host mismatch left as-is (unverified).
+
+## 2026-09-11 — Pass-3 Medium Fixes (Muse Spark)
+
+Hardened four backend mediums: download `Content-Disposition` built via
+RFC 6266/5987 helper (sanitized `filename` + `filename*`); Dropbox webhook
+recovers `crew_member_id` from `/hydenlyne/<crew_id>/...` paths so rows join
+the staff review queue (truly foreign files stay admin-visible via
+`pending_reviews`); agent upload accepts an `idempotency_key` with staff-path
+409 semantics and stores it as `upload_key` (+ tests); malformed GraphQL
+`filters`/`data`/`approved_data`/date strings map to `BAD_USER_INPUT` via
+`_parse_json_object`/`_parse_date` helpers instead of 500s (+ test).
+
+**Why:** Close header injection, orphan invisibility, retry duplication, and
+unactionable 500s on client input errors.
+
+**Follow-up:** Residual webhook orphans for non-app paths, 017
+CONCURRENTLY, backup durability still open.
+
 ## 2026-09-11 — Hidden-Bug Pass 3 Fixes (Muse Spark)
 
 Fixed 4 items from the third sweep: `me` resolver now scrubs by caller tier

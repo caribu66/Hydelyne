@@ -12,7 +12,10 @@ set -euo pipefail
 # docker-compose default).  It is safe to run while the application is live;
 # pg_dump uses a REPEATABLE READ transaction and does not block writers.
 
-BACKUP_DIR="${BACKUP_DIR:-/app/backups}"
+# Default lives on the persisted document_storage volume
+# (/app/data/documents), so dumps survive container recreation in both
+# dev and prod — unlike an unmounted /app/backups.
+BACKUP_DIR="${BACKUP_DIR:-/app/data/backups}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 FILENAME="hydenlyne-${TIMESTAMP}.sql.gz"
 
@@ -34,6 +37,15 @@ pg_dump "${LIBPQ_URL}" --format=plain --no-owner --no-acl \
 
 echo "Backup complete: ${BACKUP_DIR}/${FILENAME} ($(du -h "${BACKUP_DIR}/${FILENAME}" | cut -f1))"
 
-# Retention: keep the last 7 daily backups
-ls -1t "${BACKUP_DIR}"/hydenlyne-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+# Retention: keep the 7 most recent dumps. Portable across GNU/BSD:
+# nullglob avoids a failing glob when empty, and xargs runs only when
+# there is actually something to delete (xargs -r is GNU-only).
+shopt -s nullglob
+dumps=("${BACKUP_DIR}"/hydenlyne-*.sql.gz)
+if ((${#dumps[@]} > 7)); then
+    printf '%s\n' "${dumps[@]}" \
+        | xargs ls -1t 2>/dev/null \
+        | tail -n +8 \
+        | xargs rm -f
+fi
 echo "Retention policy applied (kept 7 most recent)."

@@ -232,10 +232,22 @@ async def process_dropbox_file(file_entry: dict) -> None:
                 process_dropbox_document.delay(doc.id)
             return
 
+        # App-managed files live at /hydenlyne/<crew_id>/documents/... —
+        # recover the owner so the row joins the staff review queue instead
+        # of becoming a crew-less orphan visible only to admins.
+        crew_member_id: Optional[str] = None
+        parts = file_path.strip("/").split("/")
+        if len(parts) >= 2 and parts[0] == "hydenlyne":
+            candidate = parts[1]
+            owner = await session.execute(select(CrewMember).where(CrewMember.id == candidate))
+            if owner.scalar_one_or_none() is not None:
+                crew_member_id = candidate
+
         doc = DocumentModel(
             file_name=file_name,
             file_type=file_name.split(".")[-1].lower(),
             file_size=file_entry.get("size", 0),
+            crew_member_id=crew_member_id,
             storage_type="dropbox",
             storage_path=file_path,
             dropbox_path=file_path,

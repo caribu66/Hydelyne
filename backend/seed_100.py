@@ -171,6 +171,16 @@ async def generate_crew(count: int = 100) -> int:
 
 
 async def main() -> None:
+    import logging
+
+    from app.config import get_settings
+
+    if get_settings().APP_ENV == "production":
+        logging.getLogger(__name__).warning(
+            "Refusing to seed in production (APP_ENV=production)."
+        )
+        return
+
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

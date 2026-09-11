@@ -242,3 +242,19 @@ async def test_llm_enriched_report_uses_ai_service_response_when_available(clien
     report = body["data"]["generateReport"]
     assert report["summary"] == "AI-generated summary"
     assert report["data"] == '{"ai": true}'
+
+
+@pytest.mark.asyncio
+async def test_malformed_filters_return_bad_input_not_500(client, monkeypatch):
+    _mock_admin_user(monkeypatch)
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": "query($t: ReportType!, $f: String) { generateReport(reportType: $t, filters: $f) { reportType } }",
+            "variables": {"t": "AVAILABILITY", "f": "{not-json"},
+        },
+        headers=_admin_headers(),
+    )
+    body = resp.json()
+    assert "errors" in body
+    assert body["errors"][0]["extensions"]["code"] == "BAD_USER_INPUT"

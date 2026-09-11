@@ -48,8 +48,8 @@ services:
     restart: unless-stopped
 
   backend:
-    ports:
-      - "8000:8000"
+    # Port mapping inherited from base (single 8000:8000); re-declaring it
+    # here duplicates the mapping under merge semantics.
     # No dev volume mounts in prod — use baked image
     volumes: !reset []
     environment:
