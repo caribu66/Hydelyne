@@ -124,7 +124,7 @@ async def seed_all() -> int:
             if existing_crew:
                 # Update compliance fields if not populated
                 if not existing_crew.medical_expiry:
-                    existing_crew.medical_status = "fit_for_offshore"
+                    existing_crew.medical_status = "fit"
                     existing_crew.medical_expiry = date(2027, 12, 31)
                     existing_crew.medical_provider = "Aberdeen Offshore Medical / OEUK"
                     existing_crew.passport_expiry = date(2030, 6, 30)
@@ -140,7 +140,7 @@ async def seed_all() -> int:
                 role=data.get("role", "user"),
                 tags=data.get("tags", []),
                 profile_completeness_score=data.get("profile_completeness_score"),
-                medical_status="fit_for_offshore",
+                medical_status="fit",
                 medical_expiry=date(2027, 12, 31),
                 medical_provider="Aberdeen Offshore Medical / OEUK",
                 passport_number=f"GB{10000000 + i}",

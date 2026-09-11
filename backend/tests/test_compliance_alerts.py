@@ -212,6 +212,39 @@ async def test_evaluate_and_update_compliance_sync(db_session):
 
 
 @pytest.mark.asyncio
+async def test_expiring_soon_cert_does_not_leak_into_medical_status(db_session):
+    """Cert lifecycle vocab must not leak into the crew fitness flag.
+
+    medical_status uses MEDICAL_STATUS_VALUES (fit/fit_with_restrictions/
+    expired); an "expiring_soon" cert transition must leave it as "fit".
+    """
+    crew = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Nia Okafor",
+        role="user",
+        medical_status="fit",
+    )
+    db_session.add(crew)
+    cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="OGUK Medical",
+        expiry_date=date.today() + timedelta(days=10),
+        status="valid",
+    )
+    db_session.add(cert)
+    await db_session.commit()
+
+    updated = await certification_service.check_and_update_expiration_status()
+    assert updated >= 1
+
+    await db_session.refresh(cert)
+    assert cert.status == "expiring_soon"
+    await db_session.refresh(crew)
+    assert crew.medical_status == "fit"
+
+
+@pytest.mark.asyncio
 async def test_check_expiring_certifications_celery_task(db_session):
     """The check_expiring_certifications Celery task must execute cleanly."""
     result = check_expiring_certifications()

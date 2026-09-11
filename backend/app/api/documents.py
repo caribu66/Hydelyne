@@ -355,6 +355,8 @@ async def upload_document(
     is_valid, error_msg = document_upload_service.validate_file(file)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_msg)
+    # Normalize once so storage, CV gating, and downstream filters agree.
+    classification = normalize_classification(classification)
     try:
         crew_id = safe_path_component(crew_id, "crew_id")
     except ValueError as exc:
@@ -631,11 +633,19 @@ async def agent_upload_document(
     is_valid, error_msg = document_upload_service.validate_file(file)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_msg)
-    if classification and normalize_classification(classification) == "cv":
+    classification = normalize_classification(classification)
+    if classification == "cv":
         raise HTTPException(
             status_code=403,
             detail="CVs must use the staff upload and administrator review workflow",
         )
+
+    async with get_session_factory()() as _crew_sess:
+        crew_exists = (
+            await _crew_sess.execute(select(CrewMember).where(CrewMember.id == crew_id))
+        ).scalar_one_or_none()
+        if crew_exists is None:
+            raise HTTPException(status_code=404, detail="Crew member not found")
 
     try:
         document_id, storage_path, file_size = await document_upload_service.save_file(

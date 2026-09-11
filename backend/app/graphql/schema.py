@@ -317,8 +317,13 @@ class Query:
     @strawberry.field
     @require_auth
     async def me(self, info: Info) -> Optional[CrewMember]:
+        from app.graphql.scrub import scrub_crew_member
+
         user = info.context.get("current_user")
-        return _model_to_graphql_crew_member(user) if user else None
+        if not user:
+            return None
+        tier = tier_for_role(user.role)
+        return scrub_crew_member(_model_to_graphql_crew_member(user), tier)
 
     @strawberry.field
     @require_auth
@@ -390,6 +395,9 @@ class Query:
         limit: int = 100,
         offset: int = 0,
     ) -> list[Certification]:
+        days = min(max(days, 1), 365)
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         certs = await certification_service.get_expiring_certifications(
             days, limit=limit, offset=offset
         )
@@ -457,6 +465,8 @@ class Query:
         tier = tier_for_role(actor.role)
         if tier == "T1":
             return []
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         docs = await document_service.get_documents_by_crew(crew_id, limit=limit, offset=offset)
         return [scrub_document(_model_to_graphql_document(d), tier) for d in docs]
 
@@ -465,6 +475,8 @@ class Query:
     async def pending_reviews(
         self, info: Info, limit: int = 50, offset: int = 0
     ) -> list[DocumentType]:
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         docs = await document_service.get_pending_documents(limit=limit, offset=offset)
         return [_model_to_graphql_document(d) for d in docs]
 
@@ -639,6 +651,8 @@ class Query:
         from app.services.assignment import assignment_service
 
         status_val = status.value if status else None
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         models = await assignment_service.list_assignments(
             vessel_imo=vessel_imo,
             project_id=project_id,
@@ -660,6 +674,8 @@ class Query:
     ) -> list[CampaignAssignmentType]:
         from app.services.assignment import assignment_service
 
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         models = await assignment_service.list_assignments(
             vessel_imo=imo, limit=limit, offset=offset
         )

@@ -205,10 +205,13 @@ export function evaluateCandidatePreflightCompliance(
 
   if (!effectiveMedExp) {
     if (medCerts.length > 0) {
+      // A certificate on file without any expiry date cannot prove validity
+      // through the campaign window — warn, don't pass.
+      issues.push(`${medCertName} on file but expiry not recorded — validity unverified`)
       checks.push({
         item: 'Offshore Medical',
-        status: 'pass',
-        detail: `${medCertName} verified on file`,
+        status: 'warn',
+        detail: `${medCertName} on file, expiry not recorded`,
       })
     } else {
       issues.push('Offshore medical certificate date not recorded or unverified')
@@ -302,12 +305,15 @@ export function evaluateCandidatePreflightCompliance(
         detail: `Expired on ${expStr}`,
       })
     } else {
+      // Certificates on file but none carry an expiry date — validity
+      // through the campaign cannot be established.
       const [firstSurv] = survivalCerts
       const name = firstSurv?.certType || firstSurv?.name || 'BOSIET'
+      issues.push(`${name} on file but expiry not recorded — validity unverified`)
       checks.push({
         item: 'Survival / BOSIET',
-        status: 'pass',
-        detail: `${name} verified on file`,
+        status: 'warn',
+        detail: `${name} on file, expiry not recorded`,
       })
     }
   }

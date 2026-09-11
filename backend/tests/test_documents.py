@@ -763,3 +763,13 @@ async def test_resolve_document_review_by_document_id(client, db_session):
     # Verify review queue item is resolved
     queue = await client.get("/api/documents/review-queue")
     assert not any(item["document_id"] == doc_id for item in queue.json())
+
+
+def test_vision_extraction_rejects_oversize_image(tmp_path):
+    """Oversize images must fail fast, not become OOM-sized LLM payloads."""
+    from app.services.extraction import MAX_IMAGE_BYTES, extraction_service
+
+    big = tmp_path / "big.png"
+    big.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * (MAX_IMAGE_BYTES + 1))
+    with pytest.raises(ValueError, match="exceeds"):
+        extraction_service.extract_from_image_sync(str(big), "certificate")

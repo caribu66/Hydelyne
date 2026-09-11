@@ -357,6 +357,25 @@ describe('evaluateCandidatePreflightCompliance', () => {
     expect(medCheck?.detail).toContain('valid through 2027-11-30')
   })
 
+  it('warns when certs are on file but no expiry is recorded', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      campaignStartDate: '2026-10-01',
+      campaignEndDate: '2026-10-28',
+      certifications: [
+        { name: 'OGUK Medical' },
+        { name: 'OPITO BOSIET' },
+      ],
+    })
+
+    expect(report.status).toBe('warning')
+    const medCheck = report.checks.find((c) => c.item === 'Offshore Medical')
+    expect(medCheck?.status).toBe('warn')
+    const survCheck = report.checks.find((c) => c.item === 'Survival / BOSIET')
+    expect(survCheck?.status).toBe('warn')
+    expect(report.issues.some((i) => i.includes('expiry not recorded'))).toBe(true)
+  })
+
   it('resolves the valid renewed survival cert when older cert is expired', () => {
     const report = evaluateCandidatePreflightCompliance({
       availabilityStatus: 'available',

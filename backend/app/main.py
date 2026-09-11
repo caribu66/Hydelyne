@@ -82,14 +82,23 @@ def validate_prod_secrets() -> None:
         "SESSION_SECRET_KEY": "dev_secret_key_change_in_production",  # nosec B105
         "MEILI_MASTER_KEY": "meili_master_key_change_in_production",  # nosec B105
         "REDIS_PASSWORD": "",  # nosec B105
+        "FLOWER_PASSWORD": "flower_pass",  # nosec B105
+        "ADMIN_PASSWORD": "",  # nosec B105
     }
+    # Compose dev defaults that the ""-only check would otherwise miss.
+    known_dev_values = {"dev_redis_pass", "hydenlyne_pass", "flower_pass"}
     for key, bad_default in insecure_defaults.items():
         val = getattr(settings, key, "")
-        if not val or val == bad_default:
+        if not val or val == bad_default or val in known_dev_values:
             raise RuntimeError(
                 f"Refusing to start in production: {key} is unset or still default. "
                 "Set a strong random value via env/secret manager."
             )
+    if "hydenlyne_pass" in settings.DATABASE_URL:
+        raise RuntimeError(
+            "Refusing to start in production: DATABASE_URL still uses the "
+            "compose dev password. Set POSTGRES_PASSWORD explicitly."
+        )
     if settings.SESSION_SECRET_KEY and len(settings.SESSION_SECRET_KEY) < 32:
         raise RuntimeError("SESSION_SECRET_KEY must be >=32 chars in production")
     if "sqlite" in settings.DATABASE_URL:
@@ -142,6 +151,7 @@ def create_app() -> FastAPI:
                 "http://127.0.0.1:5173",
             ]
         )
+    is_prod = settings.APP_ENV == "production"
     for url in [
         settings.APP_URL,
         getattr(settings, "FRONTEND_URL", ""),
@@ -151,8 +161,17 @@ def create_app() -> FastAPI:
             continue
         for part in str(url).split(","):
             part = part.strip().rstrip("/")
-            if part and part not in cors_origins:
-                cors_origins.append(part)
+            if not part or part in cors_origins:
+                continue
+            if part == "*":
+                raise RuntimeError(
+                    "Refusing to start: CORS_ORIGINS='*' is incompatible with "
+                    "allow_credentials=True. List explicit origins instead."
+                )
+            if is_prod and part.startswith("http://localhost"):
+                # A localhost default must never become a trusted prod origin.
+                continue
+            cors_origins.append(part)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
 

@@ -169,6 +169,19 @@ class SyncDocumentProcessor:
 
                     crew_member_id = doc.crew_member_id
 
+                    # Sync Celery-worker context only: asyncio.run() cannot
+                    # nest inside a running loop — fail loudly instead of a
+                    # cryptic RuntimeError deep in the call stack.
+                    try:
+                        asyncio.get_running_loop()
+                    except RuntimeError:
+                        pass
+                    else:
+                        raise RuntimeError(
+                            "SyncDocumentProcessor.process must be called from a "
+                            "sync context (Celery worker), not a running event loop"
+                        )
+
                     async def _link_cert_and_release_engine() -> None:
                         try:
                             await certification_service.link_extracted_certificate(
@@ -178,6 +191,11 @@ class SyncDocumentProcessor:
                                 confidence=doc.extraction_confidence,
                             )
                         finally:
+                            # Intentional worker hygiene, not collateral damage:
+                            # asyncpg connections bind to the asyncio.run()
+                            # throwaway loop, so the singleton must be dropped
+                            # before the next document in this worker process.
+                            # See app/database.py::dispose_engine.
                             await dispose_engine()
 
                     asyncio.run(_link_cert_and_release_engine())

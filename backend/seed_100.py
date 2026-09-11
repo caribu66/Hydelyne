@@ -111,7 +111,7 @@ async def generate_crew(count: int = 100) -> int:
                 role="user",
                 tags=random.sample(CERTIFICATIONS_POOL, k=random.randint(2, 5)),
                 profile_completeness_score=round(random.uniform(75, 99), 1),
-                medical_status="fit_for_offshore" if is_active_or_ready else "expired",
+                medical_status="fit" if is_active_or_ready else "expired",
                 medical_expiry=med_exp,
                 medical_provider="OEUK Approved Clinic" if is_active_or_ready else "Aberdeen Health",
                 passport_number=f"P{random.randint(10000000, 99999999)}",

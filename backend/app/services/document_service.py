@@ -61,6 +61,8 @@ class DocumentService:
         self, crew_id: str, limit: int = 50, offset: int = 0
     ) -> list[DocumentModel]:
         """Get all documents belonging to a crew member."""
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         factory = get_session_factory()
         async with factory() as session:
             stmt = (
@@ -88,6 +90,8 @@ class DocumentService:
 
     async def get_pending_documents(self, limit: int = 50, offset: int = 0) -> list[DocumentModel]:
         """Get all documents pending extraction."""
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         factory = get_session_factory()
         async with factory() as session:
             stmt = (

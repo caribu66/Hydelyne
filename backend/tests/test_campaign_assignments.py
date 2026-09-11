@@ -411,6 +411,44 @@ async def test_schedule_conflict_exact_boundaries(db_session: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_evaluate_compliance_verified_no_expiry_warns(db_session: Any) -> None:
+    """Verified-on-file certs without any expiry must warn, not pass."""
+    from app.models import Certification
+
+    crew = await _create_test_crew(db_session, "Wedge Antilles")
+    db_session.add_all(
+        [
+            Certification(
+                id=str(uuid.uuid4()),
+                crew_member_id=crew.id,
+                cert_type="OGUK Medical",
+                expiry_date=None,
+                status="valid",
+                verification_status="verified",
+            ),
+            Certification(
+                id=str(uuid.uuid4()),
+                crew_member_id=crew.id,
+                cert_type="OPITO BOSIET",
+                expiry_date=None,
+                status="valid",
+                verification_status="verified",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    with patch("app.services.assignment.get_session_factory", return_value=lambda: db_session):
+        report = await assignment_service.evaluate_compliance(
+            crew_member_id=crew.id,
+            start_date=date(2026, 10, 1),
+            end_date=date(2026, 10, 28),
+        )
+        assert report["status"] == "warning"
+        assert any("expiry not recorded" in issue for issue in report["issues"])
+
+
+@pytest.mark.asyncio
 async def test_evaluate_compliance_credential_edge_cases(db_session: Any) -> None:
     from app.models import Certification
 

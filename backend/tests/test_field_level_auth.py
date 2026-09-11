@@ -235,6 +235,25 @@ async def test_detail_as_T1_redacts_C2_and_C3(client, db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_me_as_T1_redacts_C2_and_C3(client, db_session, monkeypatch):
+    await _create_crew_with_sensitive_fields(db_session)
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("user")),
+    )
+    resp = await client.post(
+        "/graphql",
+        json={"query": "query { me { id fullName email phone passport { number } } }"},
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    m = body["data"]["me"]
+    assert m["email"] is None
+    assert m["phone"] is None
+    assert m["passport"] is None
+
+
+@pytest.mark.asyncio
 async def test_detail_as_staff_shows_C2_not_C3(client, db_session, monkeypatch):
     crew_id = await _create_crew_with_sensitive_fields(db_session)
     monkeypatch.setattr(

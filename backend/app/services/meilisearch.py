@@ -53,11 +53,12 @@ class MeilisearchClient:
         import asyncio
 
         def _sync_setup() -> None:
-            # Crew members index
+            # Crew members index — client.index() is a lazy handle and never
+            # raises, so create unconditionally and tolerate already-exists.
             try:
-                self.client.index(CREW_MEMBERS_INDEX)
-            except Exception:
                 self.client.create_index(CREW_MEMBERS_INDEX, {"primaryKey": "id"})
+            except Exception:
+                pass
 
             crew_index = self.client.index(CREW_MEMBERS_INDEX)
             # C1-only searchable attributes per ADR 0005 — email/phone and
@@ -98,11 +99,11 @@ class MeilisearchClient:
                 ]
             )
 
-            # Documents index
+            # Documents index — same lazy-handle reasoning as above.
             try:
-                self.client.index(DOCUMENTS_INDEX)
-            except Exception:
                 self.client.create_index(DOCUMENTS_INDEX, {"primaryKey": "id"})
+            except Exception:
+                pass
 
             doc_index = self.client.index(DOCUMENTS_INDEX)
             doc_index.update_searchable_attributes(

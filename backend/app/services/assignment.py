@@ -157,6 +157,8 @@ class AssignmentService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[CampaignAssignment]:
+        limit = min(max(limit, 1), 100)
+        offset = max(offset, 0)
         factory = get_session_factory()
         async with factory() as session:
             stmt = select(CampaignAssignment).options(*_assignment_query_options())
@@ -337,11 +339,14 @@ class AssignmentService:
                 if med_certs and any(
                     c.status == "valid" or c.verification_status == "verified" for c in med_certs
                 ):
+                    # Verified on file but no expiry anywhere: validity through
+                    # the campaign cannot be established — warn, don't pass.
+                    issues.append(f"{med_name} verified on file but expiry not recorded")
                     checks.append(
                         {
                             "item": "Offshore Medical",
-                            "status": "pass",
-                            "detail": f"{med_name} verified on file",
+                            "status": "warn",
+                            "detail": f"{med_name} verified on file, expiry not recorded",
                         }
                     )
                 else:
@@ -457,11 +462,18 @@ class AssignmentService:
                     c.status == "valid" or c.verification_status == "verified"
                     for c in survival_certs
                 ):
+                    issues.append(
+                        f"Survival certificate {survival_certs[0].cert_type} verified "
+                        "on file but expiry not recorded"
+                    )
                     checks.append(
                         {
                             "item": "Survival / BOSIET",
-                            "status": "pass",
-                            "detail": f"{survival_certs[0].cert_type} verified on file",
+                            "status": "warn",
+                            "detail": (
+                                f"{survival_certs[0].cert_type} verified on file, "
+                                "expiry not recorded"
+                            ),
                         }
                     )
                 else:

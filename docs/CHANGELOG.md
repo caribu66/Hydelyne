@@ -10,6 +10,47 @@ Newest entries first. Each entry: date, who/what did it, what changed, why,
 and any follow-up the next session needs to know about. Keep entries short —
 this is an index into commits and docs, not a replacement for either.
 
+## 2026-09-11 — Hidden-Bug Pass 3 Fixes (Muse Spark)
+
+Fixed 4 items from the third sweep: `me` resolver now scrubs by caller tier
+like every sibling resolver (+ T1 regression test); `medical_status` unified
+on `MEDICAL_STATUS_VALUES` (`fit`/`fit_with_restrictions`/`expired`) —
+periodic job no longer writes cert-lifecycle `expiring_soon` into the fitness
+flag, seeds/`seed_100` use `fit` (+ regression test); vision extraction caps
+source images at 10 MB before base64 (+ regression test); sync worker cert
+link fails loudly outside sync context and documents the intentional engine
+disposal. `enrich_compliance.py` keeps one `fit_for_offshore` write (file not
+writable in this environment — one-off script, fix on next touch).
+
+**Why:** Close C2/C3 scrub bypass, silent filter misses, OOM-sized LLM
+payloads, and async-engine footguns.
+
+**Follow-up:** Remaining pass-3 mediums (Content-Disposition, webhook
+orphans, 017 CONCURRENTLY, backup durability, seed guards) untouched.
+
+## 2026-09-11 — Hidden-Bug Pass 2 Fixes (Muse Spark)
+
+Fixed 9 high-severity items from the second sweep: agent upload now 404s on
+unknown `crew_id` and normalizes `classification` on staff + agent paths
+(`documents.py`); prod secret validation covers `FLOWER_PASSWORD`,
+`ADMIN_PASSWORD`, dev-default values, and `hydenlyne_pass` in `DATABASE_URL`
+(`main.py`); Meilisearch bootstrap creates indexes unconditionally instead of
+the dead lazy-handle branch; CORS rejects `*` with credentials and drops
+localhost defaults in prod; pagination clamped 1–100 at resolvers and services
+(`schema.py`, `assignment.py`, `document_service.py`); `useCrewProfiles`
+auto-pagination bounded (250) with error handling and working
+`loadMore`/`hasMore`; AI-synthesized profiles no longer fabricate
+title/location, re-apply facet filters, and only rank while matching the
+current query; missing-expiry certs warn instead of pass on both frontend
+(`assignmentUtils.ts`) and backend (`assignment.py`) preflight, with
+regression tests each side.
+
+**Why:** Close AuthZ bypass, fail-open compliance, unbounded fetch/DoS,
+filter bypass, and silent prod misconfiguration.
+
+**Follow-up:** Remaining medium/low leads (Content-Disposition injection,
+webhook orphans, 017 CONCURRENTLY, seed guards, mapper gaps) untouched.
+
 ## 2026-09-11 — High-Severity Hidden-Bug Fixes (Muse Spark)
 
 Fixed 11 verified high-severity bugs across auth, booking, cache, queries,

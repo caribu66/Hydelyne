@@ -144,11 +144,13 @@ export function useSearchWorkspace({
               synthesized.push({
                 id: ai.id,
                 name: ai.name,
-                title: ai.name,
+                // The AI payload carries no title/company/location evidence —
+                // never fabricate them from the name or availability string.
+                title: 'Contractor',
                 avatar: '',
                 company: '',
                 department: '',
-                location: availability === 'Available immediately' ? 'Available' : 'Unavailable',
+                location: '',
                 remoteType: 'On-site',
                 yearsOfExperience: Math.round((ai.experience_months ?? 0) / 12),
                 skills: ai.certifications ?? [],
@@ -163,6 +165,9 @@ export function useSearchWorkspace({
               })
             }
             list = [...list, ...synthesized]
+            // The AI id-set replaces the keyword match, not the user's
+            // facet filters — re-apply them so chips stay truthful.
+            list = filterProfiles(list, { ...filters, keyword: '' })
           }
         } else {
         list = filterProfiles(list, {
@@ -185,7 +190,11 @@ export function useSearchWorkspace({
       list = list.filter((p) => isBookmarked(p.id))
     }
 
-    const aiMatchedIds = aiQueryData?.results?.map((r) => r.id) || []
+    // Only let AI rank order results while it matches the current query;
+    // otherwise a stale payload reshuffles plain keyword searches.
+    const aiMatchesSort = aiQueryActive
+      && aiQueryData?.query.trim().toLowerCase() === committedQuery.trim().toLowerCase()
+    const aiMatchedIds = aiMatchesSort ? aiQueryData?.results?.map((r) => r.id) || [] : []
     return sortProfiles(list, sortBy, committedQuery, aiMatchedIds)
   }, [committedQuery, showSavedOnly, isBookmarked, sortBy, filters, allProfiles, aiQueryData, aiQueryActive])
 

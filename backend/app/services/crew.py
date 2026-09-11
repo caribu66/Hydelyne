@@ -542,8 +542,15 @@ class CertificationService:
 
                     if new_status and new_status != old_status:
                         cert.status = new_status
-                        if "medical" in cert.cert_type.lower() and cert.crew_member:
-                            cert.crew_member.medical_status = new_status
+                        # medical_status uses the crew-level fitness vocabulary
+                        # (MEDICAL_STATUS_VALUES), not the cert lifecycle:
+                        # only an actual expiry changes fitness.
+                        if (
+                            "medical" in cert.cert_type.lower()
+                            and cert.crew_member
+                            and new_status == "expired"
+                        ):
+                            cert.crew_member.medical_status = "expired"
                         updated += 1
                         if cert.crew_member:
                             affected_crew_ids.add(cert.crew_member.id)

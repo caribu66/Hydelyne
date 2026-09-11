@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 CONFIDENCE_AUTO_ACCEPT = 0.85
 CONFIDENCE_REVIEW_THRESHOLD = 0.50
 
+# Vision payload guard: base64 inflates raw bytes by ~33% before they enter
+# the LLM request, so cap source images well below the 50 MB upload limit.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
 EXTRACTION_PROMPTS = {
     "certificate": """You are extracting structured data from a training certificate or certification document.
 
@@ -259,7 +263,14 @@ class ExtractionService:
     ) -> dict[str, Any]:
         """Extract data from image using vision model (async version)."""
         import base64
+        import os
 
+        # Bound the payload before reading: base64 inflates bytes by ~33%,
+        # and an uncapped image becomes an OOM-sized LLM request.
+        if os.path.getsize(image_path) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"Image exceeds {MAX_IMAGE_BYTES // (1024 * 1024)} MB cap for vision extraction"
+            )
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode()
 
@@ -279,7 +290,12 @@ class ExtractionService:
     ) -> dict[str, Any]:
         """Extract data from image using vision model (sync version)."""
         import base64
+        import os
 
+        if os.path.getsize(image_path) > MAX_IMAGE_BYTES:
+            raise ValueError(
+                f"Image exceeds {MAX_IMAGE_BYTES // (1024 * 1024)} MB cap for vision extraction"
+            )
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode()
 

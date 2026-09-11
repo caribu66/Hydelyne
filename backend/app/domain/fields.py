@@ -21,6 +21,11 @@ CERT_STATUS_VALUES: tuple[str, ...] = ("pending_verification", "valid", "expirin
 
 CERT_VERIFICATION_STATUS_VALUES: tuple[str, ...] = ("unverified", "verified", "rejected")
 
+# Canonical CrewMember.medical_status vocabulary. Certification rows have
+# their own lifecycle (CERT_STATUS_VALUES, incl. "expiring_soon"); the
+# crew-level medical flag only records fitness: fit, restricted, or expired.
+MEDICAL_STATUS_VALUES: tuple[str, ...] = ("fit", "fit_with_restrictions", "expired")
+
 DOCUMENT_CLASSIFICATIONS: tuple[str, ...] = (
     "certificate",
     "cv",
