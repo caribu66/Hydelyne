@@ -1,25 +1,53 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserProfile } from '../types';
+import { csvDocument } from '../utils/csv';
+import { formatExperience } from '../utils/experience';
+import { availabilityLabel } from '../utils/profileLabels';
 
 const STORAGE_KEY = 'hydenlyne_bookmarked_ids';
 
-export function useShortlist(allProfiles: UserProfile[]) {
+export function useShortlist(allProfiles: UserProfile[], userId: string | null) {
+  const storageKey = userId ? `${STORAGE_KEY}:${userId}` : null;
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(() => {
+    if (!storageKey) return [];
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem(storageKey);
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) && parsed.every((id): id is string => typeof id === 'string') ? parsed : [];
     } catch {
       return [];
     }
   });
+  const [loadedStorageKey, setLoadedStorageKey] = useState(storageKey);
 
   useEffect(() => {
+    setLoadedStorageKey(storageKey);
+    if (!storageKey) {
+      setBookmarkedIds([]);
+      try {
+        localStorage.setItem(STORAGE_KEY, '[]');
+      } catch {
+        // Ignore storage write errors (e.g. incognito restrictions)
+      }
+      return;
+    }
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarkedIds));
+      const saved = localStorage.getItem(storageKey);
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      setBookmarkedIds(Array.isArray(parsed) && parsed.every((id): id is string => typeof id === 'string') ? parsed : []);
+    } catch {
+      setBookmarkedIds([]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (loadedStorageKey !== storageKey || !storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(bookmarkedIds));
     } catch {
       // Ignore storage write errors (e.g. incognito restrictions)
     }
-  }, [bookmarkedIds]);
+  }, [bookmarkedIds, loadedStorageKey, storageKey]);
 
   const toggleBookmark = useCallback((profileId: string) => {
     setBookmarkedIds((prev) =>
@@ -28,31 +56,38 @@ export function useShortlist(allProfiles: UserProfile[]) {
   }, []);
 
   const isBookmarked = useCallback(
-    (profileId: string) => bookmarkedIds.includes(profileId),
-    [bookmarkedIds]
+    (profileId: string) => loadedStorageKey === storageKey && bookmarkedIds.includes(profileId),
+    [bookmarkedIds, loadedStorageKey, storageKey]
   );
 
   const clearShortlist = useCallback(() => {
     setBookmarkedIds([]);
-  }, []);
+    try {
+      if (storageKey) localStorage.removeItem(storageKey);
+      localStorage.setItem(STORAGE_KEY, '[]');
+    } catch {
+      // Ignore storage write errors (e.g. incognito restrictions)
+    }
+  }, [storageKey]);
 
-  const shortlistedProfiles = allProfiles.filter((p) => bookmarkedIds.includes(p.id));
+  const visibleBookmarkedIds = loadedStorageKey === storageKey ? bookmarkedIds : [];
+  const shortlistedProfiles = allProfiles.filter((p) => visibleBookmarkedIds.includes(p.id));
 
   const exportAsCSV = useCallback(() => {
     if (shortlistedProfiles.length === 0) return '';
     const headers = ['Name', 'Title', 'Discipline', 'Location', 'Availability', 'Day Rate (GBP)', 'Experience (Yrs)', 'Email'];
     const rows = shortlistedProfiles.map((p) => [
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.title.replace(/"/g, '""')}"`,
-      `"${p.department.replace(/"/g, '""')}"`,
-      `"${p.location.replace(/"/g, '""')}"`,
-      `"${(p.availability || 'Available').replace(/"/g, '""')}"`,
-      p.dayRate ? `${p.dayRate}` : 'N/A',
-      `${p.yearsOfExperience}`,
-      `"${p.email.replace(/"/g, '""')}"`,
+      p.name,
+      p.title,
+      p.department,
+      p.location,
+      availabilityLabel(p.availability),
+      p.dayRate != null ? p.dayRate : 'N/A',
+      formatExperience(p.yearsOfExperience),
+      p.email,
     ]);
 
-    return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    return csvDocument([headers, ...rows]);
   }, [shortlistedProfiles]);
 
   const copyShortlistSummary = useCallback(async () => {
@@ -60,7 +95,7 @@ export function useShortlist(allProfiles: UserProfile[]) {
     const text = shortlistedProfiles
       .map(
         (p, idx) =>
-          `${idx + 1}. ${p.name} - ${p.title} (${p.department})\n   Location: ${p.location} | Avail: ${p.availability || 'Available'} | Rate: £${p.dayRate || 'Req'}/day\n   Contact: ${p.email}`
+          `${idx + 1}. ${p.name} - ${p.title} (${p.department})\n   Location: ${p.location} | Avail: ${availabilityLabel(p.availability)} | Rate: ${p.dayRate != null ? `£${p.dayRate}/day` : 'Rate on request'}\n   Contact: ${p.email}`
       )
       .join('\n\n');
 
@@ -73,13 +108,13 @@ export function useShortlist(allProfiles: UserProfile[]) {
   }, [shortlistedProfiles]);
 
   return {
-    bookmarkedIds,
+    bookmarkedIds: visibleBookmarkedIds,
     shortlistedProfiles,
     toggleBookmark,
     isBookmarked,
     clearShortlist,
     exportAsCSV,
     copyShortlistSummary,
-    shortlistCount: bookmarkedIds.length,
+    shortlistCount: visibleBookmarkedIds.length,
   };
 }

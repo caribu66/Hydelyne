@@ -63,6 +63,7 @@ class WorkHistory:
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     status: Optional[str] = None
+    document_ref: Optional[str] = None
 
 
 @strawberry.type
@@ -72,7 +73,11 @@ class DocumentType:
     file_type: str
     file_size: int
     storage_type: str
+    title: Optional[str] = None
     classification: Optional[str] = None
+    issue_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    notes: Optional[str] = None
     extraction_status: str = "pending"
     extracted_text: Optional[str] = None
     extracted_data: Optional[str] = None
@@ -94,13 +99,16 @@ class CrewMember:
     flying_point: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    role: str = "user"
-    publication_status: str = "approved"
+    role: Optional[str] = None
+    # Partial projections must not imply publication without an explicit
+    # source-of-truth value.
+    publication_status: str = "draft"
     passport: Optional[PassportInfo] = None
     visa: Optional[VisaInfo] = None
     medical: Optional[MedicalInfo] = None
     insurance: Optional[InsuranceInfo] = None
-    availability_status: str = "available"
+    # Missing availability is not evidence of mobilizability.
+    availability_status: str = "unavailable"
     availability_date: Optional[str] = None
     profile_completeness_score: Optional[float] = None
     years_of_experience: Optional[float] = None
@@ -125,10 +133,13 @@ class Project:
     project_type: str
     location: Optional[str] = None
     country: Optional[str] = None
+    water_depth: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     status: str = "planning"
+    crew_assigned: Optional[list[str]] = None
     requirements: Optional[str] = None
+    document_ref: Optional[str] = None
 
 
 @strawberry.type
@@ -235,7 +246,12 @@ class AuthPayload:
     success: bool
     message: str
     user: Optional[CrewMember] = None
-    token: Optional[str] = None
+    # Kept as a deprecated nullable field for clients during the cookie-session
+    # migration. Session credentials must never be exposed in GraphQL data.
+    token: Optional[str] = strawberry.field(
+        default=None,
+        deprecation_reason="Session credentials are delivered through the HttpOnly cookie",
+    )
 
 
 @strawberry.type
@@ -258,7 +274,7 @@ class CVReviewType:
     status: str
     proposed_data: Optional[str] = None
     approved_data: Optional[str] = None
-    submitted_by: str
+    submitted_by: Optional[str] = None
     reviewed_by: Optional[str] = None
     review_note: Optional[str] = None
     created_at: str

@@ -39,7 +39,7 @@ class. Adding a new column requires classifying it here and in
 - `CrewMember`: `email`, `phone`, `address`, `emergency_contact_name/relationship/phone`, `internal_notes`
 - `WorkHistory.*`: `client_name`, `project_name`, `project_type`, `location`, `country`, `role`, `responsibilities`, `start_date`, `end_date`, `status`, `document_ref`
 - `Certification`: `cert_number`, `issuing_body`, `renewal_date`, `document_ref`, `extracted_confidence`
-- `Document` metadata: `file_name`, `file_type`, `file_size`, `classification`, `extraction_status`, `uploaded_at`, `version_number`, `uploaded_by` (identifier only)
+- `Document` metadata: `file_name`, `file_type`, `file_size`, `title`, `classification`, `issue_date`, `expiry_date`, `notes`, `extraction_status`, `uploaded_at`, `version_number`, `uploaded_by` (identifier only)
 - `Project`: `requirements`, `crew_assigned`, `document_ref`, assignment history
 
 **C3 — Compliance-only** (`T3`: `admin` only; future `compliance` role may be split from `admin` without re-classification):
@@ -102,13 +102,16 @@ a scrub is a fail-closed bug.
 | `searchCrew` | `@require_auth` + tier scrub | T1 → T3 per tier | Same as `crewMembers` | Keyword search surface |
 | `queryCrew` | `@require_auth` | T1 | C1 (structured hits + AI summary with provenance) | Natural-language search; approved-only |
 | `expiringCertifications` | `@require_staff` | T2 | C1 + C2 cert dates/numbers scoped to T2 | Operational alert; T1 receives `FORBIDDEN` |
+| `evaluateAssignmentCompliance` | `@require_admin` | T3 | Includes medical-expiry and assignment compliance details | T1/T2 receive `FORBIDDEN` |
 | `complianceStatus(crewId)` | `@require_admin` + ownership check | T3 | C1 aggregates + C3 expiry detail | T1/T2 receive `FORBIDDEN` |
 | `crewSummary(crewId)` | `@require_auth` | T1 (explicit/on-demand) | C1 summary with provenance | Future: explicit request flag, non-AI fallback when Ollama unavailable |
 | `document(id)` | `@require_auth` + tier gate | T2 (metadata) / T3 (evidence) | `null` for T1; C2 metadata for T2 (no `extractedText`/`extractedData`); full for T3 | Never return C3 fields to T1/T2; enforced via `scrub_document` |
 | `documentsByCrew(crewId)` | `@require_auth` + tier gate | T2 / T3 | `[]` for T1; C2 list for T2; full for T3 | Same split as `document` |
 | `pendingReviews` | `@require_admin` | T3 | C3 queue + C2 metadata | Admin/compliance only |
 | `cvReviews` | `@require_staff` | T2/T3 | C3 proposed/approved data only for `admin`; staff sees own submissions only | Already ownership-scoped; C3 payload must enforce T3 for full evidence |
+| `staffAccounts` | `@require_admin` | T3 | Account-management fields across all publication states | Separate from the approved-only contractor roster so draft/rejected accounts remain manageable |
 | `project` / `projects` | `@require_auth` + tier scrub | T1 (summary) / T2 (assignment) | C1 project roster for T1; `crew_assigned`/`requirements` is C2/T2 | Via `scrub_project` |
+| `campaignAssignments` / `vesselRoster` / vessel lookup | `@require_staff` | T2 | Assignment dates, vessel/contractor names, role, notes, rates, and live vessel operations are staff-only | Staff/admin only |
 | `generateReport` | `@require_auth` + tier branch | T1 (availability) / T2/T3 (compliance/performance) | C1 aggregates for availability; C3 detail for compliance | `COMPLIANCE`/`PERFORMANCE`/`PROJECT_READINESS` require T2+; `AVAILABILITY` remains T1 |
 
 This is enforced automatically for operation-level auth:
@@ -124,7 +127,7 @@ covered by `backend/tests/test_field_level_auth.py` — T1 callers receive
 | Endpoint | Dependency | Required | Policy tier | Notes |
 |---|---|---|---|---|
 | `GET /api/search/crew` | `get_current_user_rest` | any authenticated | **T1 / C1 only** | Returns C1 projection; general index is C1-only and hits are stripped of denied fields (`MEILISEARCH_CREW_DENIED_FIELDS`) |
-| `GET /api/search/documents` | `require_staff_rest` | staff/admin | **T2 (metadata) / T3 (evidence)** | Metadata list is T2; `extracted_data`/`extracted_text` stripped for T2, full for T3. Excludes `pending`/`failed`/`rejected` via `SEARCHABLE_DOCUMENTS_FILTER`. |
+| `GET /api/search/documents` | `require_staff_rest` | staff/admin | **T2 (metadata) / T3 (evidence)** | Metadata list is T2; `extracted_data`/`extracted_text` stripped for T2, full for T3. Excludes `pending`/`failed`/`rejected` and extracted-but-unapproved contractor-link documents via the source-of-truth check. |
 | `POST /api/search/index/crew/{crew_id}` | `require_admin_rest` | admin | T3 (write) | State-changing (Meilisearch write) — admin-only |
 | `GET /api/search/health` | none | public | public | Meilisearch liveness only, no data |
 | `POST /api/documents/preview-cv` | `require_staff_rest` | staff/admin | T2 | Deterministic CV preview only |
@@ -148,7 +151,7 @@ covered by `backend/tests/test_field_level_auth.py` — T1 callers receive
 ## Search and projection policy
 
 - **General `crew_members` Meilisearch index is C1-only.** It contains `id`, `full_name`, `availability_status`, `nationality`, `country_of_residence`, `gender`, `languages`, `flying_point`, `tags`, `publication_status`, and derived C1 text (`education`, `systems_experience`, `training_qualifications`, `geographical_experience`, `professional_summary` as text) — and **must not** contain `email`, `phone`, `passport`/`visa`/`medical`/`insurance`-derived values, or unrestricted `extracted_data`. Enforced in `backend/app/services/consultant_knowledge.py:_crew_meilisearch_doc` (allow-list `MEILISEARCH_CREW_C1_FIELDS`) and `backend/app/services/meilisearch.py:setup_indexes` (searchable attributes C1-only); hits are additionally stripped of `MEILISEARCH_CREW_DENIED_FIELDS` in `GET /api/search/crew` as defense-in-depth for pre-migration indexes. General index rebuild via `reindex_all_crew` keyset path produces C1-only docs.
-- **Document `documents` index** searchable filter `SEARCHABLE_DOCUMENTS_FILTER = 'extraction_status IN ["approved", "extracted"]'` remains; `extracted_data`/`extracted_text` in hits is C3 and is stripped for T2 callers in `GET /api/search/documents` (full for T3).
+- **Document `documents` index** uses `SEARCHABLE_DOCUMENTS_FILTER = 'extraction_status IN ["approved", "extracted"]'`; the PostgreSQL source-of-truth check additionally excludes extracted-but-unapproved contractor-link documents. `extracted_data`/`extracted_text` in hits is C3 and is stripped for T2 callers in `GET /api/search/documents` (full for T3).
 - **Future compliance projection** (`compliance_crew` or Qdrant payload) may be created only with documented operational need and T3 gating. Its existence, retention, and deletion propagation must be proven before it ships.
 - **Deletion / revocation propagation**: `deleteCrewMember`, `remove_from_index`, role demotion (`setStaffRole`), and subject deletion/anonymisation must remove the crew/document from **all** projections (general + any compliance index + Qdrant). Verified by `reindex_all_crew` keyset rebuild and a revocation test (downgrade `admin` → `user` then assert C2/C3 absent from search hits and Apollo cache).
 

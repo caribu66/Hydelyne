@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   deriveCrewReadinessMetrics,
+  formatCalendarDate,
   formatExpiringCertSearchQuery,
   formatProjectSearchQuery,
   getFirstName,
   getGreeting,
   getGreetingForUser,
   isStaffOrAdmin,
+  isoDateAfterDays,
 } from './operationsHome'
 import { UserProfile } from '../types'
 
@@ -137,6 +139,28 @@ describe('formatProjectSearchQuery', () => {
   it('handles missing fields', () => {
     expect(formatProjectSearchQuery({})).toBe('')
     expect(formatProjectSearchQuery({ location: 'Aberdeen' })).toBe('Aberdeen')
+  })
+})
+
+describe('formatCalendarDate', () => {
+  it('formats date-only values in local calendar time without UTC shifting', () => {
+    expect(formatCalendarDate('2026-09-13')).toBe('13 Sept 2026')
+  })
+
+  it('preserves missing and malformed calendar values safely', () => {
+    expect(formatCalendarDate(null)).toBe('—')
+    expect(formatCalendarDate('2026-02-30')).toBe('2026-02-30')
+    expect(formatCalendarDate('not-a-date')).toBe('not-a-date')
+  })
+})
+
+describe('isoDateAfterDays', () => {
+  it('adds days in local calendar time across month boundaries', () => {
+    expect(isoDateAfterDays(7, new Date(2026, 8, 27, 23, 30))).toBe('2026-10-04')
+  })
+
+  it('rejects fractional offsets', () => {
+    expect(() => isoDateAfterDays(1.5, new Date(2026, 8, 13))).toThrow('integer')
   })
 })
 

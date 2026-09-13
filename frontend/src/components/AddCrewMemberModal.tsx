@@ -1,16 +1,19 @@
-import { FC, useState, useRef, ChangeEvent, FormEvent } from 'react';
+import { FC, useCallback, useEffect, useState, useRef, ChangeEvent, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, UserPlus, Loader2, Upload, FileText, CheckCircle } from 'lucide-react';
 import { ApolloError, useMutation } from '@apollo/client';
 import { CREATE_CREW_MEMBER } from '../lib/queries';
 import { getDocumentStatus, previewCv, uploadDocument } from '../lib/documentsApi';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
+import { apolloResultHasErrors } from '../utils/sessionScope';
+import { isAddCrewOperationCurrent, isCvProcessingFailure } from './addCrewMemberUtils';
 
 interface AddCrewMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
   isAdmin: boolean;
+  sessionKey?: string | null;
 }
 
 interface UploadedCv {
@@ -18,7 +21,13 @@ interface UploadedCv {
   status: string;
 }
 
-export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClose, onSuccess, isAdmin }) => {
+export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  isAdmin,
+  sessionKey = null,
+}) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -32,10 +41,16 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
   const [duplicateCandidateId, setDuplicateCandidateId] = useState<string | null>(null);
   const [step, setStep] = useState<'form' | 'creating' | 'extracting' | 'done'>('form');
   const uploadKeyRef = useRef<string | null>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  const previousSessionKeyRef = useRef(sessionKey);
+  const currentIsOpenRef = useRef(isOpen);
+  const operationVersionRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  currentIsOpenRef.current = isOpen;
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
+    operationVersionRef.current += 1;
     setFullName('');
     setEmail('');
     setPhone('');
@@ -49,54 +64,99 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
     setDuplicateCandidateId(null);
     setStep('form');
     uploadKeyRef.current = null;
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     resetForm();
     onClose();
-  };
+  }, [onClose, resetForm]);
+
+  currentSessionKeyRef.current = sessionKey;
+
+  useEffect(() => {
+    operationVersionRef.current += 1;
+    if (previousSessionKeyRef.current !== null && previousSessionKeyRef.current !== sessionKey) {
+      resetForm();
+      onClose();
+    }
+    previousSessionKeyRef.current = sessionKey;
+  }, [onClose, resetForm, sessionKey]);
 
   useAccessibleDialog(isOpen, dialogRef, handleClose);
 
   const [createCrewMember] = useMutation(CREATE_CREW_MEMBER);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    operationVersionRef.current += 1;
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && sessionKey && currentSessionKeyRef.current === sessionKey) {
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
         setCvFile(file);
         uploadKeyRef.current = null;
         setUploadError(null);
         setIsPreviewing(true);
+        const operationVersion = ++operationVersionRef.current;
         try {
           const preview = await previewCv(file);
+          if (
+            operationVersion !== operationVersionRef.current
+            || !currentIsOpenRef.current
+            || currentSessionKeyRef.current !== sessionKey
+          ) return;
           if (preview.full_name && !fullName.trim()) setFullName(preview.full_name);
           if (preview.email && !email.trim()) setEmail(preview.email);
           if (preview.phone && !phone.trim()) setPhone(preview.phone);
           if (preview.nationality && !nationality.trim()) setNationality(preview.nationality);
         } catch (error) {
+          if (
+            operationVersion !== operationVersionRef.current
+            || !currentIsOpenRef.current
+            || currentSessionKeyRef.current !== sessionKey
+          ) return;
           setUploadError(error instanceof Error ? error.message : 'Could not read CV details');
         } finally {
-          setIsPreviewing(false);
+          if (
+            operationVersion === operationVersionRef.current
+            && currentIsOpenRef.current
+            && currentSessionKeyRef.current === sessionKey
+          ) setIsPreviewing(false);
         }
       } else {
+        setCvFile(null);
+        setUploadedCv(null);
+        setIsPreviewing(false);
+        setUploadError(null);
         alert('Please upload a PDF file');
         e.target.value = '';
       }
+    } else if (file) {
+      setCvFile(null);
+      setUploadedCv(null);
+      setIsPreviewing(false);
     }
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!cvFile) return;
+    if (!cvFile || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
 
     setStep('creating');
     setUploadError(null);
+    const operationVersion = ++operationVersionRef.current;
+
+    const operationIsCurrent = () => isAddCrewOperationCurrent(
+      operationVersion,
+      operationVersionRef.current,
+      true,
+      currentIsOpenRef.current,
+      currentSessionKeyRef.current,
+      sessionKey,
+    );
 
     try {
       let crewId = createdCrewId;
       if (!crewId) {
-        const { data } = await createCrewMember({
+        const result = await createCrewMember({
           variables: {
             fullName: fullName.trim() || 'Pending CV import',
             email: email.trim() || undefined,
@@ -106,7 +166,9 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
             confirmDistinct,
           },
         });
-        crewId = data?.createCrewMember?.id ?? null;
+        if (apolloResultHasErrors(result)) throw new Error('Contractor creation returned errors');
+        if (!operationIsCurrent()) return;
+        crewId = result.data?.createCrewMember?.id ?? null;
         setCreatedCrewId(crewId);
         setDuplicateCandidateId(null);
       }
@@ -119,8 +181,10 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
           // GraphQL mutation sent metadata only and could never extract it.
           uploadKeyRef.current ??= crypto.randomUUID();
           result = await uploadDocument(crewId, cvFile, 'cv', uploadKeyRef.current);
+          if (!operationIsCurrent()) return;
           setUploadedCv({ documentId: result.id, status: result.status });
         } catch (extractError) {
+          if (!operationIsCurrent()) return;
           // Preserve the draft ID so retrying uploads to the same contractor
           // instead of creating an accidental duplicate.
           setUploadError(extractError instanceof Error ? extractError.message : 'CV upload failed');
@@ -135,17 +199,33 @@ export const AddCrewMemberModal: FC<AddCrewMemberModalProps> = ({ isOpen, onClos
           for (let attempt = 0; attempt < 30 && ['pending', 'processing'].includes(status); attempt += 1) {
             await new Promise((resolve) => window.setTimeout(resolve, 2_000));
             const latest = await getDocumentStatus(result.id);
+            if (!operationIsCurrent()) return;
             status = latest.extraction_status;
             setUploadedCv({ documentId: result.id, status });
           }
+          if (isCvProcessingFailure(status)) {
+            setUploadError('CV processing failed. Please try again.');
+            setStep('form');
+            return;
+          }
+          if (['pending', 'processing'].includes(status)) {
+            setUploadError('CV processing is taking longer than expected. Please try again.');
+            setStep('form');
+            return;
+          }
         } catch (statusError) {
+          if (!operationIsCurrent()) return;
           setUploadError(statusError instanceof Error ? statusError.message : 'Could not refresh CV status');
+          setStep('form');
+          return;
         }
       }
 
+      if (!operationIsCurrent()) return;
       setStep('done');
       onSuccess?.();
     } catch (error) {
+      if (!operationIsCurrent()) return;
       const message = error instanceof Error ? error.message : 'Could not create contractor';
       if (error instanceof ApolloError) {
         const candidateId = error.graphQLErrors

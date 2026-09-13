@@ -93,10 +93,16 @@ class Certification(Base):
     issue_date: Mapped[Optional[date]] = mapped_column(Date)
     expiry_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
     renewal_date: Mapped[Optional[date]] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(String(20), default="pending_verification", index=True)
+    # Legacy rows may have null lifecycle values; retrieval paths treat null as
+    # unknown rather than silently promoting the evidence to a valid state.
+    status: Mapped[Optional[str]] = mapped_column(
+        String(20), default="pending_verification", index=True
+    )
     document_ref: Mapped[Optional[str]] = mapped_column(String(255))
     extracted_confidence: Mapped[Optional[float]] = mapped_column(Float)
-    verification_status: Mapped[str] = mapped_column(String(20), default="unverified")
+    verification_status: Mapped[Optional[str]] = mapped_column(
+        String(20), default="unverified"
+    )
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=sa.func.now(), onupdate=sa.func.now()
@@ -214,6 +220,7 @@ class Document(Base):
         String(36), ForeignKey("crew_members.id"), index=True
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[Optional[str]] = mapped_column(String(255))
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_type: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -222,7 +229,15 @@ class Document(Base):
     dropbox_revision: Mapped[Optional[str]] = mapped_column(String(100))
     classification: Mapped[Optional[str]] = mapped_column(String(50), index=True)
     classification_confidence: Mapped[Optional[float]] = mapped_column(Float)
+    issue_date: Mapped[Optional[date]] = mapped_column(Date)
+    expiry_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     extraction_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    # Persisted lease marker used to recover documents whose worker died
+    # after claiming them for extraction.
+    processing_started_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True, index=True
+    )
     # Complete text recovered from the original document. The source PDF in
     # Dropbox remains authoritative; this supports search and audit without
     # flattening every CV detail into the crew profile.

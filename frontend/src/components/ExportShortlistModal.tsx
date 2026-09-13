@@ -1,8 +1,12 @@
-import { FC, useState, useRef } from 'react';
+import { FC, useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { X, Download, Copy, Check, Trash2, Users } from 'lucide-react';
 import { UserProfile } from '../types';
+import { csvDocument } from '../utils/csv';
+import { isoDateAfterDays } from '../utils/operationsHome';
+import { formatExperience } from '../utils/experience';
+import { availabilityLabel } from '../utils/profileLabels';
 
 interface ExportShortlistModalProps {
   isOpen: boolean;
@@ -23,21 +27,33 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useAccessibleDialog(isOpen, dialogRef, onClose);
+
+  useEffect(() => {
+    setCopied(false);
+    return () => {
+      if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
+    };
+  }, [isOpen]);
 
   const handleCopy = async () => {
     if (shortlistedProfiles.length === 0) return;
     const text = shortlistedProfiles
       .map(
         (p, idx) =>
-          `[${idx + 1}] ${p.name} - ${p.title} (${p.department})\nLocation: ${p.location} | Avail: ${p.availability} | Day Rate: £${p.dayRate || 'On Request'}/day\nEmail: ${p.email}\nBio: ${p.bio}\nKey Skills: ${p.skills.slice(0, 5).join(', ')}`
+          `[${idx + 1}] ${p.name} - ${p.title} (${p.department})\nLocation: ${p.location} | Avail: ${p.availability} | Day Rate: ${p.dayRate != null ? `£${p.dayRate}/day` : 'Rate on request'}\nEmail: ${p.email}\nBio: ${p.bio}\nKey Skills: ${p.skills.slice(0, 5).join(', ')}`
       )
       .join('\n\n------------------------------------\n\n');
 
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
+      copyFeedbackTimerRef.current = setTimeout(() => {
+        copyFeedbackTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
       // Fallback
     }
@@ -47,24 +63,25 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
     if (shortlistedProfiles.length === 0) return;
     const headers = ['Name', 'Title', 'Discipline', 'Location', 'Availability', 'Day Rate GBP', 'Years Experience', 'Email'];
     const rows = shortlistedProfiles.map((p) => [
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.title.replace(/"/g, '""')}"`,
-      `"${p.department.replace(/"/g, '""')}"`,
-      `"${p.location.replace(/"/g, '""')}"`,
-      `"${(p.availability || 'Available').replace(/"/g, '""')}"`,
-      p.dayRate ? `${p.dayRate}` : 'N/A',
-      `${p.yearsOfExperience}`,
-      `"${p.email.replace(/"/g, '""')}"`,
+      p.name,
+      p.title,
+      p.department,
+      p.location,
+      p.availability || 'Availability not recorded',
+      p.dayRate != null ? p.dayRate : 'N/A',
+      formatExperience(p.yearsOfExperience),
+      p.email,
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = csvDocument([headers, ...rows]);
+    const blobUrl = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Hydenlyne_Shortlist_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('href', blobUrl);
+    link.setAttribute('download', `Hydenlyne_Shortlist_${isoDateAfterDays(0)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
   };
 
   return (
@@ -169,8 +186,8 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
                         <div className="text-xs text-muted flex items-center gap-2">
                           <span>{profile.location}</span>
                           <span>•</span>
-                          <span className="text-positive">{profile.availability}</span>
-                          {profile.dayRate && (
+                          <span className="text-positive">{availabilityLabel(profile.availability)}</span>
+                          {profile.dayRate != null && (
                             <>
                               <span>•</span>
                               <span className="font-mono">£{profile.dayRate}/d</span>

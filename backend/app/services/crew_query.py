@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import date, timedelta
 from typing import Any, TypedDict
 
@@ -9,16 +10,18 @@ import sqlalchemy as sa
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.domain.certifications import normalize_cert_name
-from app.domain.crew_query_rules import apply_deterministic_query_rules
+from app.domain.crew_query_rules import MAX_SEARCH_QUERY_LENGTH, apply_deterministic_query_rules
 from app.models import Certification as CertificationModel
 from app.models import CrewMember as CrewMemberModel
-from app.models import WorkHistory as WorkHistoryModel
 from app.services.ollama import ollama_client
 
 logger = logging.getLogger(__name__)
+MAX_GENERATED_RESPONSE_LENGTH = 12_000
+MAX_INTENT_RESPONSE_LENGTH = 20_000
 
 
 class CrewQueryEntities(TypedDict, total=False):
@@ -46,6 +49,76 @@ class CrewQueryLLMResponse(TypedDict, total=False):
 
 _INTENT_VALUES = {"search", "summarize", "compliance", "matching", "general"}
 _AVAILABILITY_VALUES = {"available immediately", "available", "unavailable", "on assignment"}
+MAX_QUERY_ENTITY_VALUE_LENGTH = 255
+MAX_QUERY_ENTITY_LIST_ITEMS = 50
+
+
+def _bounded_entity_values(value: object) -> list[str]:
+    """Keep model-produced filter values scalar, bounded, and finite."""
+    if not isinstance(value, list):
+        return []
+    values: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        normalized = item.strip()
+        if normalized and len(normalized) <= MAX_QUERY_ENTITY_VALUE_LENGTH:
+            values.append(normalized)
+        if len(values) >= MAX_QUERY_ENTITY_LIST_ITEMS:
+            break
+    return list(dict.fromkeys(values))
+
+
+def _bounded_entity_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized or len(normalized) > MAX_QUERY_ENTITY_VALUE_LENGTH:
+        return None
+    return normalized
+
+
+def _contains_like(value: str) -> str:
+    """Build a literal substring pattern for a SQL ``LIKE`` expression."""
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _experience_years(experience_months: int | None) -> float | None:
+    """Convert stored experience without turning an unknown value into zero."""
+    if experience_months is None:
+        return None
+    return round(experience_months / 12, 1)
+
+
+def _derived_compliance_status(
+    expiry_date: date | None,
+    stored_status: str | None,
+    reference_date: date,
+) -> str | None:
+    """Derive compliance state from expiry evidence, not stale status text."""
+    if expiry_date is None:
+        return stored_status if stored_status in {"expired", "expiring_soon"} else None
+    if expiry_date < reference_date:
+        return "expired"
+    if expiry_date <= reference_date + timedelta(days=90):
+        return "expiring_soon"
+    return None
+
+
+def _not_explicitly_rejected(
+    column: ColumnElement[Any] | InstrumentedAttribute[Any],
+) -> ColumnElement[bool]:
+    """Treat legacy NULL lifecycle values as not explicitly rejected."""
+    return or_(column.is_(None), column != "rejected")
+
+
+def _contractor_account_condition() -> ColumnElement[bool]:
+    """Keep login accounts out of natural-language contractor retrieval."""
+    return and_(
+        CrewMemberModel.password_hash.is_(None),
+        or_(CrewMemberModel.role.is_(None), CrewMemberModel.role.not_in(("staff", "admin"))),
+    )
 
 
 def _validate_llm_response(raw: dict[str, Any]) -> CrewQueryLLMResponse:
@@ -74,10 +147,14 @@ def _validate_llm_response(raw: dict[str, Any]) -> CrewQueryLLMResponse:
         "certification_keywords",
     ):
         value = entities.get(field)
-        if isinstance(value, list) and all(isinstance(item, str) for item in value):
-            certified[field] = value  # type: ignore[literal-required]
+        if isinstance(value, list):
+            bounded_values = _bounded_entity_values(value)
+            if bounded_values:
+                certified[field] = bounded_values  # type: ignore[literal-required]
         elif value is not None:
-            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+            logger.warning(
+                "Ignoring malformed LLM entities.%s (type=%s)", field, type(value).__name__
+            )
 
     for field in (
         "location",
@@ -88,30 +165,47 @@ def _validate_llm_response(raw: dict[str, Any]) -> CrewQueryLLMResponse:
         "availability_by",
     ):
         value = entities.get(field)
-        if isinstance(value, str):
-            certified[field] = value  # type: ignore[literal-required]
+        bounded_value = _bounded_entity_value(value)
+        if bounded_value is not None:
+            certified[field] = bounded_value  # type: ignore[literal-required]
         elif value is not None:
-            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+            logger.warning(
+                "Ignoring malformed LLM entities.%s (type=%s)", field, type(value).__name__
+            )
 
     for field in ("min_experience_years", "max_experience_years"):
         value = entities.get(field)
-        if isinstance(value, (int, float)):
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and 0 <= value <= 100
+        ):
             certified[field] = float(value)  # type: ignore[literal-required]
         elif value is not None:
-            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+            logger.warning(
+                "Ignoring malformed LLM entities.%s (type=%s)", field, type(value).__name__
+            )
 
     for field in ("medical_required", "medical_valid", "certifications_valid"):
         value = entities.get(field)
         if isinstance(value, bool):
             certified[field] = value  # type: ignore[literal-required]
         elif value is not None:
-            logger.warning("Ignoring malformed LLM entities.%s: %r", field, value)
+            logger.warning(
+                "Ignoring malformed LLM entities.%s (type=%s)", field, type(value).__name__
+            )
 
     if certified.get("availability") not in _AVAILABILITY_VALUES:
         certified.pop("availability", None)
 
     confidence = raw.get("confidence")
-    if not isinstance(confidence, (int, float)) or not (0.0 <= float(confidence) <= 1.0):
+    if (
+        not isinstance(confidence, (int, float))
+        or isinstance(confidence, bool)
+        or not math.isfinite(float(confidence))
+        or not (0.0 <= float(confidence) <= 1.0)
+    ):
         confidence = None
 
     return CrewQueryLLMResponse(intent=intent, entities=certified, confidence=confidence)
@@ -216,11 +310,35 @@ For each candidate, provide:
 class CrewQueryService:
     """Service for natural language queries about crew members."""
 
-    async def process_query(self, query: str, db_session: AsyncSession) -> dict[str, Any]:
+    async def process_query(
+        self,
+        query: str,
+        db_session: AsyncSession,
+        *,
+        allow_compliance: bool = True,
+    ) -> dict[str, Any]:
         """Process a natural language query about crew members."""
+        normalized_query = query.strip()
+        if not normalized_query:
+            raise ValueError("Search query must not be blank")
+        if len(normalized_query) > MAX_SEARCH_QUERY_LENGTH:
+            raise ValueError(
+                f"Search query must be {MAX_SEARCH_QUERY_LENGTH} characters or fewer"
+            )
+        query = normalized_query
         intent_result = await self._classify_intent(query)
         intent = intent_result.get("intent", "general")
         entities = intent_result.get("entities", {})
+
+        if intent == "compliance" and not allow_compliance:
+            return {
+                "intent": "compliance",
+                "query": query,
+                "entities": entities,
+                "results": [],
+                "summary": "Compliance searches require staff access.",
+                "total_issues": 0,
+            }
 
         if intent == "search":
             response = await self._handle_search(query, entities, db_session)
@@ -244,11 +362,13 @@ class CrewQueryService:
         try:
             result = await ollama_client.extract(prompt)
             response_text = result.get("response", "")
+            if not isinstance(response_text, str) or len(response_text) > MAX_INTENT_RESPONSE_LENGTH:
+                raise ValueError("Intent classifier response is invalid or too large")
             classified = json.loads(response_text)
             validated = _validate_llm_response(classified)
             return apply_deterministic_query_rules(query, dict(validated))
         except Exception as e:
-            logger.error(f"Intent classification failed: {e}")
+            logger.error("Intent classification failed: %s", type(e).__name__)
             # Search remains useful when the local model is unavailable.
             return apply_deterministic_query_rules(
                 query, {"intent": "search", "entities": {}, "confidence": 0.0}
@@ -261,34 +381,33 @@ class CrewQueryService:
         stmt = (
             select(CrewMemberModel)
             .where(CrewMemberModel.publication_status == "approved")
+            .where(_contractor_account_condition())
             .options(
                 selectinload(CrewMemberModel.certifications),
-                selectinload(CrewMemberModel.work_history),
             )
         )
 
         filters: list[ColumnElement[bool]] = []
         search_terms = []
 
-        # Source systems may represent a medical as a certification or as a
-        # dedicated crew field, so include both representations.
+        # Medical certification type and expiry are C1 searchable fields;
+        # dedicated medical columns are C3 and must not be a T1 side channel.
         if entities.get("medical_required"):
             if entities.get("medical_valid"):
                 filters.append(
                     or_(
-                        and_(
-                            CrewMemberModel.medical_status.in_(("fit", "fit_with_restrictions")),
-                            CrewMemberModel.medical_expiry.is_not(None),
-                            CrewMemberModel.medical_expiry >= date.today(),
-                        ),
                         CrewMemberModel.certifications.any(
                             and_(
-                                CertificationModel.cert_type.ilike("%medical%"),
-                                CertificationModel.status.in_(("valid", "pending_verification")),
                                 or_(
-                                    CertificationModel.expiry_date.is_(None),
-                                    CertificationModel.expiry_date >= date.today(),
+                                    CertificationModel.cert_type.ilike("%medical%"),
+                                    CertificationModel.cert_type.ilike("%oguk%"),
+                                    CertificationModel.cert_type.ilike("%oeuk%"),
+                                    CertificationModel.cert_type.ilike("%eng1%"),
                                 ),
+                                _not_explicitly_rejected(CertificationModel.status),
+                                CertificationModel.verification_status == "verified",
+                                CertificationModel.expiry_date.is_not(None),
+                                CertificationModel.expiry_date >= date.today(),
                             )
                         ),
                     )
@@ -297,16 +416,26 @@ class CrewQueryService:
                 filters.append(
                     or_(
                         CrewMemberModel.certifications.any(
-                            CertificationModel.cert_type.ilike("%medical%")
+                            and_(
+                                or_(
+                                    CertificationModel.cert_type.ilike("%medical%"),
+                                    CertificationModel.cert_type.ilike("%oguk%"),
+                                    CertificationModel.cert_type.ilike("%oeuk%"),
+                                    CertificationModel.cert_type.ilike("%eng1%"),
+                                ),
+                                _not_explicitly_rejected(CertificationModel.status),
+                                _not_explicitly_rejected(CertificationModel.verification_status),
+                            )
                         ),
-                        CrewMemberModel.medical_status.is_not(None),
-                        CrewMemberModel.medical_expiry.is_not(None),
-                        CrewMemberModel.medical_provider.is_not(None),
                     )
                 )
 
         if entities.get("nationality"):
-            filters.append(CrewMemberModel.nationality.ilike(f"%{entities['nationality']}%"))
+            filters.append(
+                CrewMemberModel.nationality.ilike(
+                    _contains_like(str(entities["nationality"])), escape="\\"
+                )
+            )
 
         if entities.get("min_experience_years") is not None:
             filters.append(
@@ -323,11 +452,16 @@ class CrewQueryService:
         # that family: IMCA Survey QC, IMCA Geotech, IMCA Client Rep, etc.
         for keyword in entities.get("certification_keywords") or []:
             family_conditions: list[ColumnElement[bool]] = [
-                CertificationModel.cert_type.ilike(f"%{keyword}%")
+                CertificationModel.cert_type.ilike(
+                    _contains_like(str(keyword)), escape="\\"
+                ),
+                _not_explicitly_rejected(CertificationModel.status),
+                _not_explicitly_rejected(CertificationModel.verification_status),
             ]
             if entities.get("certifications_valid"):
                 family_conditions.extend(
                     [
+                        CertificationModel.verification_status == "verified",
                         CertificationModel.expiry_date.is_not(None),
                         CertificationModel.expiry_date >= date.today(),
                     ]
@@ -359,11 +493,14 @@ class CrewQueryService:
             # as "BOSIET and OGUK Medical".
             for cert_type in normalized_certs:
                 cert_conditions: list[ColumnElement[bool]] = [
-                    CertificationModel.cert_type == cert_type
+                    CertificationModel.cert_type == cert_type,
+                    _not_explicitly_rejected(CertificationModel.status),
+                    _not_explicitly_rejected(CertificationModel.verification_status),
                 ]
                 if entities.get("certifications_valid"):
                     cert_conditions.extend(
                         [
+                            CertificationModel.verification_status == "verified",
                             CertificationModel.expiry_date.is_not(None),
                             CertificationModel.expiry_date >= date.today(),
                         ]
@@ -409,25 +546,51 @@ class CrewQueryService:
         if search_terms:
             for term in search_terms:
                 term_filters: list[ColumnElement[bool]] = []
-                term_filters.append(CrewMemberModel.full_name.ilike(f"%{term}%"))
-                term_filters.append(sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{term}%"))
-                term_filters.append(CrewMemberModel.internal_notes.ilike(f"%{term}%"))
-                # Work history fields
+                like_pattern = _contains_like(str(term))
                 term_filters.append(
-                    CrewMemberModel.work_history.any(
-                        or_(
-                            WorkHistoryModel.project_type.ilike(f"%{term}%"),
-                            WorkHistoryModel.location.ilike(f"%{term}%"),
-                            WorkHistoryModel.responsibilities.ilike(f"%{term}%"),
-                            WorkHistoryModel.role.ilike(f"%{term}%"),
-                            WorkHistoryModel.client_name.ilike(f"%{term}%"),
-                        )
-                    )
+                    CrewMemberModel.full_name.ilike(like_pattern, escape="\\")
+                )
+                term_filters.append(
+                    sa.cast(CrewMemberModel.tags, sa.String).ilike(like_pattern, escape="\\")
+                )
+                # Natural search is a T1/C1 surface. Do not use internal notes
+                # or work-history rows here; matching on either would let a
+                # caller infer restricted data even if the result is scrubbed.
+                term_filters.extend(
+                    [
+                        CrewMemberModel.nationality.ilike(like_pattern, escape="\\"),
+                        CrewMemberModel.country_of_residence.ilike(
+                            like_pattern, escape="\\"
+                        ),
+                        sa.cast(CrewMemberModel.languages, sa.String).ilike(
+                            like_pattern, escape="\\"
+                        ),
+                        CrewMemberModel.flying_point.ilike(like_pattern, escape="\\"),
+                        CrewMemberModel.professional_summary.ilike(
+                            like_pattern, escape="\\"
+                        ),
+                        CrewMemberModel.education.ilike(like_pattern, escape="\\"),
+                        sa.cast(CrewMemberModel.geographical_experience, sa.String).ilike(
+                            like_pattern, escape="\\"
+                        ),
+                        sa.cast(CrewMemberModel.systems_experience, sa.String).ilike(
+                            like_pattern, escape="\\"
+                        ),
+                        sa.cast(CrewMemberModel.training_qualifications, sa.String).ilike(
+                            like_pattern, escape="\\"
+                        ),
+                    ]
                 )
                 # Certification type names
                 term_filters.append(
                     CrewMemberModel.certifications.any(
-                        CertificationModel.cert_type.ilike(f"%{term}%")
+                        and_(
+                                        CertificationModel.cert_type.ilike(
+                                            like_pattern, escape="\\"
+                                        ),
+                                        _not_explicitly_rejected(CertificationModel.status),
+                                        _not_explicitly_rejected(CertificationModel.verification_status),
+                        )
                     )
                 )
                 # Also split multi-word terms for partial matching
@@ -437,11 +600,19 @@ class CrewQueryService:
                         if len(word) > 3:  # Skip short words
                             term_filters.append(
                                 CrewMemberModel.certifications.any(
-                                    CertificationModel.cert_type.ilike(f"%{word}%")
+                                    and_(
+                                        CertificationModel.cert_type.ilike(
+                                            _contains_like(str(word)), escape="\\"
+                                        ),
+                                        _not_explicitly_rejected(CertificationModel.status),
+                                        _not_explicitly_rejected(CertificationModel.verification_status),
+                                    )
                                 )
                             )
                             term_filters.append(
-                                sa.cast(CrewMemberModel.tags, sa.String).ilike(f"%{word}%")
+                                sa.cast(CrewMemberModel.tags, sa.String).ilike(
+                                    _contains_like(str(word)), escape="\\"
+                                )
                             )
                 # Each requested skill/location/project term is a requirement;
                 # the OR applies only to the fields where that term may be
@@ -476,9 +647,8 @@ class CrewQueryService:
                 {
                     "id": crew.id,
                     "name": crew.full_name,
-                    "email": crew.email,
                     "availability": crew.availability_status,
-                    "experience_years": round((crew.experience_months or 0) / 12, 1),
+                    "experience_years": _experience_years(crew.experience_months),
                     "nationality": crew.nationality,
                     "country_of_residence": crew.country_of_residence,
                     "languages": crew.languages or [],
@@ -488,24 +658,12 @@ class CrewQueryService:
                     "training_qualifications": crew.training_qualifications or [],
                     "geographical_experience": crew.geographical_experience or [],
                     "systems_experience": crew.systems_experience or [],
-                    "certifications": [c.cert_type for c in crew.certifications]
-                    if crew.certifications
-                    else [],
-                    "work_locations": list(
-                        set(wh.location for wh in crew.work_history if wh.location)
-                    )
-                    if crew.work_history
-                    else [],
-                    "work_countries": list(
-                        set(wh.country for wh in crew.work_history if wh.country)
-                    )
-                    if crew.work_history
-                    else [],
-                    "project_types": list(
-                        set(wh.project_type for wh in crew.work_history if wh.project_type)
-                    )
-                    if crew.work_history
-                    else [],
+                    "certifications": [
+                        c.cert_type
+                        for c in crew.certifications
+                        if (c.status is None or c.status != "rejected")
+                        and (c.verification_status is None or c.verification_status != "rejected")
+                    ],
                 }
             )
 
@@ -534,14 +692,42 @@ class CrewQueryService:
         stmt = (
             select(CrewMemberModel)
             .where(CrewMemberModel.publication_status == "approved")
+            .where(_contractor_account_condition())
             .options(
                 selectinload(CrewMemberModel.certifications),
                 selectinload(CrewMemberModel.documents),
             )
-            .where(CrewMemberModel.full_name.ilike(f"%{crew_name}%"))
+            .where(
+                CrewMemberModel.full_name.ilike(
+                    _contains_like(str(crew_name)), escape="\\"
+                )
+            )
         )
-        result = await db_session.execute(stmt)
-        crew = result.scalar_one_or_none()
+        # A partial name can match several approved profiles (for example
+        # "Alex Carter" and "Alex Carter Jr"). Do not let
+        # scalar_one_or_none() turn that normal ambiguity into a 500, and do
+        # not silently summarize an arbitrary person. Prefer one exact
+        # case-insensitive match; otherwise require the caller to clarify.
+        result = await db_session.execute(stmt.limit(2))
+        matches = list(result.scalars().all())
+        normalized_name = str(crew_name).strip().casefold()
+        exact_matches = [
+            candidate
+            for candidate in matches
+            if candidate.full_name.strip().casefold() == normalized_name
+        ]
+        if len(exact_matches) == 1:
+            crew = exact_matches[0]
+        elif len(matches) == 1:
+            crew = matches[0]
+        elif len(matches) > 1:
+            return {
+                "intent": "summarize",
+                "query": query,
+                "summary": "More than one approved specialist matches that name. Please be more specific.",
+            }
+        else:
+            crew = None
 
         if not crew:
             return {
@@ -570,26 +756,20 @@ class CrewQueryService:
         still needs a fuzzy name lookup to resolve `crew` in the first
         place) and the direct by-ID path
         (ConsultantKnowledgeService.summarize), which doesn't. `crew` must
-        have certifications, work_history, and documents eager-loaded.
+        have certifications and documents eager-loaded.
         """
         crew_data = {
             "id": crew.id,
             "name": crew.full_name,
-            "email": crew.email,
-            "phone": crew.phone,
             "nationality": crew.nationality,
             "country_of_residence": crew.country_of_residence,
-            "date_of_birth": str(crew.date_of_birth) if crew.date_of_birth else None,
             "gender": crew.gender,
             "languages": crew.languages,
             "flying_point": crew.flying_point,
             "education": crew.education,
             "professional_summary": crew.professional_summary,
-            "experience_years": round((crew.experience_months or 0) / 12, 1),
+            "experience_years": _experience_years(crew.experience_months),
             "availability": crew.availability_status,
-            "passport_expiry": str(crew.passport_expiry) if crew.passport_expiry else None,
-            "medical_expiry": str(crew.medical_expiry) if crew.medical_expiry else None,
-            "medical_status": crew.medical_status,
             "training_qualifications": crew.training_qualifications or [],
             "geographical_experience": crew.geographical_experience or [],
             "systems_experience": crew.systems_experience or [],
@@ -597,42 +777,24 @@ class CrewQueryService:
             "certifications": [
                 {
                     "type": c.cert_type,
-                    "issuing_body": c.issuing_body,
-                    "issue_date": str(c.issue_date) if c.issue_date else None,
                     "expiry_date": str(c.expiry_date) if c.expiry_date else None,
                     "status": c.status,
                 }
                 for c in (crew.certifications or [])
             ],
-            "work_history": [
-                {
-                    "client": wh.client_name,
-                    "country": wh.country,
-                    "project_type": wh.project_type,
-                    "role": wh.role,
-                    "start_date": str(wh.start_date) if wh.start_date else None,
-                }
-                for wh in (crew.work_history or [])
-            ],
         }
 
-        doc_data = []
-        for doc in crew.documents:
-            if doc.extracted_data:
-                doc_data.append(
-                    {
-                        "file": doc.file_name,
-                        "classification": doc.classification,
-                        "data": doc.extracted_data,
-                    }
-                )
+        # Document metadata and extraction payloads are C2/C3 data and may
+        # reveal identity, medical, or passport information. The summary is a
+        # T1 surface, so expose no document metadata to the model.
+        doc_data = "Document contents are not included in this summary."
 
         return await self._generate_response(
             "summarize_response",
             query or f"Summarize {crew.full_name}",
             json.dumps(crew_data, indent=2),
             prose=True,
-            document_data=json.dumps(doc_data, indent=2) if doc_data else "No documents",
+            document_data=doc_data,
         )
 
     async def _handle_compliance(
@@ -645,17 +807,30 @@ class CrewQueryService:
         stmt = (
             select(CrewMemberModel)
             .where(CrewMemberModel.publication_status == "approved")
+            .where(_contractor_account_condition())
             .options(selectinload(CrewMemberModel.certifications))
             .join(CertificationModel)
             .where(
                 or_(
-                    CertificationModel.status == "expired",
-                    CertificationModel.status == "expiring_soon",
-                )
+                    CertificationModel.expiry_date < today,
+                    and_(
+                        CertificationModel.expiry_date >= today,
+                        CertificationModel.expiry_date <= threshold,
+                    ),
+                    and_(
+                        CertificationModel.expiry_date.is_(None),
+                        CertificationModel.status.in_(("expired", "expiring_soon")),
+                    ),
+                ),
+                CertificationModel.verification_status == "verified",
+                _not_explicitly_rejected(CertificationModel.status),
             )
         )
 
-        result = await db_session.execute(stmt)
+        # Compliance search is staff-only, but it is still an externally
+        # triggerable query. Keep a pathological number of matching profiles
+        # from becoming an unbounded ORM result and LLM prompt.
+        result = await db_session.execute(stmt.limit(100))
         crew_list = result.scalars().unique().all()
 
         compliance_data = []
@@ -663,8 +838,13 @@ class CrewQueryService:
             expired_certs = []
             expiring_certs = []
             for cert in crew.certifications:
+                compliance_status = _derived_compliance_status(
+                    cert.expiry_date, cert.status, today
+                )
+                if compliance_status is None or cert.verification_status == "rejected":
+                    continue
                 if cert.expiry_date:
-                    if cert.expiry_date < today:
+                    if compliance_status == "expired":
                         expired_certs.append(
                             {
                                 "type": cert.cert_type,
@@ -672,7 +852,7 @@ class CrewQueryService:
                                 "status": "expired",
                             }
                         )
-                    elif cert.expiry_date <= threshold:
+                    elif compliance_status == "expiring_soon":
                         expiring_certs.append(
                             {
                                 "type": cert.cert_type,
@@ -763,6 +943,9 @@ class CrewQueryService:
             if not isinstance(response, str):
                 logger.warning("Ollama returned a non-string response field; using fallback")
                 return results
+            if len(response) > MAX_GENERATED_RESPONSE_LENGTH:
+                logger.warning("Ollama response exceeded the bounded output length")
+                return results if not prose else response[:MAX_GENERATED_RESPONSE_LENGTH]
             if prose:
                 return response.strip()
             try:
@@ -771,7 +954,7 @@ class CrewQueryService:
             except (json.JSONDecodeError, TypeError):
                 return response.strip()
         except Exception as e:
-            logger.error(f"Response generation failed: {e}")
+            logger.error("Response generation failed: %s", type(e).__name__)
             return results
 
 

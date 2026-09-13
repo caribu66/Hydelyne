@@ -11,14 +11,16 @@ import {
 
 interface DocumentReviewModalProps {
   isOpen: boolean
+  sessionKey?: string | null
   onClose: () => void
-  onOpenContractor: (crewId: string) => void
+  onOpenContractor: (crewId: string) => void | Promise<void>
   onShowToast: (message: string) => void
   onReviewResolved: () => void
 }
 
 export const DocumentReviewModal: FC<DocumentReviewModalProps> = ({
   isOpen,
+  sessionKey = null,
   onClose,
   onOpenContractor,
   onShowToast,
@@ -29,27 +31,37 @@ export const DocumentReviewModal: FC<DocumentReviewModalProps> = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
+  const requestVersionRef = useRef(0)
+  const currentSessionKeyRef = useRef(sessionKey)
+  currentSessionKeyRef.current = sessionKey
 
   useAccessibleDialog(isOpen, dialogRef, onClose)
 
   useEffect(() => {
-    if (!isOpen) return
+    requestVersionRef.current += 1
+    setItems([])
+    setError(null)
+    setActingId(null)
+    if (!isOpen || !sessionKey) {
+      return
+    }
 
     let active = true
+    const requestVersion = requestVersionRef.current
     const load = async () => {
       setLoading(true)
       try {
         const reviews = await incomingDocumentReviews()
-        if (active) {
+        if (active && requestVersion === requestVersionRef.current) {
           setItems(reviews)
           setError(null)
         }
       } catch (err) {
-        if (active) {
+        if (active && requestVersion === requestVersionRef.current) {
           setError(err instanceof Error ? err.message : 'Could not load received documents.')
         }
       } finally {
-        if (active) setLoading(false)
+        if (active && requestVersion === requestVersionRef.current) setLoading(false)
       }
     }
 
@@ -57,24 +69,31 @@ export const DocumentReviewModal: FC<DocumentReviewModalProps> = ({
     return () => {
       active = false
     }
-  }, [isOpen])
+  }, [isOpen, sessionKey])
 
   const handleAction = async (reviewId: string, action: 'approve' | 'reject', fileName: string) => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return
+    const requestVersion = requestVersionRef.current
     setActingId(reviewId)
     try {
       await actionIncomingDocumentReview(reviewId, action)
+      if (
+        requestVersion !== requestVersionRef.current ||
+        currentSessionKeyRef.current !== sessionKey
+      ) return
       setItems((currentItems) => currentItems.filter((item) => item.id !== reviewId))
       onReviewResolved()
       onShowToast(action === 'approve' ? `Approved “${fileName}” for compliance` : `Rejected “${fileName}”`)
     } catch (err) {
+      if (requestVersion !== requestVersionRef.current) return
       onShowToast(err instanceof Error ? err.message : `Failed to ${action} document`)
     } finally {
-      setActingId(null)
+      if (requestVersion === requestVersionRef.current) setActingId(null)
     }
   }
 
   const handleOpenContractor = (crewId: string) => {
-    onOpenContractor(crewId)
+    void onOpenContractor(crewId)
     onClose()
   }
 
@@ -137,6 +156,7 @@ export const DocumentReviewModal: FC<DocumentReviewModalProps> = ({
                 <ul className="space-y-3" aria-label="Pending documents">
                   {items.map((item) => {
                     const isActing = actingId === item.id
+                    const canApprove = item.extraction_status === 'extracted' || item.extraction_status === 'needs_review'
                     return (
                       <li key={item.id} className="flex flex-col gap-3 rounded-[10px] border border-border-subtle bg-canvas/60 p-3.5 sm:flex-row sm:items-center sm:justify-between">
                         <button
@@ -152,7 +172,7 @@ export const DocumentReviewModal: FC<DocumentReviewModalProps> = ({
                           </span>
                         </button>
                         <div className="flex shrink-0 gap-2">
-                          <button type="button" disabled={isActing} onClick={() => void handleAction(item.id, 'approve', item.file_name)} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-positive-soft px-3 text-xs font-semibold text-positive transition-colors hover:bg-positive/20 focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
+                          <button type="button" disabled={isActing || !canApprove} title={canApprove ? 'Approve document' : 'Approval waits for extraction to finish'} onClick={() => void handleAction(item.id, 'approve', item.file_name)} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-positive-soft px-3 text-xs font-semibold text-positive transition-colors hover:bg-positive/20 focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">
                             {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
                             Approve
                           </button>

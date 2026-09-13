@@ -1,4 +1,5 @@
 import { UserProfile } from '../types';
+import { formatExperience, numericExperience } from './experience';
 
 export interface SkillAxisData {
   axis: string;
@@ -10,7 +11,7 @@ export interface SkillAxisData {
 export function computeCandidateSkillScores(profile: UserProfile): SkillAxisData[] {
   const combinedText = `${profile.title} ${profile.department} ${profile.bio} ${profile.skills.join(' ')} ${(profile.surveyTypes || []).join(' ')} ${(profile.certifications || []).join(' ')}`.toLowerCase();
 
-  const expMultiplier = Math.min(1.2, 0.7 + (profile.yearsOfExperience || 3) * 0.035);
+  const expMultiplier = Math.min(1.2, 0.7 + Math.max(0, numericExperience(profile.yearsOfExperience)) * 0.035);
 
   // 1. Geotechnical
   const geotechKeywords = ['geotech', 'geotechnical', 'soil', 'core', 'vibrocore', 'cpt', 'borehole', 'laboratory', 'logging', 'sampling', 'benthic', 'sediment'];
@@ -56,7 +57,7 @@ export function computeCandidateSkillScores(profile: UserProfile): SkillAxisData
   const qcKeywords = ['qc', 'quality control', 'client rep', 'party chief', 'lead', 'reporting', 'management', 'audit', 'senior', 'supervision', 'signoff'];
   const qcMatches = qcKeywords.filter(k => combinedText.includes(k)).length;
   let qcScore = Math.min(98, Math.round((qcMatches * 20 + 35) * expMultiplier));
-  if (profile.title.toLowerCase().includes('lead') || profile.title.toLowerCase().includes('chief') || profile.title.toLowerCase().includes('rep') || profile.yearsOfExperience >= 8) {
+  if (profile.title.toLowerCase().includes('lead') || profile.title.toLowerCase().includes('chief') || profile.title.toLowerCase().includes('rep') || numericExperience(profile.yearsOfExperience) >= 8) {
     qcScore = Math.max(88, qcScore);
   }
 
@@ -102,7 +103,7 @@ export function computeCandidateSkillScores(profile: UserProfile): SkillAxisData
       axis: 'QC & Reporting',
       value: Math.max(25, Math.min(98, qcScore)),
       level: getLevel(qcScore),
-      details: [`${profile.yearsOfExperience}y Track Record`, profile.isHighlyRecommended ? 'Verified Rep' : 'Field QC'],
+      details: [`${formatExperience(profile.yearsOfExperience)}${profile.yearsOfExperience == null ? '' : 'y'} Track Record`, profile.isHighlyRecommended ? 'Strong match' : 'Field QC'],
     },
   ];
 }

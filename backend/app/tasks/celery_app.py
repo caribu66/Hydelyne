@@ -1,9 +1,10 @@
 from celery import Celery
 from celery.schedules import crontab
 
-from app.config import get_settings
+from app.config import get_settings, validate_prod_secrets
 
 settings = get_settings()
+validate_prod_secrets(settings)
 
 celery_app = Celery(
     "hydenlyne_tasks",

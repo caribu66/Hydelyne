@@ -6,12 +6,10 @@ import {
   FilterPreset,
 } from '../types';
 import {
-  ALL_LOCATIONS,
-  ALL_COMPANIES,
   SKILL_CATEGORIES,
-  ALL_SKILLS,
   FILTER_PRESETS,
 } from '../data/mockProfiles';
+import { UserProfile } from '../types';
 import { ExperienceRangeSlider } from './ExperienceRangeSlider';
 import {
   MapPin,
@@ -29,6 +27,7 @@ import {
 } from 'lucide-react';
 
 interface FilterSidebarProps {
+  profiles: UserProfile[];
   filters: FilterState;
   onUpdateFilters: (updater: (prev: FilterState) => FilterState) => void;
   onResetFilters: () => void;
@@ -38,6 +37,7 @@ interface FilterSidebarProps {
 }
 
 export const FilterSidebar: FC<FilterSidebarProps> = ({
+  profiles,
   filters,
   onUpdateFilters,
   onResetFilters,
@@ -112,6 +112,33 @@ export const FilterSidebar: FC<FilterSidebarProps> = ({
     }));
   };
 
+  const availableSkills = useMemo(
+    () => Array.from(new Set(profiles.flatMap((profile) => profile.skills))).sort(),
+    [profiles],
+  );
+  const availableLocations = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          profiles
+            .map((profile) => profile.location)
+            .filter((location) => location && location !== 'Location not recorded'),
+        ),
+      ).sort(),
+    [profiles],
+  );
+  const availableCompanies = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          profiles
+            .map((profile) => profile.company)
+            .filter((company) => company && company !== 'Company not recorded'),
+        ),
+      ).sort(),
+    [profiles],
+  );
+
   const toggleAvailability = (avail: AvailabilityStatus) => {
     onUpdateFilters((prev) => ({
       ...prev,
@@ -123,30 +150,33 @@ export const FilterSidebar: FC<FilterSidebarProps> = ({
 
   // Filter skills by search query and category
   const filteredSkillOptions = useMemo(() => {
-    let pool = ALL_SKILLS;
+    let pool = availableSkills;
     if (selectedSkillCategory !== 'All') {
       const cat = SKILL_CATEGORIES.find((c) => c.name === selectedSkillCategory);
-      if (cat) pool = cat.skills;
+      if (cat) {
+        const categorySkills = new Set(cat.skills);
+        pool = availableSkills.filter((skill) => categorySkills.has(skill));
+      }
     }
     if (!skillSearchQuery.trim()) return pool;
     return pool.filter((s) =>
       s.toLowerCase().includes(skillSearchQuery.toLowerCase().trim())
     );
-  }, [skillSearchQuery, selectedSkillCategory]);
+  }, [availableSkills, skillSearchQuery, selectedSkillCategory]);
 
   const filteredLocations = useMemo(() => {
-    if (!locationSearchQuery.trim()) return ALL_LOCATIONS;
-    return ALL_LOCATIONS.filter((l) =>
+    if (!locationSearchQuery.trim()) return availableLocations;
+    return availableLocations.filter((l) =>
       l.toLowerCase().includes(locationSearchQuery.toLowerCase().trim())
     );
-  }, [locationSearchQuery]);
+  }, [availableLocations, locationSearchQuery]);
 
   const filteredCompanies = useMemo(() => {
-    if (!companySearchQuery.trim()) return ALL_COMPANIES;
-    return ALL_COMPANIES.filter((c) =>
+    if (!companySearchQuery.trim()) return availableCompanies;
+    return availableCompanies.filter((c) =>
       c.toLowerCase().includes(companySearchQuery.toLowerCase().trim())
     );
-  }, [companySearchQuery]);
+  }, [availableCompanies, companySearchQuery]);
 
   const remoteOptions: { type: RemoteType; label: string; icon: string }[] = [
     { type: 'Remote', label: 'Remote', icon: '🌐' },

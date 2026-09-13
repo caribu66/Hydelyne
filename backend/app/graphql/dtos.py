@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,14 +59,14 @@ class CrewMemberDTO(BaseModel):
 
 class CrewMemberCreateDTO(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=255)
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    nationality: Optional[str] = None
-    country_of_residence: Optional[str] = None
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50)
+    nationality: Optional[str] = Field(None, max_length=100)
+    country_of_residence: Optional[str] = Field(None, max_length=100)
     date_of_birth: Optional[date] = None
-    gender: Optional[str] = None
-    languages: Optional[list[str]] = None
-    flying_point: Optional[str] = None
+    gender: Optional[str] = Field(None, max_length=50)
+    languages: Optional[list[Annotated[str, Field(max_length=255)]]] = Field(None, max_length=100)
+    flying_point: Optional[str] = Field(None, max_length=255)
     passport: Optional[PassportInfoDTO] = None
     visa: Optional[VisaInfoDTO] = None
     medical: Optional[MedicalInfoDTO] = None
@@ -78,14 +78,14 @@ class CrewMemberCreateDTO(BaseModel):
 
 class CrewMemberUpdateDTO(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    nationality: Optional[str] = None
-    country_of_residence: Optional[str] = None
+    email: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50)
+    nationality: Optional[str] = Field(None, max_length=100)
+    country_of_residence: Optional[str] = Field(None, max_length=100)
     date_of_birth: Optional[date] = None
-    gender: Optional[str] = None
-    languages: Optional[list[str]] = None
-    flying_point: Optional[str] = None
+    gender: Optional[str] = Field(None, max_length=50)
+    languages: Optional[list[Annotated[str, Field(max_length=255)]]] = Field(None, max_length=100)
+    flying_point: Optional[str] = Field(None, max_length=255)
     availability_status: Optional[str] = None
     internal_notes: Optional[str] = None
     tags: Optional[list[str]] = None
@@ -113,8 +113,8 @@ class CertificationDTO(BaseModel):
 class CertificationCreateDTO(BaseModel):
     crew_member_id: str
     cert_type: str
-    cert_number: Optional[str] = None
-    issuing_body: Optional[str] = None
+    cert_number: Optional[str] = Field(None, max_length=100)
+    issuing_body: Optional[str] = Field(None, max_length=255)
     issue_date: Optional[date] = None
     expiry_date: Optional[date] = None
     renewal_date: Optional[date] = None

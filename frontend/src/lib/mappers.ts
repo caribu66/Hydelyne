@@ -44,30 +44,19 @@ function mapAvailability(status?: string): AvailabilityStatus {
   }
 }
 
-// Curated showcase portraits shared by the demo roster and used as a stable
-// visual fallback for live records that do not yet contain a profile photo.
-const SHOWCASE_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=240&h=240&fit=crop&crop=faces&q=85',
-  'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=240&h=240&fit=crop&crop=faces&q=85',
-]
-
 function avatarFor(name: string): string {
-  const seed = name.trim().toLowerCase()
-  let hash = 0
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0
-  return SHOWCASE_AVATARS[Math.abs(hash) % SHOWCASE_AVATARS.length] ?? SHOWCASE_AVATARS[0] ?? ''
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || '?'
+  // System colors keep the neutral placeholder legible in both themes while
+  // avoiding a hard-coded palette inside the data URI.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240"><rect width="240" height="240" rx="32" fill="Canvas"/><text x="120" y="132" text-anchor="middle" dominant-baseline="middle" fill="CanvasText" font-family="Arial,sans-serif" font-size="78" font-weight="600">${initials}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
 function departmentFromTags(tags: string[]): string {
@@ -76,6 +65,30 @@ function departmentFromTags(tags: string[]): string {
   if (tags.some((t) => /geotech|cpt|cable/i.test(t))) return 'Geotechnical & Subsea'
   if (tags.some((t) => /hse|fl[oe]/i.test(t))) return 'HSE & Safety Advisory'
   return 'Survey, HSE & Client Rep'
+}
+
+function parseStringArray(value: string[] | string | null | undefined): string[] {
+  if (!value) return []
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string')
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function parseLanguages(value: string[] | string | null | undefined): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string')
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === 'string')
+    if (typeof parsed === 'string') return [parsed].filter(Boolean)
+  } catch {
+    // A plain language string is also a supported legacy representation.
+  }
+  return [value.trim()].filter(Boolean)
 }
 
 function normalizeTraining(values: string[]): Array<{ id: string; name: string; location?: string; completedDate?: string; expiryDate?: string }> {
@@ -153,22 +166,15 @@ function normalizeTraining(values: string[]): Array<{ id: string; name: string; 
 }
 
 export function backendCrewToProfile(raw: BackendCrew): UserProfile {
-  let tags: string[] = []
-  try {
-    if (raw.tags) tags = JSON.parse(raw.tags)
-    if (!Array.isArray(tags)) tags = []
-  } catch {
-    tags = []
-  }
+  const tags = parseStringArray(raw.tags)
 
   const availability = mapAvailability(raw.availabilityStatus)
   const dept = departmentFromTags(tags)
-  const location = raw.nationality ? `${raw.nationality}` : 'Location not recorded'
+  const location = raw.countryOfResidence || 'Location not recorded'
   // Live records provide audited experience from work history. The legacy
   // fallback only applies to older records that have not been calculated yet.
-  let years = 0
+  let years: number | null = null
   if (raw.yearsOfExperience != null) years = raw.yearsOfExperience
-  else if (raw.profileCompletenessScore != null) years = 0
 
   const expertise = tags.filter((tag) => /^(MMO|PAM|ADD|HSE|QC|PSO|Observer)$/i.test(tag.trim()))
   const systemNames = ['PAMGuard', 'ADD', 'ADD Lofitech', 'Microsoft Office Suite', 'QGIS']
@@ -239,7 +245,7 @@ export function backendCrewToProfile(raw: BackendCrew): UserProfile {
     countryOfResidence: raw.countryOfResidence || undefined,
     dateOfBirth: raw.dateOfBirth || undefined,
     gender: raw.gender || undefined,
-    languages: Array.isArray(raw.languages) ? raw.languages : undefined,
+    languages: parseLanguages(raw.languages),
     flyingPoint: raw.flyingPoint || undefined,
     geographicalExperience,
     systemsExperience,

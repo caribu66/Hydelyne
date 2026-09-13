@@ -4,7 +4,9 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Check, ClipboardCheck, Loader2, X } from 'lucide-react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { APPROVE_CV_REVIEW, CV_REVIEWS_QUERY, REJECT_CV_REVIEW } from '../lib/queries';
-import { documentDownloadUrl } from '../lib/documentsApi';
+import { downloadDocumentFile } from '../lib/documentsApi';
+import { apolloResultHasErrors, isSessionDataReady, isSessionQueryEnabled, isSessionRequestCurrent } from '../utils/sessionScope';
+import { formatDocumentDate } from './documentVaultUtils';
 
 interface CvReview {
   id: string;
@@ -19,14 +21,19 @@ interface CvReview {
 interface CvReviewModalProps {
   isOpen: boolean;
   isAdmin: boolean;
+  sessionKey?: string | null;
   onClose: () => void;
   onApproved: () => void;
 }
 
-export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, onClose, onApproved }) => {
+export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, sessionKey = null, onClose, onApproved }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const previousSessionKeyRef = useRef<string | null>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  currentSessionKeyRef.current = sessionKey;
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(null);
   const { data, loading, error, refetch, fetchMore } = useQuery<{ cvReviews: CvReview[] }>(CV_REVIEWS_QUERY, {
-    skip: !isOpen,
+    skip: !isSessionQueryEnabled(isOpen, sessionKey),
     fetchPolicy: 'network-only',
     variables: { limit: 100, offset: 0 },
   });
@@ -37,10 +44,87 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, onClose
   const [note, setNote] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [visibleReviews, setVisibleReviews] = useState<CvReview[]>([]);
   const [hasMore, setHasMore] = useState(true);
+  const [downloadingDocument, setDownloadingDocument] = useState(false);
+  const requestVersionRef = useRef(0);
+  const refreshPendingSessionKeyRef = useRef<string | null>(null);
+  const hasCommittedReviewsRef = useRef(false);
   useAccessibleDialog(isOpen, dialogRef, onClose);
 
-  const reviews = data?.cvReviews ?? [];
+  useEffect(() => {
+    requestVersionRef.current += 1;
+    hasCommittedReviewsRef.current = false;
+    setVisibleReviews([]);
+    setLoadedSessionKey(null);
+    setSelectedId(null);
+    setActionError(null);
+    setDownloadingDocument(false);
+    refreshPendingSessionKeyRef.current = null;
+    if (!isOpen || !sessionKey) {
+      previousSessionKeyRef.current = null;
+      return;
+    }
+
+    const sessionChanged =
+      previousSessionKeyRef.current !== null && previousSessionKeyRef.current !== sessionKey;
+    previousSessionKeyRef.current = sessionKey;
+    const requestVersion = requestVersionRef.current;
+    let active = true;
+    if (sessionChanged) {
+      refreshPendingSessionKeyRef.current = sessionKey;
+      void refetch()
+        .then((result) => {
+          if (apolloResultHasErrors(result)) throw new Error('CV review refresh failed')
+          if (
+            !active
+            || !isSessionRequestCurrent(
+              requestVersion,
+              requestVersionRef.current,
+              currentSessionKeyRef.current,
+              sessionKey,
+            )
+            || refreshPendingSessionKeyRef.current !== sessionKey
+          ) return;
+          hasCommittedReviewsRef.current = true;
+          setVisibleReviews(result.data?.cvReviews ?? []);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active && refreshPendingSessionKeyRef.current === sessionKey) {
+            refreshPendingSessionKeyRef.current = null;
+          }
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [isOpen, refetch, sessionKey]);
+
+  useEffect(() => {
+    if (
+      isOpen
+      && sessionKey
+      && loadedSessionKey === sessionKey
+      && !hasCommittedReviewsRef.current
+    ) {
+      hasCommittedReviewsRef.current = true;
+      setVisibleReviews(data?.cvReviews ?? []);
+    }
+  }, [data, isOpen, loadedSessionKey, sessionKey]);
+
+  useEffect(() => {
+    if (
+      isOpen
+      && sessionKey
+      && !loading
+      && !error
+      && refreshPendingSessionKeyRef.current !== sessionKey
+    ) setLoadedSessionKey(sessionKey);
+  }, [error, isOpen, loading, sessionKey]);
+
+  const sessionReady = isSessionDataReady(isOpen, loadedSessionKey, sessionKey, loading, error);
+  const reviews = sessionReady ? visibleReviews : [];
   const selected = reviews.find((review) => review.id === selectedId) ?? reviews[0];
 
   useEffect(() => {
@@ -60,33 +144,84 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, onClose
   }, [selected]);
 
   const handleApprove = async () => {
-    if (!selected) return;
+    if (!selected || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    const requestVersion = requestVersionRef.current;
     try {
       JSON.parse(draftData);
-      await approve({ variables: { reviewId: selected.id, approvedData: draftData, note: note || undefined } });
-      await refetch();
+      const result = await approve({
+        variables: { reviewId: selected.id, approvedData: draftData, note: note || undefined },
+      });
+      if (apolloResultHasErrors(result)) throw new Error('CV approval returned errors');
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
+      try {
+        const refreshed = await refetch();
+        if (apolloResultHasErrors(refreshed)) throw new Error('CV review refresh failed');
+        hasCommittedReviewsRef.current = true;
+        setVisibleReviews(refreshed.data?.cvReviews ?? []);
+      } catch {
+        if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+          setActionError('CV was approved, but the review list could not be refreshed.');
+        }
+        return;
+      }
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
       onApproved();
     } catch (actionFailure) {
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
       setActionError(actionFailure instanceof Error ? actionFailure.message : 'Could not approve this CV');
     }
   };
 
   const handleReject = async () => {
-    if (!selected || !note.trim()) {
+    if (!selected || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    if (!note.trim()) {
       setActionError('Add a reason before rejecting this CV.');
       return;
     }
+    const requestVersion = requestVersionRef.current;
     try {
-      await reject({ variables: { reviewId: selected.id, note: note.trim() } });
-      await refetch();
+      const result = await reject({ variables: { reviewId: selected.id, note: note.trim() } });
+      if (apolloResultHasErrors(result)) throw new Error('CV rejection returned errors');
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
+      try {
+        const refreshed = await refetch();
+        if (apolloResultHasErrors(refreshed)) throw new Error('CV review refresh failed');
+        hasCommittedReviewsRef.current = true;
+        setVisibleReviews(refreshed.data?.cvReviews ?? []);
+      } catch {
+        if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+          setActionError('CV was rejected, but the review list could not be refreshed.');
+        }
+        return;
+      }
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
     } catch (actionFailure) {
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
       setActionError(actionFailure instanceof Error ? actionFailure.message : 'Could not reject this CV');
     }
   };
 
   const handleDataChange = (event: ChangeEvent<HTMLTextAreaElement>) => setDraftData(event.target.value);
 
+  const handleDownloadOriginal = async () => {
+    if (!selected || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    const requestVersion = requestVersionRef.current;
+    setDownloadingDocument(true);
+    try {
+      await downloadDocumentFile(selected.documentId, `cv-${selected.documentId}.pdf`);
+    } catch (actionFailure) {
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
+      setActionError(actionFailure instanceof Error ? actionFailure.message : 'Could not download this CV');
+    } finally {
+      if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+        setDownloadingDocument(false);
+      }
+    }
+  };
+
   const loadMore = async () => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey || !sessionReady) return;
+    const requestVersion = requestVersionRef.current;
     setLoadingMore(true);
     setActionError(null);
     try {
@@ -96,11 +231,17 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, onClose
           cvReviews: [...previous.cvReviews, ...fetchMoreResult.cvReviews],
         }),
       });
+      if (apolloResultHasErrors(next)) throw new Error('CV review page request failed');
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
+      setVisibleReviews(next.data.cvReviews);
       setHasMore(next.data.cvReviews.length === 100);
     } catch (failure) {
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
       setActionError(failure instanceof Error ? failure.message : 'Could not load more submissions');
     } finally {
-      setLoadingMore(false);
+      if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+        setLoadingMore(false);
+      }
     }
   };
 
@@ -120,13 +261,13 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, onClose
                 {error && <p className="text-sm text-danger">Could not load CV submissions.</p>}
                 {actionError && <p role="alert" className="rounded-lg border border-danger-border bg-danger-soft p-3 text-sm text-danger">{actionError}</p>}
                 {!loading && reviews.length === 0 && <p className="text-sm text-muted">No CV submissions yet.</p>}
-                {reviews.map((review) => <button key={review.id} type="button" onClick={() => setSelectedId(review.id)} className={`w-full rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:ring-focus ${selected?.id === review.id ? 'border-border-strong bg-surface-raised' : 'border-border-subtle bg-canvas/40'}`}><span className="block text-sm font-semibold text-primary">Submission {review.id.slice(0, 8)}</span><span className="mt-1 block text-xs capitalize text-secondary">{review.status.replaceAll('_', ' ')}</span><span className="mt-1 block text-xs text-secondary">{new Date(review.createdAt).toLocaleDateString()}</span></button>)}
+                {reviews.map((review) => <button key={review.id} type="button" onClick={() => setSelectedId(review.id)} className={`w-full rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:ring-focus ${selected?.id === review.id ? 'border-border-strong bg-surface-raised' : 'border-border-subtle bg-canvas/40'}`}><span className="block text-sm font-semibold text-primary">Submission {review.id.slice(0, 8)}</span><span className="mt-1 block text-xs capitalize text-secondary">{review.status.replaceAll('_', ' ')}</span><span className="mt-1 block text-xs text-secondary">{formatDocumentDate(review.createdAt)}</span></button>)}
                 {hasMore && reviews.length === 100 && <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="min-h-11 w-full rounded-lg border border-border-strong bg-surface px-3 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more'}</button>}
               </div>
               {selected && <div className="min-h-0 space-y-3 overflow-y-auto rounded-[14px] border border-border-subtle bg-canvas/40 p-4">
                 <div><p className="text-xs font-mono uppercase tracking-wider text-muted">Status</p><p className="text-sm font-semibold capitalize text-primary">{selected.status.replaceAll('_', ' ')}</p></div>
                 {isAdmin && selected.status === 'awaiting_review' ? <>
-                  <a href={documentDownloadUrl(selected.documentId)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-lg border border-border-strong bg-surface px-4 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus">Open original CV</a>
+                  <button type="button" onClick={() => void handleDownloadOriginal()} disabled={downloadingDocument} className="inline-flex min-h-11 items-center rounded-lg border border-border-strong bg-surface px-4 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">{downloadingDocument ? 'Downloading…' : 'Download original CV'}</button>
                   <label className="block text-sm font-semibold text-primary">Extracted CV information<textarea value={draftData} onChange={handleDataChange} className="mt-2 min-h-64 w-full rounded-lg border border-border-strong bg-surface p-3 font-mono text-xs text-primary focus-visible:ring-2 focus-visible:ring-focus" spellCheck={false} /></label>
                   <label className="block text-sm font-semibold text-primary">Review note<textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-2 min-h-20 w-full rounded-lg border border-border-strong bg-surface p-3 text-sm text-primary focus-visible:ring-2 focus-visible:ring-focus" /></label>
                   <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={handleReject} disabled={rejecting || approving} className="min-h-11 rounded-lg border border-danger-border px-4 text-sm font-semibold text-danger hover:bg-danger-soft focus-visible:ring-2 focus-visible:ring-focus">Reject</button><button type="button" onClick={handleApprove} disabled={rejecting || approving} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-action px-4 text-sm font-semibold text-on-action hover:bg-action-hover focus-visible:ring-2 focus-visible:ring-focus">{approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Approve and publish</button></div>

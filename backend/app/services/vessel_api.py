@@ -14,7 +14,10 @@ documented upgrade path if callers want the SDK's iterators.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import math
+import re
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Literal, Optional
@@ -26,6 +29,8 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 VESSEL_ID_TYPES: set[str] = {"imo", "mmsi", "eni"}
+_VESSEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+MAX_VESSEL_API_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class VesselApiNotConfiguredError(RuntimeError):
@@ -114,7 +119,9 @@ def _settings_snapshot() -> tuple[str, str, float, int]:
     )
 
 
-def _validate_name(name: str) -> str:
+def _validate_name(name: object) -> str:
+    if not isinstance(name, str):
+        raise ValueError("Vessel name must be a string")
     cleaned = name.strip()
     if not cleaned:
         raise ValueError("Vessel name must not be empty")
@@ -123,13 +130,28 @@ def _validate_name(name: str) -> str:
     return cleaned
 
 
-def _validate_id_type(id_type: str) -> Literal["imo", "mmsi", "eni"]:
+def _validate_id_type(id_type: object) -> Literal["imo", "mmsi", "eni"]:
+    if not isinstance(id_type, str):
+        raise ValueError("idType must be a string")
     lowered = id_type.strip().lower()
-    if lowered not in VESSEL_ID_TYPES:
-        raise ValueError(f"idType must be one of {sorted(VESSEL_ID_TYPES)}")
-    # mypy literal narrowing
-    assert lowered in ("imo", "mmsi", "eni")
-    return lowered  # type: ignore[return-value]
+    if lowered == "imo":
+        return "imo"
+    if lowered == "mmsi":
+        return "mmsi"
+    if lowered == "eni":
+        return "eni"
+    raise ValueError(f"idType must be one of {sorted(VESSEL_ID_TYPES)}")
+
+
+def _validate_vessel_id(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("vessel id must be a string")
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("vessel id must not be empty")
+    if len(normalized) > 50 or not _VESSEL_ID_PATTERN.fullmatch(normalized):
+        raise ValueError("vessel id contains invalid characters")
+    return normalized
 
 
 def _cache_key(prefix: str, *parts: str) -> str:
@@ -148,15 +170,17 @@ def _coerce_vessel_summary(raw: dict[str, Any]) -> VesselSummary:
     # Upstream has shown both `vessel_type` and `vesselType`
     vtype = raw.get("vessel_type") or raw.get("vesselType") or raw.get("type")
     flag = raw.get("flag")
+
     # Length/width occasionally present; coerce defensively
-    try:
-        length = float(raw["length"]) if raw.get("length") is not None else None
-    except Exception:
-        length = None
-    try:
-        width = float(raw["width"]) if raw.get("width") is not None else None
-    except Exception:
-        width = None
+    def finite_float(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) else None
+
+    length = finite_float(raw.get("length"))
+    width = finite_float(raw.get("width"))
     try:
         year_built = int(raw["year_built"]) if raw.get("year_built") is not None else None
     except Exception:
@@ -202,19 +226,34 @@ def _coerce_position(raw: dict[str, Any]) -> VesselPosition:
         if v is None:
             return None
         try:
-            return float(v)
+            parsed = float(v)
         except Exception:
             return None
+        return parsed if math.isfinite(parsed) else None
+
+    def _coordinate(*keys: str, minimum: float, maximum: float) -> Optional[float]:
+        for key in keys:
+            value = _first_float(key)
+            if value is not None and minimum <= value <= maximum:
+                return value
+        return None
+
+    def _first_float(*keys: str) -> Optional[float]:
+        for key in keys:
+            value = _f(key)
+            if value is not None:
+                return value
+        return None
 
     ts_raw = inner.get("timestamp") or inner.get("updatedAt") or raw.get("timestamp")
     return VesselPosition(
         mmsi=str(inner.get("mmsi") or raw.get("mmsi") or "") or None,
         imo=str(inner.get("imo") or raw.get("imo") or "") or None,
-        latitude=_f("latitude") or _f("lat"),
-        longitude=_f("longitude") or _f("lon") or _f("lng"),
-        sog=_f("sog") or _f("speed"),
-        cog=_f("cog") or _f("course"),
-        heading=_f("heading") or _f("hdg"),
+        latitude=_coordinate("latitude", "lat", minimum=-90.0, maximum=90.0),
+        longitude=_coordinate("longitude", "lon", "lng", minimum=-180.0, maximum=180.0),
+        sog=_first_float("sog", "speed"),
+        cog=_first_float("cog", "course"),
+        heading=_first_float("heading", "hdg"),
         timestamp=str(ts_raw).strip() or None if ts_raw else None,
         destination=str(dest).strip() if dest else None,
         eta=str(eta).strip() if eta else None,
@@ -252,7 +291,7 @@ class VesselApiService:
                 return
             await cache_service.set(key, value, ttl=timedelta(seconds=ttl_s))
         except Exception as e:
-            logger.debug("VesselAPI cache set failed: %s", e)
+            logger.debug("VesselAPI cache set failed: %s", type(e).__name__)
 
     async def _request(
         self,
@@ -269,20 +308,37 @@ class VesselApiService:
         headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
         try:
             async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-                resp = await client.request(method, url, params=params)
+                async with client.stream(method, url, params=params) as resp:
+                    content_length = resp.headers.get("Content-Length")
+                    if content_length is not None:
+                        try:
+                            if int(content_length) > MAX_VESSEL_API_RESPONSE_BYTES:
+                                raise VesselApiUpstreamError("Vessel response too large")
+                        except ValueError:
+                            pass
+
+                    chunks: list[bytes] = []
+                    total_bytes = 0
+                    async for chunk in resp.aiter_bytes():
+                        total_bytes += len(chunk)
+                        if total_bytes > MAX_VESSEL_API_RESPONSE_BYTES:
+                            raise VesselApiUpstreamError("Vessel response too large")
+                        chunks.append(chunk)
+                    response_body = b"".join(chunks)
         except httpx.TimeoutException as exc:
-            logger.warning("VesselAPI timeout %s %s: %s", method, path, exc)
+            logger.warning("VesselAPI timeout for %s: %s", method, type(exc).__name__)
             raise VesselApiUpstreamError("Vessel service timed out") from exc
         except httpx.TransportError as exc:
-            logger.warning("VesselAPI transport %s %s: %s", method, path, exc)
+            logger.warning(
+                "VesselAPI transport failure for %s: %s", method, type(exc).__name__
+            )
             raise VesselApiUpstreamError("Vessel service unavailable") from exc
 
         if resp.status_code == 401:
             raise VesselApiAuthError()
         if resp.status_code == 403:
             # Upstream uses 403 for suspended keys / plan limits
-            body = resp.text[:500]
-            raise VesselApiAuthError(body or "Vessel API key forbidden or plan limit")
+            raise VesselApiAuthError("Vessel API key forbidden or plan limit")
         if resp.status_code == 404:
             raise VesselApiNotFoundError()
         if resp.status_code == 429:
@@ -295,12 +351,12 @@ class VesselApiService:
         if resp.status_code >= 500:
             raise VesselApiUpstreamError(f"Vessel service error {resp.status_code}")
         if resp.status_code >= 400:
-            # Safe excerpt, no secret echo
-            body = resp.text[:500]
-            raise VesselApiUpstreamError(f"Vessel request failed {resp.status_code}: {body}")
+            # Provider bodies can contain request-specific or credential data;
+            # expose only the status to callers and logs.
+            raise VesselApiUpstreamError(f"Vessel request failed {resp.status_code}")
 
         try:
-            data: dict[str, Any] = resp.json() if resp.content else {}
+            data: dict[str, Any] = json.loads(response_body) if response_body else {}
         except Exception as exc:
             raise VesselApiUpstreamError("Invalid vessel response") from exc
         if not isinstance(data, dict):
@@ -318,10 +374,10 @@ class VesselApiService:
     ) -> VesselSearchResult:
         """Search by vessel name/callsign. Provider-cached for 2 min."""
         q = _validate_name(name)
-        if limit < 1 or limit > 50:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1 or limit > 50:
             raise ValueError("limit must be between 1 and 50")
         api_key, base_url, timeout_s, ttl_s = self._require_key()
-        ckey = _cache_key("search", q.lower(), str(limit))
+        ckey = _cache_key("search", base_url, q.lower(), str(limit))
         cached = await self._get_cached(ckey)
         if isinstance(cached, dict) and isinstance(cached.get("vessels"), list):
             try:
@@ -380,12 +436,10 @@ class VesselApiService:
         return VesselSearchResult(vessels=summaries, cached=False, upstream_count=len(raw_list))
 
     async def get_vessel(self, vessel_id: str, *, id_type: str = "imo") -> VesselSummary:
-        vid = vessel_id.strip()
-        if not vid:
-            raise ValueError("vessel id must not be empty")
+        vid = _validate_vessel_id(vessel_id)
         itype = _validate_id_type(id_type)
         api_key, base_url, timeout_s, ttl_s = self._require_key()
-        ckey = _cache_key("get", vid, itype)
+        ckey = _cache_key("get", base_url, vid, itype)
         cached = await self._get_cached(ckey)
         if isinstance(cached, dict) and (cached.get("name") or cached.get("imo")):
             try:
@@ -422,9 +476,7 @@ class VesselApiService:
         use_satellite_fallback: bool = False,
     ) -> VesselPosition:
         """Current AIS position. Satellite fallback is off by default (costs credits)."""
-        vid = vessel_id.strip()
-        if not vid:
-            raise ValueError("vessel id must not be empty")
+        vid = _validate_vessel_id(vessel_id)
         itype = _validate_id_type(id_type)
         api_key, base_url, timeout_s, _ = self._require_key()
         params: dict[str, Any] = {"filter.idType": itype}
@@ -458,17 +510,27 @@ class VesselApiService:
         radius_m: int,
         limit: int = 20,
     ) -> VesselSearchResult:
-        if not (-90 <= latitude <= 90):
+        if (
+            not isinstance(latitude, (int, float))
+            or isinstance(latitude, bool)
+            or not math.isfinite(latitude)
+            or not -90 <= latitude <= 90
+        ):
             raise ValueError("latitude out of range")
-        if not (-180 <= longitude <= 180):
+        if (
+            not isinstance(longitude, (int, float))
+            or isinstance(longitude, bool)
+            or not math.isfinite(longitude)
+            or not -180 <= longitude <= 180
+        ):
             raise ValueError("longitude out of range")
-        if not (100 <= radius_m <= 500000):
+        if not isinstance(radius_m, int) or isinstance(radius_m, bool) or not 100 <= radius_m <= 500000:
             raise ValueError("radius must be 100..500000 meters")
-        if not (1 <= limit <= 50):
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
             raise ValueError("limit must be 1..50")
         api_key, base_url, timeout_s, ttl_s = self._require_key()
         ckey = _cache_key(
-            "radius", f"{latitude:.4f}", f"{longitude:.4f}", str(radius_m), str(limit)
+            "radius", base_url, f"{latitude:.4f}", f"{longitude:.4f}", str(radius_m), str(limit)
         )
         cached = await self._get_cached(ckey)
         if isinstance(cached, dict) and isinstance(cached.get("vessels"), list):
@@ -547,9 +609,17 @@ class VesselApiService:
             )
             return {"configured": True, "reachable": True}
         except VesselApiAuthError as exc:
-            return {"configured": True, "reachable": False, "error": str(exc)[:120]}
+            return {
+                "configured": True,
+                "reachable": False,
+                "error": type(exc).__name__,
+            }
         except Exception as exc:
-            return {"configured": True, "reachable": False, "error": str(exc)[:120]}
+            return {
+                "configured": True,
+                "reachable": False,
+                "error": type(exc).__name__,
+            }
 
 
 vessel_api_service = VesselApiService()

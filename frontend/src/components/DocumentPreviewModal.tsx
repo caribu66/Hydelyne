@@ -1,11 +1,21 @@
-import { FC, useState, useRef } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { SpecialistDocument, UserProfile } from '../types';
-import { getDocumentComplianceStatus } from '../hooks/useSpecialistDocuments';
-import { hasOriginalDocumentFile } from '../utils/documentUtils';
+import {
+  DocumentMutationResult,
+  getDocumentComplianceStatus,
+} from '../hooks/useSpecialistDocuments';
+import {
+  hasOriginalDocumentFile,
+  isDocumentApprovalReady,
+  isDocumentReviewable,
+} from '../utils/documentUtils';
+import { downloadDocumentFile } from '../lib/documentsApi';
+import { toDisplayStringRecord } from '../utils/safeData';
 import { ConfirmDialog } from './ConfirmDialog';
+import { formatDocumentDate } from './documentVaultUtils';
 import {
   X,
   FileText,
@@ -27,10 +37,12 @@ interface DocumentPreviewModalProps {
   onClose: () => void;
   document: SpecialistDocument | null;
   profile: UserProfile;
-  onDelete?: (docId: string) => void | Promise<void>;
+  onDelete?: (docId: string) => void | Promise<void | DocumentMutationResult>;
   onShowToast?: (msg: string) => void;
-  onReviewAction?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
+  onReviewAction?: (docId: string, action: 'approve' | 'reject') => void | Promise<void | DocumentMutationResult>;
   canReview?: boolean;
+  canDownloadOriginal?: boolean;
+  sessionKey?: string | null;
 }
 
 export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
@@ -42,33 +54,49 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   onShowToast,
   onReviewAction,
   canReview = false,
+  canDownloadOriginal = false,
+  sessionKey = null,
 }) => {
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
   const [showRawText, setShowRawText] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  currentSessionKeyRef.current = sessionKey;
   useAccessibleDialog(isOpen && Boolean(doc), dialogRef, onClose);
 
+  useEffect(() => {
+    setIsDeleteConfirmationOpen(false);
+    setIsReviewing(false);
+    setShowRawText(false);
+  }, [doc?.id, isOpen, sessionKey]);
+
   const handleReview = async (action: 'approve' | 'reject') => {
-    if (!doc || !onReviewAction) return;
+    if (!doc || !onReviewAction || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     setIsReviewing(true);
     try {
-      await onReviewAction(doc.id, action);
+      const result = await onReviewAction(doc.id, action);
+      if (currentSessionKeyRef.current !== sessionKey) return;
       onShowToast?.(
-        action === 'approve'
-          ? `Approved “${doc.title}” for compliance`
-          : `Rejected “${doc.title}”`,
+        result && 'refreshFailed' in result && result.refreshFailed
+          ? `${action === 'approve' ? 'Approved' : 'Rejected'} “${doc.title}” — refresh unavailable`
+          : action === 'approve'
+            ? `Approved “${doc.title}” for compliance`
+            : `Rejected “${doc.title}”`,
       );
       onClose();
     } catch (err) {
+      if (currentSessionKeyRef.current !== sessionKey) return;
       onShowToast?.(err instanceof Error ? err.message : `Failed to ${action} document`);
     } finally {
-      setIsReviewing(false);
+      if (currentSessionKeyRef.current === sessionKey) setIsReviewing(false);
     }
   };
 
   const compliance = doc ? getDocumentComplianceStatus(doc) : null;
-  const originalFileAvailable = doc ? hasOriginalDocumentFile(doc) : false;
+  const originalFileAvailable = doc
+    ? hasOriginalDocumentFile(doc) || canDownloadOriginal
+    : false;
 
   const extractedData = doc?.extractedData;
   const asStringArray = (value: unknown): string[] =>
@@ -78,30 +106,38 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   const extractedSkills = asStringArray(extractedData?.skills);
   const extractedCertifications = asStringArray(extractedData?.certifications);
   const extractedPersonalInfo =
-    extractedData?.personal_information && typeof extractedData.personal_information === 'object'
-      ? (extractedData.personal_information as Record<string, string>)
-      : undefined;
+    toDisplayStringRecord(extractedData?.personal_information);
   const hasExtractedContent = Boolean(
     extractedFullName || extractedSummary || extractedSkills.length || extractedCertifications.length || extractedPersonalInfo
   );
 
-  const handleDownload = () => {
-    if (!doc) return;
+  const handleDownload = async () => {
+    if (!doc || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     if (!originalFileAvailable) {
       onShowToast?.(`Original file unavailable for “${doc.title}”. This is a compliance record only.`);
       return;
     }
 
-    if (doc.fileUrl) {
+    if (doc.fileUrl && hasOriginalDocumentFile(doc)) {
       const a = window.document.createElement('a');
       a.href = doc.fileUrl;
       a.download = doc.fileName || `${doc.title}.pdf`;
       window.document.body.appendChild(a);
       a.click();
-      window.document.body.removeChild(a);
-      onShowToast?.(`Downloaded ${doc.fileName}`);
+      a.remove();
+    } else if (canDownloadOriginal) {
+      try {
+        await downloadDocumentFile(doc.id, doc.fileName || `${doc.title}.pdf`);
+        if (currentSessionKeyRef.current !== sessionKey) return;
+      } catch (error) {
+        if (currentSessionKeyRef.current !== sessionKey) return;
+        onShowToast?.(error instanceof Error ? error.message : 'Could not download the original file');
+        return;
+      }
+    } else {
       return;
     }
+    if (currentSessionKeyRef.current === sessionKey) onShowToast?.(`Downloaded ${doc.fileName}`);
 
   };
 
@@ -114,13 +150,19 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
   };
 
   const confirmDelete = async () => {
-    if (!doc) return;
+    if (!doc || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     try {
-      await onDelete?.(doc.id);
-      onShowToast?.(`Removed ${doc.title}`);
+      const result = await onDelete?.(doc.id);
+      if (currentSessionKeyRef.current !== sessionKey) return;
+      onShowToast?.(
+        result && 'refreshFailed' in result && result.refreshFailed
+          ? `Removed ${doc.title} — refresh unavailable`
+          : `Removed ${doc.title}`,
+      );
       setIsDeleteConfirmationOpen(false);
       onClose();
     } catch (error) {
+      if (currentSessionKeyRef.current !== sessionKey) return;
       onShowToast?.(error instanceof Error ? error.message : `Could not remove ${doc.title}`);
     }
   };
@@ -244,7 +286,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               <span className="font-semibold">Document Rejected</span>
               <span className="text-secondary">— This document was rejected during review and is not relied upon for compliance.</span>
             </div>
-            {canReview && onReviewAction && (
+            {canReview && onReviewAction && isDocumentReviewable(doc.extractionStatus) && (
               <button
                 type="button"
                 disabled={isReviewing}
@@ -265,7 +307,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               <span className="font-semibold">Review Approved</span>
               <span className="text-secondary">— Verified and approved for contractor compliance records.</span>
             </div>
-            {canReview && onReviewAction && (
+            {canReview && onReviewAction && isDocumentReviewable(doc.extractionStatus) && (
               <button
                 type="button"
                 disabled={isReviewing}
@@ -279,7 +321,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
           </div>
         )}
 
-        {canReview && onReviewAction && doc.extractionStatus !== 'approved' && doc.extractionStatus !== 'rejected' && (
+        {canReview && onReviewAction && isDocumentReviewable(doc.extractionStatus) && (
           <div className="px-5 py-2.5 bg-warning/10 border-b border-warning/20 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-warning">
               <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -287,15 +329,17 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               <span className="text-secondary">— Contractor upload requires review before relying on it for compliance.</span>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={isReviewing}
-                onClick={() => void handleReview('approve')}
-                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1 rounded-[8px] bg-action hover:bg-action-hover text-on-action font-semibold transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Approve Document</span>
-              </button>
+              {isDocumentApprovalReady(doc.extractionStatus) && (
+                <button
+                  type="button"
+                  disabled={isReviewing}
+                  onClick={() => void handleReview('approve')}
+                  className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1 rounded-[8px] bg-action hover:bg-action-hover text-on-action font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Approve Document</span>
+                </button>
+              )}
               <button
                 type="button"
                 disabled={isReviewing}
@@ -371,9 +415,9 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
               <div className="p-3 bg-canvas/60 rounded-[10px] border border-border-subtle/80 space-y-1">
                 <span className="text-secondary font-mono text-xs block uppercase">Validity Timeline</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-primary font-medium">Issued: {doc.issueDate || 'Current'}</span>
+                  <span className="text-primary font-medium">Issued: {doc.issueDate || 'Not recorded'}</span>
                   <span>→</span>
-                  <span className="text-primary font-medium">Expiry: {doc.expiryDate || 'Permanent'}</span>
+                  <span className="text-primary font-medium">Expiry: {doc.expiryDate || 'Not recorded'}</span>
                 </div>
               </div>
 
@@ -394,7 +438,7 @@ export const DocumentPreviewModal: FC<DocumentPreviewModalProps> = ({
                   : 'This compliance record contains registration metadata only. The original document file is not available in this workspace.'}
               </p>
               <p className="text-secondary text-xs">
-                Uploaded on: {new Date(doc.uploadedAt).toLocaleDateString()}
+                Uploaded on: {formatDocumentDate(doc.uploadedAt)}
                 {originalFileAvailable ? ' • Original file attached to this record.' : ' • No original file attached.'}
               </p>
             </div>

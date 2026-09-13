@@ -70,6 +70,166 @@ async def test_project_returns_project_by_id(client, db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_project_returns_assigned_crew_for_admin(client, db_session, monkeypatch):
+    """C2 project assignment data must survive the GraphQL projection."""
+    _mock_admin_user(monkeypatch)
+    crew_id = str(uuid.uuid4())
+    crew = CrewMember(id=crew_id, full_name="Assigned Contractor", role="user")
+    project = Project(
+        id=str(uuid.uuid4()),
+        client_name="Acme Subsea",
+        project_name="Assigned Survey",
+        project_type="marine_seismic",
+        water_depth="120m",
+        crew_assigned=[crew_id],
+        document_ref="project-plan.pdf",
+    )
+    db_session.add_all([crew, project])
+    await db_session.commit()
+
+    response = await client.post(
+        "/graphql",
+        headers=_admin_headers(),
+        json={
+            "query": "query($id: String!) { project(id: $id) { crewAssigned waterDepth documentRef } }",
+            "variables": {"id": project.id},
+        },
+    )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["project"]["crewAssigned"] == [crew_id]
+    assert body["data"]["project"]["waterDepth"] == "120m"
+    assert body["data"]["project"]["documentRef"] == "project-plan.pdf"
+
+
+@pytest.mark.asyncio
+async def test_project_hides_login_accounts_from_assignments(client, db_session, monkeypatch):
+    """Account rows must not appear as contractor project assignments."""
+    _mock_admin_user(monkeypatch)
+    contractor = CrewMember(id=str(uuid.uuid4()), full_name="Contractor", role="user")
+    account = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Staff Account",
+        role="staff",
+        password_hash="stored-password-hash",
+    )
+    project = Project(
+        id=str(uuid.uuid4()),
+        client_name="Acme Subsea",
+        project_name="Account Boundary",
+        project_type="marine_seismic",
+        crew_assigned=[contractor.id, account.id],
+    )
+    db_session.add_all([contractor, account, project])
+    await db_session.commit()
+
+    response = await client.post(
+        "/graphql",
+        headers=_admin_headers(),
+        json={
+            "query": "query($id: String!) { project(id: $id) { crewAssigned } }",
+            "variables": {"id": project.id},
+        },
+    )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["project"]["crewAssigned"] == [contractor.id]
+
+
+@pytest.mark.asyncio
+async def test_project_c2_fields_are_redacted_for_t1(client, db_session, monkeypatch):
+    """Project operational fields must not cross the T1 GraphQL boundary."""
+    user = CrewMember(id=str(uuid.uuid4()), full_name="Recruiter", role="user")
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=user),
+    )
+    project = Project(
+        id=str(uuid.uuid4()),
+        client_name="Acme Subsea",
+        project_name="Private Survey",
+        project_type="marine_seismic",
+        water_depth="120m",
+        crew_assigned=[str(uuid.uuid4())],
+        requirements={"certification": "restricted"},
+        document_ref="private-plan.pdf",
+    )
+    db_session.add(project)
+    await db_session.commit()
+
+    response = await client.post(
+        "/graphql",
+        headers=_admin_headers(),
+        json={
+            "query": "query($id: String!) { project(id: $id) { waterDepth crewAssigned requirements documentRef } }",
+            "variables": {"id": project.id},
+        },
+    )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["project"] == {
+        "waterDepth": None,
+        "crewAssigned": None,
+        "requirements": None,
+        "documentRef": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_staff_project_assignment_hides_unpublished_crew(client, db_session, monkeypatch):
+    """Staff C2 project data must follow the profile publication boundary."""
+    actor_id = str(uuid.uuid4())
+    actor = CrewMember(id=actor_id, full_name="Staff User", role="staff")
+    approved = CrewMember(
+        id=str(uuid.uuid4()), full_name="Approved", publication_status="approved"
+    )
+    own_draft = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Own Draft",
+        publication_status="draft",
+        submitted_by=actor_id,
+    )
+    other_draft = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Other Draft",
+        publication_status="draft",
+        submitted_by=str(uuid.uuid4()),
+    )
+    rejected = CrewMember(
+        id=str(uuid.uuid4()), full_name="Rejected", publication_status="rejected"
+    )
+    project = Project(
+        id=str(uuid.uuid4()),
+        client_name="Acme Subsea",
+        project_name="Scoped Survey",
+        project_type="marine_seismic",
+        crew_assigned=[approved.id, own_draft.id, other_draft.id, rejected.id],
+    )
+    db_session.add_all([actor, approved, own_draft, other_draft, rejected, project])
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=actor),
+    )
+
+    response = await client.post(
+        "/graphql",
+        headers=_admin_headers(),
+        json={
+            "query": "query($id: String!) { project(id: $id) { crewAssigned } }",
+            "variables": {"id": project.id},
+        },
+    )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["project"]["crewAssigned"] == [approved.id, own_draft.id]
+
+
+@pytest.mark.asyncio
 async def test_project_returns_none_for_missing_id(client, monkeypatch):
     _mock_admin_user(monkeypatch)
 

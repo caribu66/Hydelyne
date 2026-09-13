@@ -1,6 +1,8 @@
-import { FC, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../../types';
+import { mobilizationMailto, safeLinkedInUrl } from '../../utils/externalLinks';
+import { copyTextToClipboard } from '../../utils/clipboard';
 import { Mail, Copy, Check, Linkedin, Send } from 'lucide-react';
 
 interface DossierBottomBarProps {
@@ -17,12 +19,27 @@ export const DossierBottomBar: FC<DossierBottomBarProps> = ({
   onRequestMobilization,
 }) => {
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleCopyEmail = () => {
-    navigator.clipboard?.writeText(profile.email);
-    setCopiedEmail(true);
-    onShowToast(`Copied ${profile.email}`);
-    setTimeout(() => setCopiedEmail(false), 2000);
+  useEffect(() => {
+    setCopiedEmail(false);
+    return () => {
+    if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
+    };
+  }, [profile.id]);
+
+  const handleCopyEmail = async () => {
+    if (await copyTextToClipboard(profile.email)) {
+      setCopiedEmail(true);
+      onShowToast(`Copied ${profile.email}`);
+      if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
+      copyFeedbackTimerRef.current = setTimeout(() => {
+        copyFeedbackTimerRef.current = null;
+        setCopiedEmail(false);
+      }, 2000);
+    } else {
+      onShowToast('Could not copy the email address. Please try again.');
+    }
   };
 
   return (
@@ -43,12 +60,7 @@ export const DossierBottomBar: FC<DossierBottomBarProps> = ({
 
       <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
         <a
-          href={
-            profile.linkedinUrl ||
-            `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(
-              `${profile.name} Hydenlyne`,
-            )}`
-          }
+          href={safeLinkedInUrl(profile.linkedinUrl, profile.name)}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Open ${profile.name} LinkedIn profile`}
@@ -115,9 +127,7 @@ export const DossierBottomBar: FC<DossierBottomBarProps> = ({
           </button>
         ) : (
           <a
-            href={`mailto:${profile.email}?subject=Hydenlyne%20Mobilization%20Request%20-%20${encodeURIComponent(
-              profile.title,
-            )}`}
+          href={mobilizationMailto(profile.email, profile.title)}
             className="min-h-11 px-5 py-2 rounded-[10px] bg-action hover:bg-action-hover text-on-action text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-black/30"
           >
             <Mail className="w-4 h-4" />

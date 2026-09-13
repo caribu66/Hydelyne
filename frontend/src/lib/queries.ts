@@ -20,7 +20,6 @@ export const CREW_MEMBERS_QUERY = gql`
       systemsExperience
       trainingQualifications
       tags
-      medical { status expiry }
       certifications { id certType issueDate expiryDate status verificationStatus }
       createdAt
       updatedAt
@@ -118,7 +117,11 @@ export const PENDING_REVIEWS_QUERY = gql`
     pendingReviews {
       id
       fileName
+      title
       classification
+      issueDate
+      expiryDate
+      notes
       extractionStatus
     }
   }
@@ -135,9 +138,13 @@ export const DOCUMENTS_BY_CREW_QUERY = gql`
     documentsByCrew(crewId: $crewId) {
       id
       fileName
+      title
       fileType
       fileSize
       classification
+      issueDate
+      expiryDate
+      notes
       extractionStatus
       extractedText
       extractedData
@@ -152,7 +159,6 @@ export const LOGIN_MUTATION = gql`
     login(email: $email, password: $password) {
       success
       message
-      token
       user {
         id
         fullName
@@ -228,7 +234,7 @@ export const REJECT_CV_REVIEW = gql`
 
 export const STAFF_USERS_QUERY = gql`
   query StaffUsers($limit: Int!, $offset: Int!) {
-    crewMembers(limit: $limit, offset: $offset) {
+    staffAccounts(limit: $limit, offset: $offset) {
       id
       fullName
       email

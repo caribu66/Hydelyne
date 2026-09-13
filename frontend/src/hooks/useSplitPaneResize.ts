@@ -1,4 +1,4 @@
-import { KeyboardEvent, PointerEvent, RefObject, useCallback, useRef, useState } from 'react';
+import { KeyboardEvent, PointerEvent, RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
 const SPLIT_RATIO_STORAGE_KEY = 'hydenlyne_split_pane_ratio';
 const DEFAULT_SPLIT_RATIO = 35;
@@ -36,6 +36,12 @@ export function useSplitPaneResize(): UseSplitPaneResizeResult {
 
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
+  const cleanupDragRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => {
+    cleanupDragRef.current?.();
+    cleanupDragRef.current = null;
+  }, []);
 
   const updateSplitRatio = useCallback((newRatio: number) => {
     const clamped = Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, Math.round(newRatio * 10) / 10));
@@ -65,12 +71,8 @@ export function useSplitPaneResize(): UseSplitPaneResizeResult {
     };
 
     const handlePointerUp = (upEvent: globalThis.PointerEvent) => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-      document.body.style.removeProperty('cursor');
-      document.body.style.removeProperty('user-select');
-      setIsDraggingSplitter(false);
+      cleanupDragRef.current?.();
+      cleanupDragRef.current = null;
 
       const rect = container.getBoundingClientRect();
       if (rect.width > 0) {
@@ -85,6 +87,14 @@ export function useSplitPaneResize(): UseSplitPaneResizeResult {
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerUp);
+    cleanupDragRef.current = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+      document.body.style.removeProperty('cursor');
+      document.body.style.removeProperty('user-select');
+      setIsDraggingSplitter(false);
+    };
   }, [updateSplitRatio]);
 
   const handleSplitterDoubleClick = useCallback(() => {

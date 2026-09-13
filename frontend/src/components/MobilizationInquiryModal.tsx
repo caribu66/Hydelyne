@@ -19,12 +19,18 @@ import {
   calculateCampaignWindow,
   validateAssignmentInput,
 } from '../utils/assignmentUtils';
+import { copyTextToClipboard } from '../utils/clipboard';
+import { availabilityLabel } from '../utils/profileLabels';
+import { isoDateAfterDays } from '../utils/operationsHome';
+import { apolloResultHasErrors } from '../utils/sessionScope';
 
 interface MobilizationInquiryModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: UserProfile | null;
   onShowToast: (message: string) => void;
+  isAdmin: boolean;
+  sessionKey?: string | null;
 }
 
 export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
@@ -32,13 +38,15 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
   onClose,
   profile,
   onShowToast,
+  isAdmin,
+  sessionKey = null,
 }) => {
   const [projectName, setProjectName] = useState('');
   const [vesselImo, setVesselImo] = useState('');
-  const [deploymentPort, setDeploymentPort] = useState('Aberdeen, Scotland');
+  const [deploymentPort, setDeploymentPort] = useState('');
   const [surveyScope, setSurveyScope] = useState('Marine Seismic QC / OBN');
   const [startDate, setStartDate] = useState(
-    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    isoDateAfterDays(7)
   );
   const [durationDays, setDurationDays] = useState(21);
   const [clientCompany, setClientCompany] = useState('');
@@ -51,6 +59,15 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  const previousSessionKeyRef = useRef(sessionKey);
+  const currentProfileIdRef = useRef(profile?.id ?? null);
+  const currentIsOpenRef = useRef(isOpen);
+  const operationVersionRef = useRef(0);
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  currentSessionKeyRef.current = sessionKey;
+  currentProfileIdRef.current = profile?.id ?? null;
+  currentIsOpenRef.current = isOpen;
   useAccessibleDialog(isOpen && Boolean(profile), dialogRef, onClose);
 
   const [createAssignmentMutation, { loading: isSubmitting }] = useMutation<{
@@ -58,20 +75,57 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
   }>(CREATE_CAMPAIGN_ASSIGNMENT);
 
   useEffect(() => {
+    operationVersionRef.current += 1;
+    if (copyFeedbackTimerRef.current !== null) {
+      clearTimeout(copyFeedbackTimerRef.current);
+      copyFeedbackTimerRef.current = null;
+    }
     if (isOpen) {
+      const nextStartDate = isoDateAfterDays(7);
+      setProjectName('');
+      setVesselImo('');
+      setDeploymentPort('');
+      setSurveyScope('Marine Seismic QC / OBN');
+      setStartDate(nextStartDate);
+      setDurationDays(21);
+      setClientCompany('');
+      setClientName('');
+      setClientEmail('');
+      setSpecialInstructions('');
       setSubmittedRef(null);
       setSubmittedAssignment(null);
       setErrorMessage(null);
+      setIsCopied(false);
     }
-  }, [isOpen, profile]);
+  }, [isOpen, profile?.id]);
+
+  useEffect(() => {
+    if (previousSessionKeyRef.current !== null && previousSessionKeyRef.current !== sessionKey) {
+      setSubmittedRef(null);
+      setSubmittedAssignment(null);
+      setErrorMessage(null);
+      onClose();
+    }
+    previousSessionKeyRef.current = sessionKey;
+  }, [onClose, sessionKey]);
 
   if (!isOpen || !profile) return null;
 
-  const estimatedDayRate = profile.dayRate || 850;
-  const estimatedTotalRate = estimatedDayRate * durationDays;
+  const estimatedDayRate = profile.dayRate;
+  const estimatedTotalRate = estimatedDayRate != null ? estimatedDayRate * durationDays : null;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    if (!profile) return;
+    const operationVersion = ++operationVersionRef.current;
+    const profileId = profile.id;
+    const operationIsCurrent = () => (
+      operationVersion === operationVersionRef.current
+      && currentIsOpenRef.current
+      && currentSessionKeyRef.current === sessionKey
+      && currentProfileIdRef.current === profileId
+    );
     setErrorMessage(null);
 
     const validation = validateAssignmentInput({
@@ -83,15 +137,23 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
       setErrorMessage(validation.error);
       return;
     }
+    const cleanVesselImo = vesselImo.trim();
+    if (!cleanVesselImo) {
+      setErrorMessage('Vessel IMO is required to record a mobilization request');
+      return;
+    }
+    if (!deploymentPort.trim()) {
+      setErrorMessage('Deployment port is required to record a mobilization request');
+      return;
+    }
 
     const { endDate: computedEndDate } = calculateCampaignWindow(startDate, durationDays);
-    const effectiveImo = vesselImo.trim() || `IMO-MOB-${Math.floor(1000000 + Math.random() * 9000000)}`;
-    const effectiveVesselName = projectName.trim() || 'Offshore Campaign';
+    const cleanProjectName = projectName.trim();
 
     const notesPayload = [
       specialInstructions ? `Instructions: ${specialInstructions}` : '',
       deploymentPort ? `Port: ${deploymentPort}` : '',
-      clientName || clientEmail ? `Client: ${clientName} (${clientCompany || 'Energy Operator'}) <${clientEmail}>` : '',
+      clientName || clientEmail ? `Client: ${clientName || 'Not recorded'} (${clientCompany || 'Not recorded'}) <${clientEmail || 'Not provided'}>` : '',
     ].filter(Boolean).join('\n');
 
     try {
@@ -99,51 +161,64 @@ export const MobilizationInquiryModal: FC<MobilizationInquiryModalProps> = ({
         variables: {
           input: {
             crewMemberId: profile.id,
-            vesselImo: effectiveImo,
-            vesselName: effectiveVesselName,
+            vesselImo: cleanVesselImo,
+            ...(cleanProjectName ? { vesselName: cleanProjectName } : {}),
             roleOnBoard: surveyScope,
             startDate,
             endDate: computedEndDate,
-            agreedDayRate: estimatedDayRate,
+            ...(isAdmin && estimatedDayRate != null ? { agreedDayRate: estimatedDayRate } : {}),
             notes: notesPayload,
             status: 'PROPOSED',
           },
         },
       });
 
-      const assignment = res.data?.createCampaignAssignment;
-      if (assignment) {
-        const refCode = buildMobilizationReference(assignment.id);
-        setSubmittedRef(refCode);
-        setSubmittedAssignment(assignment);
-        onShowToast(`Mobilization request ${refCode} dispatched to Hydenlyne operations`);
+      if (!operationIsCurrent()) return;
+      if (apolloResultHasErrors(res)) {
+        throw new Error('Mobilization request returned errors. Please try again.');
       }
+
+      const assignment = res.data?.createCampaignAssignment;
+      if (!assignment) throw new Error('The mobilization request was not returned. Please try again.');
+      const refCode = buildMobilizationReference(assignment.id);
+      setSubmittedRef(refCode);
+      setSubmittedAssignment(assignment);
+      onShowToast(`Mobilization request ${refCode} recorded for Hydenlyne operations confirmation`);
     } catch (err: unknown) {
+      if (!operationIsCurrent()) return;
       const msg = err instanceof Error ? err.message : 'Failed to record campaign assignment';
       setErrorMessage(msg);
     }
   };
 
 
-  const handleCopySummary = () => {
+  const handleCopySummary = async () => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     const summary = `
 [HYDENLYNE MOBILIZATION REQUEST - ${submittedRef}]
 CONTRACTOR: ${profile.name} (${profile.title})
-Standard Day Rate: £${estimatedDayRate}/day
-Campaign: ${projectName || 'Offshore Campaign'}
-Port: ${deploymentPort}
+${isAdmin && estimatedDayRate != null ? `Standard Day Rate: £${estimatedDayRate}/day` : 'Day Rate: Set by administrator'}
+Campaign: ${projectName || 'Not recorded'}
+Port: ${deploymentPort || 'Not recorded'}
 Scope: ${surveyScope}
 Start Date: ${startDate} (${durationDays} Days Duration)
-Estimated Base Rate: £${estimatedTotalRate.toLocaleString()}
-Client: ${clientName || 'Lead Recruiter'} (${clientCompany || 'Energy Operator'}) - ${clientEmail || 'contact@client.com'}
-Instructions: ${specialInstructions || 'None'}
+Estimated Base Rate: ${estimatedTotalRate != null ? `£${estimatedTotalRate.toLocaleString()}` : 'Rate on request'}
+Client: ${clientName || 'Not recorded'} (${clientCompany || 'Not recorded'}) - ${clientEmail || 'Not provided'}
+Instructions: ${specialInstructions || 'Not recorded'}
 Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
     `.trim();
 
-    navigator.clipboard?.writeText(summary);
-    setIsCopied(true);
-    onShowToast('Mobilization summary copied to clipboard');
-    setTimeout(() => setIsCopied(false), 2000);
+    if (await copyTextToClipboard(summary)) {
+      setIsCopied(true);
+      onShowToast('Mobilization summary copied to clipboard');
+      if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
+      copyFeedbackTimerRef.current = setTimeout(() => {
+        copyFeedbackTimerRef.current = null;
+        setIsCopied(false);
+      }, 2000);
+    } else {
+      onShowToast('Could not copy the mobilization summary. Please try again.');
+    }
   };
 
   return (
@@ -206,7 +281,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 <h3 className="font-semibold text-sm text-primary truncate">{profile.name}</h3>
                 <p className="text-xs text-secondary truncate">{profile.title}</p>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-secondary font-mono">
-                  <span className="text-positive font-medium">{profile.availability}</span>
+                  <span className="text-positive font-medium">{availabilityLabel(profile.availability)}</span>
                   <span>•</span>
                   <span>{profile.location}</span>
                 </div>
@@ -214,10 +289,19 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
             </div>
 
             <div className="text-right shrink-0">
-              <span className="block text-xs font-medium uppercase text-secondary font-mono">Indicative day rate</span>
+              <span className="block text-xs font-medium uppercase text-secondary font-mono">
+                {isAdmin ? 'Indicative day rate' : 'Day rate'}
+              </span>
               <span className="text-base font-bold text-primary font-mono">
-                £{estimatedDayRate}
-                <span className="text-xs text-secondary font-normal">/day</span>
+                {isAdmin ? (
+                  <>
+                    {estimatedDayRate != null ? (
+                      <>£{estimatedDayRate}<span className="text-xs text-secondary font-normal">/day</span></>
+                    ) : 'Rate on request'}
+                  </>
+                ) : (
+                  'Set by administrator'
+                )}
               </span>
             </div>
           </div>
@@ -230,9 +314,9 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
               </div>
 
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-primary">Mobilization scheduled</h3>
+                <h3 className="text-base font-bold text-primary">Mobilization request recorded</h3>
                 <p className="text-xs text-secondary max-w-md mx-auto">
-                  Campaign assignment has been recorded. Hydenlyne operations has received the booking brief for mobilization dispatch.
+                  The proposed assignment has been sent to Hydenlyne operations and remains pending confirmation.
                 </p>
               </div>
 
@@ -247,7 +331,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 </div>
                 <div className="flex justify-between">
                   <span className="text-secondary">Campaign / Vessel:</span>
-                  <span className="text-primary font-medium">{submittedAssignment?.vesselName || projectName || 'Offshore Campaign'}</span>
+                  <span className="text-primary font-medium">{submittedAssignment?.vesselName || projectName || 'Not recorded'}</span>
                 </div>
                 {submittedAssignment?.vesselImo && (
                   <div className="flex justify-between">
@@ -267,11 +351,15 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 </div>
                 <div className="flex justify-between border-t border-border-subtle pt-2">
                   <span className="text-secondary">Personnel day rate:</span>
-                  <span className="text-primary font-bold font-mono">£{estimatedDayRate}/day</span>
+                  <span className="text-primary font-bold font-mono">
+                    {isAdmin && estimatedDayRate != null ? `£${estimatedDayRate}/day` : 'Set by administrator'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-secondary">Estimated base rate:</span>
-                  <span className="text-primary font-bold font-mono">£{estimatedTotalRate.toLocaleString()}</span>
+                  <span className="text-primary font-bold font-mono">
+                    {isAdmin && estimatedTotalRate != null ? `£${estimatedTotalRate.toLocaleString()}` : 'Confirmed by administrator'}
+                  </span>
                 </div>
               </div>
 
@@ -327,7 +415,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
 
                 <div>
                   <label htmlFor="mobilization-imo" className="block text-xs font-medium text-secondary mb-1">
-                    Vessel IMO <span className="text-muted text-xs font-normal">(Optional / 7 digits)</span>
+                    Vessel IMO <span className="text-muted text-xs font-normal">(Required)</span>
                   </label>
                   <input
                     id="mobilization-imo"
@@ -336,6 +424,7 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     onChange={(e) => setVesselImo(e.target.value)}
                     placeholder="e.g. 9683934"
                     maxLength={20}
+                    required
                     className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors font-mono"
                   />
                 </div>
@@ -351,8 +440,10 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                     id="mobilization-port"
                     value={deploymentPort}
                     onChange={(e) => setDeploymentPort(e.target.value)}
+                    required
                     className="min-h-11 w-full px-3 py-2 rounded-[10px] bg-canvas/70 border border-border-strong text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus transition-colors"
                   >
+                    <option value="" disabled>Select deployment port</option>
                     <option value="Aberdeen, Scotland">Aberdeen, Scotland (UK)</option>
                     <option value="Bergen / Stavanger, Norway">Bergen / Stavanger, Norway</option>
                     <option value="Great Yarmouth, UK">Great Yarmouth, UK</option>
@@ -493,10 +584,14 @@ Status: PENDING HYDENLYNE OPERATIONS CONFIRMATION
                 <div>
                   <span className="block text-xs font-medium uppercase text-secondary font-mono">Estimated personnel budget</span>
                   <div className="text-base font-bold text-primary font-mono">
-                    £{estimatedTotalRate.toLocaleString()}{' '}
-                    <span className="text-xs text-secondary font-normal">
-                      ({durationDays} days @ £{estimatedDayRate}/d)
-                    </span>
+                    {isAdmin && estimatedTotalRate != null ? (
+                      <>
+                        £{estimatedTotalRate.toLocaleString()}{' '}
+                        <span className="text-xs text-secondary font-normal">
+                          ({durationDays} days @ £{estimatedDayRate}/d)
+                        </span>
+                      </>
+                    ) : 'Rate on request'}
                   </div>
                 </div>
 

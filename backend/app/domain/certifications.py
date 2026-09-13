@@ -85,6 +85,14 @@ CERT_FAMILIES: dict[str, str] = {
 }
 
 
+def is_medical_cert_type(name: str | None) -> bool:
+    """Return whether a certificate name represents offshore medical evidence."""
+    if not isinstance(name, str):
+        return False
+    normalized = name.casefold()
+    return any(keyword in normalized for keyword in ("medical", "oguk", "oeuk", "eng1"))
+
+
 def normalize_cert_name(name: str) -> str:
     """Normalize a raw/extracted certification name to canonical form."""
     lower = name.lower().strip()

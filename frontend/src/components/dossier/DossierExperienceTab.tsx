@@ -2,6 +2,7 @@ import { FC } from 'react';
 import { UserProfile } from '../../types';
 import { HighlightText } from '../HighlightText';
 import { DossierCollection } from '../DossierCollection';
+import { formatExperience } from '../../utils/experience';
 
 interface DossierExperienceTabProps {
   profile: UserProfile;
@@ -19,7 +20,7 @@ export const DossierExperienceTab: FC<DossierExperienceTabProps> = ({
           Track Record & Clients
         </h3>
         <p className="text-secondary leading-relaxed">
-          {profile.yearsOfExperience} years of offshore experience.
+          {formatExperience(profile.yearsOfExperience)} years of offshore experience.
         </p>
         {profile.pastCompanies && profile.pastCompanies.length > 0 && (
           <DossierCollection

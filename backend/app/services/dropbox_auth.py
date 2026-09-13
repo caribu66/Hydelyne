@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import math
 from typing import Any, Optional
 
 import httpx
+from httpx import BasicAuth
 
 from app.config import get_settings
 
@@ -18,6 +21,8 @@ TOKEN_URL = "https://api.dropbox.com/oauth2/token"  # nosec B105
 # never lapse midway through an in-flight request.
 EXPIRY_SKEW_SECONDS = 300
 DEFAULT_EXPIRES_IN = 14400
+MAX_DROPBOX_TOKEN_RESPONSE_BYTES = 64 * 1024
+MAX_DROPBOX_JSON_RESPONSE_BYTES = 512 * 1024
 
 
 class DropboxAuthError(RuntimeError):
@@ -107,41 +112,61 @@ class DropboxTokenProvider:
         """Exchange the refresh token for a new access token."""
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
+                request = client.build_request(
+                    "POST",
                     TOKEN_URL,
                     data={
                         "grant_type": "refresh_token",
                         "refresh_token": settings.DROPBOX_REFRESH_TOKEN,
                     },
-                    auth=(settings.DROPBOX_APP_KEY, settings.DROPBOX_APP_SECRET),
                     timeout=30.0,
                 )
-        except httpx.HTTPError as exc:
-            raise DropboxAuthError(f"Dropbox token refresh unreachable: {exc}") from exc
-
-        if response.status_code != 200:
-            # The body can echo credentials, so only the status and Dropbox's
-            # short error tag are logged.
-            tag = ""
-            try:
-                tag = str(response.json().get("error", ""))[:100]
-            except ValueError:
-                pass
-            if response.status_code == 400:
-                logger.error(
-                    "Dropbox refresh token rejected (%s). It may have been "
-                    "revoked; re-run the one-time authorisation. %s",
-                    response.status_code,
-                    tag,
+                request = next(
+                    BasicAuth(
+                        settings.DROPBOX_APP_KEY,
+                        settings.DROPBOX_APP_SECRET,
+                    ).auth_flow(request)
                 )
-            raise DropboxAuthError(f"Dropbox token refresh failed ({response.status_code}) {tag}")
+                response = await client.send(request, stream=True)
+                try:
+                    if response.status_code != 200:
+                        # Provider bodies can echo credentials or request-specific data;
+                        # keep this boundary to the status code only.
+                        if response.status_code == 400:
+                            logger.error(
+                                "Dropbox refresh token rejected (%s). It may have been "
+                                "revoked; re-run the one-time authorisation.",
+                                response.status_code,
+                            )
+                        raise DropboxAuthError(
+                            f"Dropbox token refresh failed ({response.status_code})"
+                        )
+                    payload = await _read_bounded_json(
+                        response, max_bytes=MAX_DROPBOX_TOKEN_RESPONSE_BYTES
+                    )
+                finally:
+                    await response.aclose()
+        except httpx.HTTPError as exc:
+            # Transport exceptions can include the configured URL or request
+            # details. Keep the public error safe while preserving chaining
+            # for internal diagnostics.
+            raise DropboxAuthError("Dropbox token refresh unreachable") from exc
 
-        payload = response.json()
+        if payload is None or not isinstance(payload, dict):
+            raise DropboxAuthError("Dropbox token refresh returned an invalid payload")
         token = payload.get("access_token")
         if not isinstance(token, str) or not token:
             raise DropboxAuthError("Dropbox token refresh returned no access_token")
 
-        expires_in = payload.get("expires_in") or DEFAULT_EXPIRES_IN
+        raw_expires_in = payload.get("expires_in")
+        expires_in = (
+            raw_expires_in
+            if isinstance(raw_expires_in, (int, float))
+            and not isinstance(raw_expires_in, bool)
+            and math.isfinite(float(raw_expires_in))
+            and raw_expires_in > 0
+            else DEFAULT_EXPIRES_IN
+        )
         loop = asyncio.get_running_loop()
         self._access_token = token
         self._expires_at = loop.time() + max(expires_in - EXPIRY_SKEW_SECONDS, 60)
@@ -155,6 +180,34 @@ class DropboxTokenProvider:
 
 
 token_provider = DropboxTokenProvider()
+
+
+async def _read_bounded_json(
+    response: httpx.Response,
+    *,
+    max_bytes: int,
+) -> object | None:
+    """Read one provider JSON response without unbounded buffering."""
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    content_length = response.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > max_bytes:
+                return None
+        except ValueError:
+            pass
+    chunks: list[bytes] = []
+    total_bytes = 0
+    async for chunk in response.aiter_bytes():
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            return None
+        chunks.append(chunk)
+    try:
+        return json.loads(b"".join(chunks))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
 
 
 async def dropbox_request(
@@ -183,3 +236,115 @@ async def dropbox_request(
         response = await client.request(method, url, headers=request_headers, **kwargs)
 
     return response
+
+
+async def dropbox_request_json(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: Optional[dict[str, str]] = None,
+    max_bytes: int = MAX_DROPBOX_JSON_RESPONSE_BYTES,
+    **kwargs: Any,
+) -> tuple[int, dict[str, Any] | None]:
+    """Request a Dropbox JSON payload with bounded streaming and token retry."""
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+
+    async def _request(token: str) -> tuple[int, dict[str, Any] | None]:
+        request_headers = dict(headers or {})
+        request_headers["Authorization"] = f"Bearer {token}"
+        request = client.build_request(method, url, headers=request_headers, **kwargs)
+        response = await client.send(request, stream=True)
+        try:
+            if response.status_code != 200:
+                return response.status_code, None
+            payload = await _read_bounded_json(response, max_bytes=max_bytes)
+            return response.status_code, payload if isinstance(payload, dict) else None
+        finally:
+            await response.aclose()
+
+    token = await token_provider.get_token()
+    status_code, payload = await _request(token)
+    if status_code == 401 and token_provider.can_refresh:
+        logger.info("Dropbox returned 401; refreshing token for bounded JSON request")
+        token = await token_provider.get_token(force_refresh=True)
+        status_code, payload = await _request(token)
+    return status_code, payload
+
+
+async def dropbox_request_status(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: Optional[dict[str, str]] = None,
+    **kwargs: Any,
+) -> int:
+    """Call a Dropbox endpoint without buffering an unused response body."""
+
+    async def _request(token: str) -> int:
+        request_headers = dict(headers or {})
+        request_headers["Authorization"] = f"Bearer {token}"
+        request = client.build_request(method, url, headers=request_headers, **kwargs)
+        response = await client.send(request, stream=True)
+        try:
+            return response.status_code
+        finally:
+            await response.aclose()
+
+    token = await token_provider.get_token()
+    status_code = await _request(token)
+    if status_code == 401 and token_provider.can_refresh:
+        logger.info("Dropbox returned 401; refreshing token for status request")
+        token = await token_provider.get_token(force_refresh=True)
+        status_code = await _request(token)
+    return status_code
+
+
+async def download_dropbox_content(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    max_bytes: int,
+    headers: Optional[dict[str, str]] = None,
+    **kwargs: Any,
+) -> tuple[int, bytes | None]:
+    """Download a Dropbox response without buffering beyond ``max_bytes``."""
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+
+    async def _download(token: str) -> tuple[int, bytes | None]:
+        request_headers = dict(headers or {})
+        request_headers["Authorization"] = f"Bearer {token}"
+        request = client.build_request(method, url, headers=request_headers, **kwargs)
+        response = await client.send(request, stream=True)
+        try:
+            if response.status_code != 200:
+                return response.status_code, None
+            content_length = response.headers.get("content-length")
+            if content_length is not None:
+                try:
+                    if int(content_length) > max_bytes:
+                        return response.status_code, None
+                except ValueError:
+                    pass
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > max_bytes:
+                    return response.status_code, None
+                chunks.append(chunk)
+            return response.status_code, b"".join(chunks)
+        finally:
+            await response.aclose()
+
+    token = await token_provider.get_token()
+    status_code, content = await _download(token)
+    if status_code == 401 and token_provider.can_refresh:
+        logger.info("Dropbox returned 401; refreshing token for bounded download")
+        token = await token_provider.get_token(force_refresh=True)
+        status_code, content = await _download(token)
+    return status_code, content

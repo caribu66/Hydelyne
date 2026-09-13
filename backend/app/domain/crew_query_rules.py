@@ -17,6 +17,8 @@ from typing import Any
 
 from app.domain.certifications import CERT_ALIASES, CERT_FAMILIES
 
+MAX_SEARCH_QUERY_LENGTH = 500
+
 NATIONALITY_ALIASES = {
     "british": "British",
     "dutch": "Dutch",
@@ -38,7 +40,7 @@ NATIONALITY_ALIASES = {
     "singaporean": "Singaporean",
     "maltese": "Maltese",
     "greek": "Greek",
-    "finnish": "Finnic",
+    "finnish": "Finnish",
     "icelandic": "Icelandic",
 }
 
@@ -123,6 +125,12 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
         )
     )
 
+    # Compliance access is role-gated in the GraphQL resolver. Do not let an
+    # untrusted intent-classifier response downgrade an explicit compliance
+    # request into an ordinary profile search and bypass that gate.
+    if re.search(r"\b(expired|expiring|compliance|renew(?:al)?|non[- ]compliant)\b", lower_query):
+        normalized["intent"] = "compliance"
+
     if has_medical_term and not is_medical_compliance_query:
         normalized["intent"] = "search"
         entities["medical_required"] = True
@@ -148,7 +156,8 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
             entities["medical_valid"] = True
 
     for alias, nationality in NATIONALITY_ALIASES.items():
-        if alias in lower_query:
+        alias_pattern = rf"(?<![A-Za-z0-9]){re.escape(alias)}(?![A-Za-z0-9])"
+        if re.search(alias_pattern, lower_query):
             entities["nationality"] = nationality
             break
 
@@ -191,16 +200,15 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
         entities["location"] = "Aberdeen"
     elif "north sea" in lower_query and not entities.get("location"):
         entities["location"] = "North Sea"
-    if (
-        "available" in lower_query
-        and "unavailable" not in lower_query
-        and not entities.get("availability")
+    if not entities.get("availability") and (
+        "unavailable" in lower_query
+        or re.search(r"\b(?:not|no longer)\s+available\b", lower_query)
     ):
-        entities["availability"] = "available"
-    elif "unavailable" in lower_query and not entities.get("availability"):
         entities["availability"] = "unavailable"
+    elif "available" in lower_query and not entities.get("availability"):
+        entities["availability"] = "available"
 
-    if "next month" in lower_query and "available" in lower_query:
+    if "next month" in lower_query and entities.get("availability") == "available":
         today = date.today()
         next_month_year = today.year + (1 if today.month == 12 else 0)
         next_month = 1 if today.month == 12 else today.month + 1
@@ -212,7 +220,12 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
 
     inferred_certifications = list(entities.get("certifications") or [])
     for alias, certificate in CERT_ALIASES.items():
-        if " " not in alias and alias in lower_query and certificate not in inferred_certifications:
+        # Environmental is a broad discipline, not an unambiguous JNCC MMO
+        # credential. It remains available through the skills text search.
+        if alias == "environmental":
+            continue
+        alias_pattern = rf"(?<![A-Za-z0-9]){re.escape(alias)}(?![A-Za-z0-9])"
+        if re.search(alias_pattern, lower_query) and certificate not in inferred_certifications:
             inferred_certifications.append(certificate)
     if inferred_certifications:
         entities["certifications"] = inferred_certifications

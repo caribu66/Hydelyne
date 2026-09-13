@@ -2,6 +2,7 @@ import { FC, useRef, useState } from 'react';
 import { UserProfile } from '../../types';
 import { useMenuKeyboardNav } from '../../hooks/useMenuKeyboardNav';
 import { HighlightText } from '../HighlightText';
+import { formatExperience } from '../../utils/experience';
 import {
   MapPin,
   Bookmark,
@@ -218,10 +219,10 @@ export const DossierHeader: FC<DossierHeaderProps> = ({
                 {profile.isHighlyRecommended && (
                   <span className="badge-accent inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium">
                     <BadgeCheck className="w-3.5 h-3.5 text-accent" />
-                    <span>Verified</span>
+                    <span>Strong match</span>
                   </span>
                 )}
-                {profile.dayRate && (
+                {profile.dayRate != null && (
                   <span className="font-mono text-xs font-semibold text-positive bg-surface-raised px-2 py-0.5 rounded-md border border-border-subtle">
                     £{profile.dayRate}/d
                   </span>
@@ -241,8 +242,8 @@ export const DossierHeader: FC<DossierHeaderProps> = ({
                 <span className="text-muted/60">•</span>
                 <span className="text-accent font-medium">{profile.department}</span>
                 <span className="text-muted/60">•</span>
-                <span className="font-mono text-secondary">{profile.yearsOfExperience}y exp</span>
-                {profile.rating && (
+                <span className="font-mono text-secondary">{formatExperience(profile.yearsOfExperience)}{profile.yearsOfExperience == null ? '' : 'y exp'}</span>
+                {profile.rating != null && (
                   <>
                     <span className="text-muted/60">•</span>
                     <span className="font-mono text-warning">★ {profile.rating.toFixed(1)}</span>

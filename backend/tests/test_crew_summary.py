@@ -54,6 +54,56 @@ async def test_generate_crew_summary_includes_professional_summary(db_session):
 
 
 @pytest.mark.asyncio
+async def test_generate_crew_summary_excludes_private_and_document_data(db_session):
+    """The authenticated summary surface must not turn C2/C3 fields into prose.
+
+    GraphQL field scrubbing cannot redact values after an LLM has incorporated
+    them into a returned string, so the prompt itself must be C1-safe.
+    """
+    from datetime import date
+
+    from app.models import Document
+    from app.services.crew_query import CrewQueryService
+
+    crew = CrewMember(
+        full_name="Summary Privacy Test",
+        email="private@example.com",
+        phone="+44 7000 999999",
+        medical_expiry=date(2030, 1, 1),
+        passport_expiry=date(2031, 1, 1),
+    )
+    db_session.add(crew)
+    await db_session.flush()
+    db_session.add(
+        Document(
+            crew_member_id=crew.id,
+            file_name="passport.pdf",
+            file_type="pdf",
+            file_size=10,
+            storage_type="local",
+            storage_path="/tmp/passport.pdf",
+            classification="passport",
+            extracted_data={"passport_number": "P-SECRET-123"},
+        )
+    )
+    await db_session.commit()
+    await db_session.refresh(crew, attribute_names=["certifications", "work_history", "documents"])
+
+    service = CrewQueryService()
+    service._generate_response = AsyncMock(return_value="A generated summary.")
+
+    await service.generate_crew_summary(crew)
+    sent_crew_data_json = service._generate_response.await_args.args[2]
+    sent_document_data_json = service._generate_response.await_args.kwargs["document_data"]
+
+    for private_value in ("private@example.com", "+44 7000 999999", "2030-01-01", "2031-01-01"):
+        assert private_value not in sent_crew_data_json
+    assert "P-SECRET-123" not in sent_document_data_json
+    assert "passport.pdf" not in sent_document_data_json
+    assert "passport" not in sent_document_data_json
+
+
+@pytest.mark.asyncio
 async def test_consultant_knowledge_summarize_resolves_by_id_not_fuzzy_name(db_session):
     """Regression test for the redundant/fragile lookup this replaced:
     summarize() used to fetch the crew member by ID just to read
@@ -128,9 +178,36 @@ async def test_summarize_result_is_cached(db_session):
         first = await consultant_knowledge_service.summarize(crew.id, db_session=db_session)
         second = await consultant_knowledge_service.summarize(crew.id, db_session=db_session)
 
-    assert first == "A generated summary."
-    assert second == "A generated summary."
-    mock_generate.assert_awaited_once()
+        assert first == "A generated summary."
+        assert second == "A generated summary."
+        mock_generate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_summary_cache_cannot_bypass_publication_revocation(db_session):
+    """A stale Redis summary must not survive profile demotion or deletion."""
+    from app.services import cache as cache_module
+    from app.services.consultant_knowledge import consultant_knowledge_service
+
+    crew = CrewMember(full_name="Revoked Summary Test", publication_status="rejected")
+    db_session.add(crew)
+    await db_session.commit()
+
+    with (
+        patch.object(
+            cache_module.cache_service,
+            "get",
+            new=AsyncMock(return_value="stale private profile summary"),
+        ),
+        patch(
+            "app.services.consultant_knowledge.crew_query_service.generate_crew_summary",
+            new=AsyncMock(),
+        ) as mock_generate,
+    ):
+        result = await consultant_knowledge_service.summarize(crew.id, db_session=db_session)
+
+    assert result == "No crew member found with that id."
+    mock_generate.assert_not_awaited()
 
 
 @pytest.mark.asyncio

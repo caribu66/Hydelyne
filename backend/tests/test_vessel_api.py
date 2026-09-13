@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.services.vessel_api import (
+    MAX_VESSEL_API_RESPONSE_BYTES,
+    VesselApiAuthError,
     VesselApiNotConfiguredError,
     VesselApiService,
+    VesselApiUpstreamError,
+    _cache_key,
     _coerce_position,
     _coerce_vessel_summary,
     _validate_id_type,
     _validate_name,
+    _validate_vessel_id,
 )
 
 
@@ -22,6 +28,8 @@ def test_validate_name() -> None:
         _validate_name("   ")
     with pytest.raises(ValueError, match="too long"):
         _validate_name("a" * 101)
+    with pytest.raises(ValueError, match="must be a string"):
+        _validate_name(123)
 
 
 def test_validate_id_type() -> None:
@@ -30,6 +38,34 @@ def test_validate_id_type() -> None:
     assert _validate_id_type("eni ") == "eni"
     with pytest.raises(ValueError, match="idType must be one of"):
         _validate_id_type("invalid_type")
+    with pytest.raises(ValueError, match="idType must be a string"):
+        _validate_id_type(None)
+
+
+def test_validate_vessel_id_rejects_path_and_query_delimiters() -> None:
+    assert _validate_vessel_id("  9683934  ") == "9683934"
+    with pytest.raises(ValueError, match="invalid characters"):
+        _validate_vessel_id("9683934?next=/admin")
+    with pytest.raises(ValueError, match="must be a string"):
+        _validate_vessel_id(9683934)
+
+
+@pytest.mark.asyncio
+async def test_vessel_adapter_rejects_malformed_numeric_bounds_before_provider_access() -> None:
+    service = VesselApiService()
+
+    with pytest.raises(ValueError, match="between 1 and 50"):
+        await service.search_vessels("Survey", limit="20")
+    with pytest.raises(ValueError, match="latitude out of range"):
+        await service.vessels_in_radius(latitude="57", longitude=0, radius_m=100)
+    with pytest.raises(ValueError, match="radius must be"):
+        await service.vessels_in_radius(latitude=57, longitude=0, radius_m=True)
+
+
+def test_vessel_cache_key_is_scoped_to_upstream_base_url() -> None:
+    assert _cache_key("search", "https://provider-a.example", "survey", "20") != (
+        _cache_key("search", "https://provider-b.example", "survey", "20")
+    )
 
 
 def test_coerce_vessel_summary() -> None:
@@ -83,6 +119,66 @@ def test_coerce_position() -> None:
     assert pos.eta == "09-07 14:00"
 
 
+def test_coerce_position_preserves_valid_zero_values() -> None:
+    pos = _coerce_position(
+        {
+            "position": {
+                "latitude": 0,
+                "longitude": 0,
+                "speed": 0,
+                "course": 0,
+                "heading": 0,
+            }
+        }
+    )
+    assert pos.latitude == 0.0
+    assert pos.longitude == 0.0
+    assert pos.sog == 0.0
+    assert pos.cog == 0.0
+    assert pos.heading == 0.0
+
+
+def test_coerce_position_discards_non_finite_values() -> None:
+    pos = _coerce_position(
+        {
+            "position": {
+                "latitude": "nan",
+                "longitude": "inf",
+                "speed": "-inf",
+                "course": "not-a-number",
+            }
+        }
+    )
+
+    assert pos.latitude is None
+    assert pos.longitude is None
+    assert pos.sog is None
+    assert pos.cog is None
+
+
+def test_coerce_position_discards_out_of_range_coordinates() -> None:
+    pos = _coerce_position(
+        {
+            "position": {
+                "latitude": 91,
+                "longitude": -181,
+            }
+        }
+    )
+
+    assert pos.latitude is None
+    assert pos.longitude is None
+
+
+def test_coerce_vessel_summary_discards_non_finite_dimensions() -> None:
+    summary = _coerce_vessel_summary(
+        {"id": "123", "name": "Example", "length": "nan", "width": "inf"}
+    )
+
+    assert summary.length is None
+    assert summary.width is None
+
+
 @pytest.mark.asyncio
 async def test_unconfigured_service_fails_closed() -> None:
     svc = VesselApiService()
@@ -99,6 +195,80 @@ async def test_unconfigured_service_fails_closed() -> None:
             await svc.get_position("9876543")
         with pytest.raises(VesselApiNotConfiguredError):
             await svc.vessels_in_radius(latitude=57.0, longitude=-2.0, radius_m=50000)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "error_type"),
+    [(403, VesselApiAuthError), (400, VesselApiUpstreamError)],
+)
+async def test_provider_error_bodies_are_not_embedded_in_adapter_errors(
+    status_code: int, error_type: type[Exception]
+) -> None:
+    """Provider payloads must not cross the adapter error boundary."""
+    import httpx
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        @asynccontextmanager
+        async def stream(self, *args: object, **kwargs: object):
+            yield httpx.Response(status_code, text="credential-or-request-secret")
+
+    svc = VesselApiService()
+    with patch("app.services.vessel_api.httpx.AsyncClient", return_value=FakeClient()):
+        with pytest.raises(error_type) as error:
+            await svc._request(
+                "GET",
+                "/search/vessels",
+                timeout_s=5.0,
+                api_key="key",
+                base_url="https://api.vesselapi.com",
+            )
+
+    assert "credential-or-request-secret" not in str(error.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("declared_length", [True, False])
+async def test_provider_response_size_is_bounded(declared_length: bool) -> None:
+    class FakeResponse:
+        status_code = 200
+        headers = (
+            {"Content-Length": str(MAX_VESSEL_API_RESPONSE_BYTES + 1)}
+            if declared_length
+            else {}
+        )
+
+        async def aiter_bytes(self):
+            if not declared_length:
+                yield b"x" * (MAX_VESSEL_API_RESPONSE_BYTES + 1)
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        @asynccontextmanager
+        async def stream(self, *args: object, **kwargs: object):
+            yield FakeResponse()
+
+    svc = VesselApiService()
+    with patch("app.services.vessel_api.httpx.AsyncClient", return_value=FakeClient()):
+        with pytest.raises(VesselApiUpstreamError, match="response too large"):
+            await svc._request(
+                "GET",
+                "/search/vessels",
+                timeout_s=5.0,
+                api_key="key",
+                base_url="https://api.vesselapi.com",
+            )
 
 
 @pytest.mark.asyncio

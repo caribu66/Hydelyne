@@ -3,11 +3,15 @@ import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SpecialistDocument } from '../types';
+import type { DocumentMutationResult } from '../hooks/useSpecialistDocuments';
 import { CertificationBadge } from './CertificationBadge';
 import { DocumentVault } from './DocumentVault';
 import { CandidateSkillRadarChart } from './CandidateSkillRadarChart';
 import { computeCandidateSkillScores } from '../utils/skillRadarUtils';
 import { DossierCollection } from './DossierCollection';
+import { mobilizationMailto, safeLinkedInUrl } from '../utils/externalLinks';
+import { formatExperience } from '../utils/experience';
+import { availabilityLabel } from '../utils/profileLabels';
 import {
   X,
   MapPin,
@@ -37,6 +41,7 @@ type ProfileInformationSection = 'summary' | 'credentials' | 'expertise' | 'hist
 
 interface ProfileDetailModalProps {
   profile: UserProfile | null;
+  sessionKey?: string | null;
   onClose: () => void;
   isBookmarked: boolean;
   onToggleBookmark: (profileId: string) => void;
@@ -47,8 +52,8 @@ interface ProfileDetailModalProps {
   onPrintDossier?: (profile: UserProfile) => void;
   documents?: SpecialistDocument[];
   onAddDocument?: () => void;
-  onRemoveDocument?: (docId: string) => void | Promise<void>;
-  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
+  onRemoveDocument?: (docId: string) => void | Promise<void | DocumentMutationResult>;
+  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void | DocumentMutationResult>;
   canManageDocuments?: boolean;
   canRequestDocuments?: boolean;
   canDeleteCrew?: boolean;
@@ -57,6 +62,7 @@ interface ProfileDetailModalProps {
 
 export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
   profile,
+  sessionKey = null,
   onClose,
   isBookmarked,
   onToggleBookmark,
@@ -82,6 +88,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const skillScores = profile ? computeCandidateSkillScores(profile) : [];
   const avgScore = skillScores.length > 0 ? Math.round(skillScores.reduce((acc, curr) => acc + curr.value, 0) / skillScores.length) : 0;
@@ -89,18 +96,44 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
   useAccessibleDialog(Boolean(profile), dialogRef, onClose);
 
   useEffect(() => {
+    if (copyFeedbackTimerRef.current !== null) {
+      clearTimeout(copyFeedbackTimerRef.current);
+      copyFeedbackTimerRef.current = null;
+    }
     setActiveProfileSection('summary');
+    setActiveTab('profile');
     setIsRadarExpanded(false);
+    setIsDeleteConfirmOpen(false);
+    setIsDeleting(false);
+    setCopiedEmail(false);
     bodyRef.current?.scrollTo({ top: 0, behavior: 'auto' });
-  }, [profile?.id]);
+    return () => {
+      if (copyFeedbackTimerRef.current !== null) {
+        clearTimeout(copyFeedbackTimerRef.current);
+        copyFeedbackTimerRef.current = null;
+      }
+    };
+  }, [profile?.id, sessionKey]);
 
   if (!profile) return null;
 
-  const handleCopyEmail = () => {
-    navigator.clipboard?.writeText(profile.email);
-    setCopiedEmail(true);
-    if (onShowToast) onShowToast(`Copied ${profile.email}`);
-    setTimeout(() => setCopiedEmail(false), 2000);
+  const handleCopyEmail = async () => {
+    if (!navigator.clipboard) {
+      onShowToast?.('Could not copy the email address in this browser.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(profile.email);
+      setCopiedEmail(true);
+      onShowToast?.(`Copied ${profile.email}`);
+      copyFeedbackTimerRef.current = setTimeout(() => {
+        copyFeedbackTimerRef.current = null;
+        setCopiedEmail(false);
+      }, 2000);
+    } catch {
+      setCopiedEmail(false);
+      onShowToast?.('Could not copy the email address. Please try again.');
+    }
   };
 
   const handleDeleteCrew = async () => {
@@ -117,6 +150,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
   };
 
   const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
+  const displayedAvailability = availabilityLabel(profile.availability);
   const profileSections: ReadonlyArray<{ value: ProfileInformationSection; label: string }> = [
     { value: 'summary', label: 'Snapshot' },
     { value: 'credentials', label: `Credentials (${profile.certifications?.length ?? 0})` },
@@ -180,7 +214,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   {profile.isHighlyRecommended && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-raised border border-border-strong/60 text-xs text-primary font-medium">
                       <BadgeCheck className="w-3.5 h-3.5 text-accent" />
-                      <span>Verified Contractor</span>
+                      <span>Strong match</span>
                     </span>
                   )}
                   {isCompared && (
@@ -200,7 +234,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                   <span className="text-muted/60">•</span>
                   <span className="text-accent font-medium">{profile.department}</span>
                   <span className="text-muted/60">•</span>
-                  <span className="font-mono text-secondary">{profile.yearsOfExperience} yrs experience</span>
+                <span className="font-mono text-secondary">{formatExperience(profile.yearsOfExperience)} yrs experience</span>
                 </div>
               </div>
             </div>
@@ -292,14 +326,14 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
-                <span>{profile.availability}</span>
+                <span>{displayedAvailability}</span>
               </span>
             </div>
 
             <div className="border-l border-border-subtle/70 px-3 sm:border-l-0 sm:border-r">
               <span className="text-xs text-secondary block uppercase font-mono">Rating</span>
               <span className="font-semibold text-xs text-warning block mt-0.5 font-mono">
-                ★ {profile.rating ? profile.rating.toFixed(1) : '—'}
+                ★ {profile.rating != null ? profile.rating.toFixed(1) : '—'}
                 {profile.reviewCount ? <span className="ml-1 text-muted font-normal">({profile.reviewCount})</span> : null}
               </span>
             </div>
@@ -307,14 +341,14 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
             <div className="mt-3 border-t border-border-subtle/70 px-3 pt-3 sm:mt-0 sm:border-t-0 sm:border-r sm:pt-0">
               <span className="text-xs text-secondary block uppercase font-mono">Day Rate</span>
               <span className="font-semibold text-xs text-positive block mt-0.5 font-mono">
-                {profile.dayRate ? `£${profile.dayRate}/day` : 'Upon Request'}
+                {profile.dayRate != null ? `£${profile.dayRate}/day` : 'Upon Request'}
               </span>
             </div>
 
             <div className="mt-3 border-l border-t border-border-subtle/70 px-3 pt-3 sm:mt-0 sm:border-t-0 sm:pr-0 sm:pt-0">
               <span className="text-xs text-secondary block uppercase font-mono">Experience</span>
               <span className="font-semibold text-xs text-primary block mt-0.5 font-mono">
-                {profile.yearsOfExperience} years
+                {formatExperience(profile.yearsOfExperience)} years
               </span>
             </div>
           </div>
@@ -379,6 +413,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               onReviewDocument={onReviewDocument}
               canManageDocuments={canManageDocuments}
               canRequestDocuments={canRequestDocuments}
+              sessionKey={sessionKey}
               onShowToast={onShowToast || (() => {})}
             />
           ) : activeTab === 'radar' ? (
@@ -483,17 +518,12 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
         <div className="flex flex-col items-stretch gap-3 border-t border-border-subtle bg-canvas p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0">
             <span className="text-xs text-secondary font-mono block truncate">{profile.email}</span>
-            <span className="text-xs text-secondary">Hydenlyne Verified Contractor Network</span>
+            <span className="text-xs text-secondary">Hydenlyne Contractor Network</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
             <a
-              href={
-                profile.linkedinUrl ||
-                `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(
-                  `${profile.name} Hydenlyne`
-                )}`
-              }
+              href={safeLinkedInUrl(profile.linkedinUrl, profile.name)}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open ${profile.name} LinkedIn profile`}
@@ -506,7 +536,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
 
             <button
               type="button"
-              onClick={handleCopyEmail}
+              onClick={() => void handleCopyEmail()}
               aria-label={`Copy ${profile.name} email address`}
               className={`relative min-h-11 px-3.5 py-2 rounded-[10px] text-xs font-medium flex items-center gap-1.5 transition-all duration-200 cursor-pointer overflow-hidden ${
                 copiedEmail
@@ -572,9 +602,7 @@ export const ProfileDetailModal: FC<ProfileDetailModalProps> = ({
               </button>
             ) : (
               <a
-                href={`mailto:${profile.email}?subject=Hydenlyne%20Mobilization%20Request%20-%20${encodeURIComponent(
-                  profile.title
-                )}`}
+              href={mobilizationMailto(profile.email, profile.title)}
                 className="px-4 py-2 rounded-[10px] bg-action hover:bg-action-hover text-on-action text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
               >
                 <Mail className="w-3.5 h-3.5" />

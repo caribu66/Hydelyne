@@ -1,5 +1,6 @@
 import { useEffect, Dispatch, SetStateAction } from 'react'
 import { UserProfile } from '../types'
+import { copyTextToClipboard } from '../utils/clipboard'
 
 interface UseKeyboardNavigationOptions {
   results: UserProfile[]
@@ -136,8 +137,9 @@ export function useKeyboardNavigation({
         onToggleCompare(activeSelectedProfile)
       } else if (e.key.toLowerCase() === 'c' && activeSelectedProfile) {
         e.preventDefault()
-        navigator.clipboard?.writeText(activeSelectedProfile.email)
-        showToast(`Copied ${activeSelectedProfile.email}`)
+        void copyTextToClipboard(activeSelectedProfile.email).then((copied) => {
+          showToast(copied ? `Copied ${activeSelectedProfile.email}` : 'Could not copy the email address. Please try again.')
+        })
       } else if (e.key.toLowerCase() === 'm' && activeSelectedProfile) {
         e.preventDefault()
         handleRequestMobilization(activeSelectedProfile)

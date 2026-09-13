@@ -47,6 +47,23 @@ describe('parseNaturalLanguageQuery', () => {
     expect(result.selectedSkills).not.toContain('PAMGUARD');
   });
 
+  it('uses the loaded roster for live-only skills, locations, and companies', () => {
+    const liveProfile = makeProfile({
+      skills: ['Live-only qualification'],
+      location: 'Esbjerg, Denmark',
+      company: 'Live Marine Partners',
+    });
+
+    const result = parseNaturalLanguageQuery(
+      'Live-only qualification specialists in Esbjerg at Live Marine Partners',
+      [liveProfile],
+    );
+
+    expect(result.selectedSkills).toEqual(['Live-only qualification']);
+    expect(result.locations).toEqual(['Esbjerg, Denmark']);
+    expect(result.companies).toEqual(['Live Marine Partners']);
+  });
+
   it('detects remote mode keywords', () => {
     expect(parseNaturalLanguageQuery('remote PyTorch engineers').remoteTypes).toEqual(['Remote']);
     expect(parseNaturalLanguageQuery('hybrid role').remoteTypes).toEqual(['Hybrid']);
@@ -280,6 +297,15 @@ describe('sortProfiles', () => {
     expect(sortProfiles(profiles, 'relevance', '').map((p) => p.id)).toEqual(['a', 'c', 'b']);
   });
 
+  it('does not invent a rating for a profile with no recorded rating', () => {
+    const result = sortProfiles(
+      [makeProfile({ id: 'unrated', rating: undefined }), makeProfile({ id: 'rated', rating: 1 })],
+      'relevance',
+      'unmatched query',
+    );
+    expect(result.map((p) => p.id)).toEqual(['rated', 'unrated']);
+  });
+
   it('preserves backend AI ranking order over incidental keyword scoring', () => {
     // "b" would score lower than "a" or "c" on name/bio relevance alone, but
     // the backend has already ranked structured matches — that order wins.
@@ -287,10 +313,38 @@ describe('sortProfiles', () => {
     expect(result.map((p) => p.id)).toEqual(['b', 'c', 'a']);
   });
 
+  it('sorts malformed recent dates as unknown instead of producing NaN ordering', () => {
+    const result = sortProfiles(
+      [
+        makeProfile({ id: 'invalid', dateAdded: 'not-a-date' }),
+        makeProfile({ id: 'recent', dateAdded: '2026-09-12' }),
+      ],
+      'recent',
+      '',
+    );
+    expect(result.map((profile) => profile.id)).toEqual(['recent', 'invalid']);
+  });
+
   it('does not mutate the input array', () => {
     const original = [...profiles];
     sortProfiles(profiles, 'experience-desc', '');
     expect(profiles).toEqual(original);
+  });
+
+  it('does not treat unknown experience as zero in cohort averages', () => {
+    const overview = generateAIOverview(
+      'find contractors',
+      [makeProfile({ yearsOfExperience: null })],
+      INITIAL_FILTER_STATE,
+    );
+    expect(overview?.avgExperience).toBeNull();
+    expect(overview?.summary).toContain('Audited experience was not recorded');
+  });
+
+  it('does not claim verification or accreditation without source evidence', () => {
+    const overview = generateAIOverview('find contractors', [makeProfile()], INITIAL_FILTER_STATE);
+    expect(overview?.summary).not.toContain('verified');
+    expect(overview?.summary).not.toContain('accredited');
   });
 });
 
@@ -344,5 +398,25 @@ describe('generateAIOverview', () => {
     expect(overview?.avgExperience).toBe(6);
     expect(overview?.topSkillsFound).toContain('JNCC MMO');
     expect(overview?.highlightProfileId).toBe('a');
+  });
+
+  it('does not report a fabricated day-rate range when rates are unavailable', () => {
+    const overview = generateAIOverview(
+      'mmo specialists',
+      [makeProfile({ dayRate: undefined })],
+      INITIAL_FILTER_STATE,
+    );
+    expect(overview?.keyInsights.join(' ')).not.toMatch(/£(?:750|800|1200)/);
+    expect(overview?.keyInsights.some((insight) => insight.includes('day rate'))).toBe(false);
+  });
+
+  it('does not present missing company history as a real company', () => {
+    const overview = generateAIOverview(
+      '',
+      [makeProfile({ company: 'Company not recorded', skills: ['PAMGUARD'] })],
+      { ...INITIAL_FILTER_STATE, selectedSkills: ['PAMGUARD'] },
+    );
+    expect(overview?.summary).toContain('Company history was not recorded');
+    expect(overview?.summary).not.toContain('Company not recorded');
   });
 });

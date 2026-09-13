@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bell, Check, FileText, Loader2, X } from 'lucide-react'
 import {
   IncomingDocumentReview,
@@ -7,42 +7,70 @@ import {
 } from '../lib/documentsApi'
 
 interface IncomingDocumentAlertProps {
-  onOpenContractor: (crewId: string) => void
+  sessionKey?: string | null
+  onOpenContractor: (crewId: string) => void | Promise<void>
   onShowToast?: (msg: string) => void
   onReviewResolved?: () => void
 }
 
 export function IncomingDocumentAlert({
+  sessionKey = null,
   onOpenContractor,
   onShowToast,
   onReviewResolved,
 }: IncomingDocumentAlertProps) {
   const [items, setItems] = useState<IncomingDocumentReview[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [actingId, setActingId] = useState<string | null>(null)
+  const requestVersionRef = useRef(0)
+  const currentSessionKeyRef = useRef(sessionKey)
+  currentSessionKeyRef.current = sessionKey
 
   useEffect(() => {
     let active = true
+    requestVersionRef.current += 1
+    setItems([])
+    setLoading(true)
+    setLoadError(null)
+    if (!sessionKey) {
+      setLoading(false)
+      return () => {
+        active = false
+        requestVersionRef.current += 1
+      }
+    }
     const load = async () => {
+      const requestVersion = ++requestVersionRef.current
       try {
         const next = await incomingDocumentReviews()
-        if (active) setItems(next)
+        if (active && requestVersion === requestVersionRef.current) {
+          setItems(next)
+          setLoadError(null)
+        }
+      } catch {
+        if (active && requestVersion === requestVersionRef.current) {
+          setLoadError('Could not load received documents. Try again shortly.')
+        }
       } finally {
-        if (active) setLoading(false)
+        if (active && requestVersion === requestVersionRef.current) setLoading(false)
       }
     }
     void load()
     const interval = window.setInterval(() => void load(), 30_000)
     return () => {
       active = false
+      requestVersionRef.current += 1
       window.clearInterval(interval)
     }
-  }, [])
+  }, [sessionKey])
 
   const handleAction = async (reviewId: string, action: 'approve' | 'reject', fileName: string) => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return
     setActingId(reviewId)
     try {
       await actionIncomingDocumentReview(reviewId, action)
+      if (currentSessionKeyRef.current !== sessionKey) return
       setItems((prev) => prev.filter((item) => item.id !== reviewId))
       onShowToast?.(
         action === 'approve'
@@ -51,9 +79,10 @@ export function IncomingDocumentAlert({
       )
       onReviewResolved?.()
     } catch (err) {
+      if (currentSessionKeyRef.current !== sessionKey) return
       onShowToast?.(err instanceof Error ? err.message : `Failed to ${action} document`)
     } finally {
-      setActingId(null)
+      setActingId((current) => (current === reviewId ? null : current))
     }
   }
 
@@ -83,12 +112,15 @@ export function IncomingDocumentAlert({
         <p className="mt-1 text-xs text-secondary">
           Review contractor uploads before relying on them for compliance.
         </p>
-        {items.length === 0 ? (
+        {loadError ? (
+          <p className="py-6 text-center text-xs text-danger" role="alert">{loadError}</p>
+        ) : items.length === 0 ? (
           <p className="py-6 text-center text-xs text-muted">No documents are waiting for review.</p>
         ) : (
           <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto">
             {items.map((item) => {
               const isActing = actingId === item.id
+              const canApprove = item.extraction_status === 'extracted' || item.extraction_status === 'needs_review'
               return (
                 <li
                   key={item.id}
@@ -114,10 +146,10 @@ export function IncomingDocumentAlert({
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
-                      disabled={isActing}
+                      disabled={isActing || !canApprove}
                       onClick={() => void handleAction(item.id, 'approve', item.file_name)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-positive-soft text-positive hover:bg-positive/20 focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50 cursor-pointer"
-                      title="Approve document"
+                      title={canApprove ? 'Approve document' : 'Approval waits for extraction to finish'}
                       aria-label={`Approve ${item.file_name}`}
                     >
                       {isActing ? (

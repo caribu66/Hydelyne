@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bot, Cloud, Database, Server } from 'lucide-react';
 import { GRAPHQL_URL } from '../config';
-import { getAuthToken } from '../lib/apollo';
 
 type ServiceName = 'database' | 'redis' | 'dropbox' | 'ollama';
 type ServiceState = 'healthy' | 'unhealthy' | 'unconfigured' | 'checking';
@@ -20,6 +19,26 @@ const stateStyle: Record<ServiceState, string> = {
   checking: 'border-border-strong bg-surface text-secondary',
 };
 
+function isServiceState(value: unknown): value is ServiceState {
+  return value === 'healthy' || value === 'unhealthy' || value === 'unconfigured' || value === 'checking';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseServiceStates(value: unknown): Record<ServiceName, ServiceState> {
+  if (!isRecord(value)) throw new Error('Invalid service status response');
+  const database = value.database;
+  const redis = value.redis;
+  const dropbox = value.dropbox;
+  const ollama = value.ollama;
+  if (!isServiceState(database) || !isServiceState(redis) || !isServiceState(dropbox) || !isServiceState(ollama)) {
+    throw new Error('Invalid service status response');
+  }
+  return { database, redis, dropbox, ollama };
+}
+
 export function ServiceStatus() {
   const [states, setStates] = useState<Record<ServiceName, ServiceState>>({
     database: 'checking', redis: 'checking', dropbox: 'checking', ollama: 'checking',
@@ -27,18 +46,23 @@ export function ServiceStatus() {
 
   useEffect(() => {
     let cancelled = false;
+    let latestRequest = 0;
     const check = async () => {
+      const requestId = ++latestRequest;
       try {
-        const token = getAuthToken();
         const response = await fetch(`${GRAPHQL_URL.replace(/\/graphql\/?$/, '')}/health/services`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           credentials: 'include',
         });
         if (!response.ok) throw new Error('Health check failed');
-        const body = await response.json() as { services: Record<ServiceName, ServiceState> };
-        if (!cancelled) setStates(body.services);
+        const body: unknown = await response.json();
+        if (!isRecord(body) || !('services' in body)) {
+          throw new Error('Invalid service status response');
+        }
+        if (!cancelled && requestId === latestRequest) setStates(parseServiceStates(body.services));
       } catch {
-        if (!cancelled) setStates({ database: 'unhealthy', redis: 'unhealthy', dropbox: 'unhealthy', ollama: 'unhealthy' });
+        if (!cancelled && requestId === latestRequest) {
+          setStates({ database: 'unhealthy', redis: 'unhealthy', dropbox: 'unhealthy', ollama: 'unhealthy' });
+        }
       }
     };
     void check();

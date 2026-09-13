@@ -4,20 +4,22 @@ import json
 import logging
 import uuid
 from datetime import date, datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 import strawberry
 from strawberry import Info
 
 from app.auth.decorators import require_admin, require_auth, require_staff
+from app.auth.session import MAX_LOGIN_EMAIL_LENGTH, MAX_LOGIN_PASSWORD_LENGTH
 from app.database import get_session_factory
-from app.domain.access_tiers import tier_for_role
+from app.domain.access_tiers import Tier, tier_for_role
+from app.domain.crew_accounts import is_contractor_profile
+from app.domain.crew_query_rules import MAX_SEARCH_QUERY_LENGTH
+from app.domain.input_limits import MAX_REVIEW_NOTE_LENGTH
 from app.graphql.dtos import (
     CertificationCreateDTO,
     CrewMemberCreateDTO,
     CrewMemberUpdateDTO,
-    DocumentCreateDTO,
     ProjectCreateDTO,
 )
 from app.graphql.mappers import (
@@ -78,20 +80,57 @@ from app.services.document_service import document_service
 from app.services.project import project_service
 from app.services.reports import report_service
 
+MAX_GRAPHQL_JSON_INPUT_LENGTH = 1_000_000
+
 
 def _parse_json_object(raw: str, *, field: str) -> dict:
     """Parse client JSON, mapping malformed input to BAD_USER_INPUT (not 500)."""
     from graphql import GraphQLError
 
+    if len(raw) > MAX_GRAPHQL_JSON_INPUT_LENGTH:
+        raise GraphQLError(
+            f"{field} is too large (max {MAX_GRAPHQL_JSON_INPUT_LENGTH} characters)",
+            extensions={"code": "BAD_USER_INPUT"},
+        )
+
+    def reject_non_standard_number(value: str) -> None:
+        raise ValueError(f"Non-standard JSON number: {value}")
+
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(raw, parse_constant=reject_non_standard_number)
     except Exception as exc:
         raise GraphQLError(
-            f"Invalid JSON for {field}: {exc}", extensions={"code": "BAD_USER_INPUT"}
+            f"Invalid JSON for {field}", extensions={"code": "BAD_USER_INPUT"}
         ) from exc
     if not isinstance(parsed, dict):
         raise GraphQLError(f"{field} must be a JSON object", extensions={"code": "BAD_USER_INPUT"})
     return parsed
+
+
+def _validate_review_note(note: str | None) -> None:
+    """Keep administrator review notes bounded before persistence."""
+    from graphql import GraphQLError
+
+    if note is not None and len(note) > MAX_REVIEW_NOTE_LENGTH:
+        raise GraphQLError(
+            f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)",
+            extensions={"code": "BAD_USER_INPUT"},
+        )
+
+
+def _validate_graphql_search_query(query: str) -> str:
+    """Normalize GraphQL search text and map invalid input to GraphQL errors."""
+    from graphql import GraphQLError
+
+    normalized = query.strip()
+    if not normalized:
+        raise GraphQLError("Search query must not be blank", extensions={"code": "BAD_USER_INPUT"})
+    if len(normalized) > MAX_SEARCH_QUERY_LENGTH:
+        raise GraphQLError(
+            f"Search query must be {MAX_SEARCH_QUERY_LENGTH} characters or fewer",
+            extensions={"code": "BAD_USER_INPUT"},
+        )
+    return normalized
 
 
 def _parse_date(value: str | None, *, field: str) -> date | None:
@@ -104,7 +143,7 @@ def _parse_date(value: str | None, *, field: str) -> date | None:
         return date.fromisoformat(value)
     except Exception as exc:
         raise GraphQLError(
-            f"Invalid date for {field}: {exc}", extensions={"code": "BAD_USER_INPUT"}
+            f"Invalid date for {field}", extensions={"code": "BAD_USER_INPUT"}
         ) from exc
 
 
@@ -114,6 +153,8 @@ def _dto_to_graphql_crew_member(dto: CrewMemberCreateDTO) -> CrewMember:
         id=str(uuid.uuid4()),
         full_name=dto.full_name,
         email=dto.email if hasattr(dto, "email") else None,
+        publication_status="draft",
+        availability_status="unavailable",
     )
 
 
@@ -130,7 +171,10 @@ def _model_to_graphql_crew_member(model: CrewMemberModel) -> CrewMember:
         email=model.email,
         phone=model.phone,
         role=model.role,
-        publication_status=model.publication_status,
+        # Unknown legacy publication state must not become published by
+        # projection. The database default is approved for valid new rows;
+        # null legacy data is treated as an unpublished draft here.
+        publication_status=model.publication_status or "draft",
         passport=PassportInfo(
             number=model.passport_number,
             expiry=str(model.passport_expiry) if model.passport_expiry else None,
@@ -152,7 +196,8 @@ def _model_to_graphql_crew_member(model: CrewMemberModel) -> CrewMember:
             coverage=model.insurance_coverage,
             expiry=str(model.insurance_expiry) if model.insurance_expiry else None,
         ),
-        availability_status=model.availability_status,
+        # Unknown availability must never be presented as mobilizable.
+        availability_status=model.availability_status or "unavailable",
         availability_date=str(model.availability_date) if model.availability_date else None,
         profile_completeness_score=model.profile_completeness_score,
         years_of_experience=round(model.experience_months / 12, 1)
@@ -187,10 +232,10 @@ def _model_to_graphql_certification(model: CertificationModel) -> Certification:
         issue_date=str(model.issue_date) if model.issue_date else None,
         expiry_date=str(model.expiry_date) if model.expiry_date else None,
         renewal_date=str(model.renewal_date) if model.renewal_date else None,
-        status=model.status,
+        status=model.status or "pending_verification",
         document_ref=model.document_ref,
         extracted_confidence=model.extracted_confidence,
-        verification_status=model.verification_status,
+        verification_status=model.verification_status or "unverified",
     )
 
 
@@ -207,6 +252,7 @@ def _model_to_graphql_work_history(model: WorkHistoryModel) -> WorkHistory:
         start_date=str(model.start_date) if model.start_date else None,
         end_date=str(model.end_date) if model.end_date else None,
         status=model.status,
+        document_ref=model.document_ref,
     )
 
 
@@ -214,11 +260,15 @@ def _model_to_graphql_document(model: DocumentModel) -> DocumentType:
     return DocumentType(
         id=model.id,
         file_name=model.file_name,
+        title=model.title,
         file_type=model.file_type,
         file_size=model.file_size,
         storage_type=model.storage_type,
         classification=model.classification,
-        extraction_status=model.extraction_status,
+        issue_date=str(model.issue_date) if model.issue_date else None,
+        expiry_date=str(model.expiry_date) if model.expiry_date else None,
+        notes=model.notes,
+        extraction_status=model.extraction_status or "pending",
         extracted_text=model.extracted_text,
         extracted_data=json.dumps(model.extracted_data) if model.extracted_data else None,
         extraction_confidence=json.dumps(model.extraction_confidence)
@@ -230,7 +280,13 @@ def _model_to_graphql_document(model: DocumentModel) -> DocumentType:
     )
 
 
-def _model_to_graphql_project(model: ProjectModel) -> Project:
+def _model_to_graphql_project(
+    model: ProjectModel, *, crew_assigned: list[str] | None = None
+) -> Project:
+    assigned = model.crew_assigned if crew_assigned is None else crew_assigned
+    crew_assigned = (
+        [item for item in assigned if isinstance(item, str)] if isinstance(assigned, list) else None
+    )
     return Project(
         id=model.id,
         client_name=model.client_name,
@@ -238,10 +294,13 @@ def _model_to_graphql_project(model: ProjectModel) -> Project:
         project_type=model.project_type,
         location=model.location,
         country=model.country,
+        water_depth=model.water_depth,
         start_date=str(model.start_date) if model.start_date else None,
         end_date=str(model.end_date) if model.end_date else None,
-        status=model.status,
+        status=model.status or "planning",
+        crew_assigned=crew_assigned,
         requirements=json.dumps(model.requirements) if model.requirements else None,
+        document_ref=model.document_ref,
     )
 
 
@@ -261,7 +320,9 @@ def _model_to_graphql_vessel(model: VesselModel) -> VesselType:
     )
 
 
-def _model_to_graphql_assignment(model: CampaignAssignmentModel) -> CampaignAssignmentType:
+def _model_to_graphql_assignment(
+    model: CampaignAssignmentModel, *, include_commercial: bool = True
+) -> CampaignAssignmentType:
     from sqlalchemy.inspection import inspect as sa_inspect
 
     state = sa_inspect(model)
@@ -303,8 +364,8 @@ def _model_to_graphql_assignment(model: CampaignAssignmentModel) -> CampaignAssi
         role_on_board=model.role_on_board,
         start_date=str(model.start_date),
         end_date=str(model.end_date),
-        status=model.status,
-        agreed_day_rate=model.agreed_day_rate,
+        status=model.status or "proposed",
+        agreed_day_rate=model.agreed_day_rate if include_commercial else None,
         notes=model.notes,
         created_at=str(model.created_at),
         updated_at=str(model.updated_at),
@@ -326,17 +387,22 @@ class Query:
             limit=min(max(limit, 1), 100),
             offset=max(offset, 0),
         )
+        is_admin = actor.role == "admin"
         return [
             CVReviewType(
                 id=review.id,
                 document_id=review.document_id,
                 crew_member_id=review.crew_member_id,
                 status=review.status,
-                proposed_data=json.dumps(review.proposed_data) if review.proposed_data else None,
-                approved_data=json.dumps(review.approved_data) if review.approved_data else None,
-                submitted_by=review.submitted_by,
-                reviewed_by=review.reviewed_by,
-                review_note=review.review_note,
+                proposed_data=(
+                    json.dumps(review.proposed_data) if is_admin and review.proposed_data else None
+                ),
+                approved_data=(
+                    json.dumps(review.approved_data) if is_admin and review.approved_data else None
+                ),
+                submitted_by=review.submitted_by if is_admin else None,
+                reviewed_by=review.reviewed_by if is_admin else None,
+                review_note=review.review_note if is_admin else None,
                 created_at=str(review.created_at),
                 reviewed_at=str(review.reviewed_at) if review.reviewed_at else None,
             )
@@ -352,18 +418,22 @@ class Query:
         if not user:
             return None
         tier = tier_for_role(user.role)
-        return scrub_crew_member(_model_to_graphql_crew_member(user), tier)
+        return scrub_crew_member(_model_to_graphql_crew_member(user), tier, include_role=True)
 
     @strawberry.field
     @require_auth
     async def crew_member(self, info: Info, id: str) -> Optional[CrewMember]:
         crew = await crew_service.get_crew_member(id)
         actor = info.context["current_user"]
+        if crew and not is_contractor_profile(crew) and actor.role != "admin" and crew.id != actor.id:
+            return None
         if (
             crew
             and crew.publication_status != "approved"
             and actor.role != "admin"
-            and crew.submitted_by != actor.id
+            and not (
+                crew.publication_status == "draft" and crew.submitted_by == actor.id
+            )
         ):
             return None
         if crew:
@@ -375,7 +445,11 @@ class Query:
             # For an approved profile T2 is fine; for another staff member's draft
             # the publication check above already returned None, so no leak.
             gql = _model_to_graphql_crew_member(crew)
-            return scrub_crew_member(gql, tier)
+            return scrub_crew_member(
+                gql,
+                tier,
+                include_role=actor.role == "admin" or crew.id == actor.id,
+            )
         return None
 
     @strawberry.field
@@ -391,6 +465,8 @@ class Query:
         # Enforce pagination limits to avoid abuse
         limit = min(max(limit, 1), 100)
         offset = max(offset, 0)
+        if search is not None:
+            search = _validate_graphql_search_query(search)
         crew_list = await crew_service.list_crew_members(
             availability=availability.value if availability else None,
             search=search,
@@ -401,19 +477,52 @@ class Query:
         await audit_service.log_profile_access(
             actor_id=actor.id, action="list_profiles", result_count=len(crew_list)
         )
-        tier = tier_for_role(actor.role)
-        return [scrub_crew_member(_model_to_graphql_crew_member(c), tier) for c in crew_list]
+        # Bulk roster responses are the cross-profile discovery surface. Keep
+        # them C1-only even for staff/admin; C2/C3 requires the explicit
+        # crewMember detail path, where the access decision is auditable and
+        # scoped to one profile.
+        tier: Tier = "T1"
+        return [
+            scrub_crew_member(
+                _model_to_graphql_crew_member(c),
+                tier,
+                include_role=False,
+            )
+            for c in crew_list
+        ]
+
+    @strawberry.field
+    @require_admin
+    async def staff_accounts(
+        self, info: Info, limit: int = 100, offset: int = 0
+    ) -> list[CrewMember]:
+        """List every account for role management, including unpublished profiles."""
+        models = await crew_service.list_staff_accounts(limit=limit, offset=offset)
+        return [
+            scrub_crew_member(_model_to_graphql_crew_member(model), "T3", include_role=True)
+            for model in models
+        ]
 
     @strawberry.field
     @require_auth
     async def search_crew(self, info: Info, query: str) -> list[CrewMember]:
+        query = _validate_graphql_search_query(query)
         crew_list = await crew_service.list_crew_members(search=query)
         actor = info.context["current_user"]
         await audit_service.log_profile_access(
             actor_id=actor.id, action="keyword_search", result_count=len(crew_list)
         )
-        tier = tier_for_role(actor.role)
-        return [scrub_crew_member(_model_to_graphql_crew_member(c), tier) for c in crew_list]
+        # Keyword search is also a bulk discovery surface. Do not let a forged
+        # selection set turn it into a cross-profile C2/C3 export.
+        tier: Tier = "T1"
+        return [
+            scrub_crew_member(
+                _model_to_graphql_crew_member(c),
+                tier,
+                include_role=False,
+            )
+            for c in crew_list
+        ]
 
     @strawberry.field
     @require_staff
@@ -427,10 +536,14 @@ class Query:
         days = min(max(days, 1), 365)
         limit = min(max(limit, 1), 100)
         offset = max(offset, 0)
-        certs = await certification_service.get_expiring_certifications(
-            days, limit=limit, offset=offset
-        )
         actor = info.context["current_user"]
+        certs = await certification_service.get_expiring_certifications(
+            days,
+            limit=limit,
+            offset=offset,
+            actor_id=actor.id,
+            actor_role=actor.role,
+        )
         tier = tier_for_role(actor.role)
         # Expiring certs carry cert_number/issuing_body (C2) — T2+ only.
         # Resolver is @require_staff so T1 never reaches here, but scrub still
@@ -446,7 +559,9 @@ class Query:
         if not await crew_service.can_access_profile(
             crew_id, actor_id=actor.id, actor_role=actor.role
         ):
-            raise ValueError("Crew member not found")
+            from graphql import GraphQLError
+
+            raise GraphQLError("Crew member not found", extensions={"code": "NOT_FOUND"})
         status = await crew_service.get_compliance_status(crew_id)
         return json.dumps(status)
 
@@ -464,6 +579,10 @@ class Query:
     async def document(self, info: Info, id: str) -> Optional[DocumentType]:
         doc = await document_service.get_document(id)
         actor = info.context["current_user"]
+        if doc and not doc.crew_member_id and actor.role != "admin":
+            # Dropbox orphan records have no publication owner and are an
+            # administrator-only recovery surface.
+            return None
         if (
             doc
             and doc.crew_member_id
@@ -514,13 +633,17 @@ class Query:
     async def query_crew(self, info: Info, query: str) -> CrewQueryResponse:
         from app.services.consultant_knowledge import consultant_knowledge_service
 
+        query = _validate_graphql_search_query(query)
+        actor = info.context["current_user"]
         factory = get_session_factory()
         async with factory() as session:
             search_result = await consultant_knowledge_service.search(
-                query, db_session=session, mode="auto"
+                query,
+                db_session=session,
+                mode="auto",
+                allow_compliance=actor.role in {"staff", "admin"},
             )
         result = search_result.raw or {}
-        actor = info.context["current_user"]
         await audit_service.log_profile_access(
             actor_id=actor.id,
             action="natural_search",
@@ -546,7 +669,15 @@ class Query:
             return None
         actor = info.context["current_user"]
         tier = tier_for_role(actor.role)
-        return scrub_project(_model_to_graphql_project(model), tier)
+        visible_assignments = await project_service.visible_crew_assignments(
+            [model], actor_id=actor.id, actor_role=actor.role
+        )
+        return scrub_project(
+            _model_to_graphql_project(
+                model, crew_assigned=visible_assignments.get(model.id, [])
+            ),
+            tier,
+        )
 
     @strawberry.field
     @require_auth
@@ -554,14 +685,31 @@ class Query:
         self,
         info: Info,
         status: Optional[ProjectStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[Project]:
-        models = await project_service.list_projects(status.value if status else None)
+        models = await project_service.list_projects(
+            status.value if status else None,
+            limit=min(max(limit, 1), 100),
+            offset=max(offset, 0),
+        )
         actor = info.context["current_user"]
         tier = tier_for_role(actor.role)
-        return [scrub_project(_model_to_graphql_project(m), tier) for m in models]
+        visible_assignments = await project_service.visible_crew_assignments(
+            models, actor_id=actor.id, actor_role=actor.role
+        )
+        return [
+            scrub_project(
+                _model_to_graphql_project(
+                    model, crew_assigned=visible_assignments.get(model.id, [])
+                ),
+                tier,
+            )
+            for model in models
+        ]
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def vessel_search(self, info: Info, name: str, limit: int = 20) -> VesselSearchResponse:
         """Search external AIS vessels via VesselAPI. Auth-gated, backend-owned key."""
         from app.services.vessel_api import (
@@ -598,7 +746,7 @@ class Query:
         )
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def vessel_position(
         self, info: Info, vessel_id: str, id_type: VesselIdType
     ) -> Optional[VesselPosition]:
@@ -626,10 +774,16 @@ class Query:
             from graphql import GraphQLError as _GQLE
 
             raise _GQLE(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        except Exception as exc:
+            from graphql import GraphQLError as _GQLE
+
+            raise _GQLE(
+                "Vessel position unavailable", extensions={"code": "UPSTREAM_ERROR"}
+            ) from exc
         return VesselPosition(**pos.__dict__)
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def vessels_in_radius(
         self,
         info: Info,
@@ -666,7 +820,7 @@ class Query:
         )
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def campaign_assignments(
         self,
         info: Info,
@@ -679,21 +833,32 @@ class Query:
     ) -> list[CampaignAssignmentType]:
         from app.services.assignment import assignment_service
 
+        actor = info.context["current_user"]
         status_val = status.value if status else None
         limit = min(max(limit, 1), 100)
         offset = max(offset, 0)
-        models = await assignment_service.list_assignments(
-            vessel_imo=vessel_imo,
-            project_id=project_id,
-            crew_member_id=crew_id,
-            status=status_val,
-            limit=limit,
-            offset=offset,
-        )
-        return [_model_to_graphql_assignment(m) for m in models]
+        try:
+            models = await assignment_service.list_assignments(
+                vessel_imo=vessel_imo,
+                project_id=project_id,
+                crew_member_id=crew_id,
+                status=status_val,
+                limit=limit,
+                offset=offset,
+                actor_id=actor.id,
+                actor_role=actor.role,
+            )
+        except ValueError as exc:
+            from graphql import GraphQLError
+
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        return [
+            _model_to_graphql_assignment(m, include_commercial=actor.role == "admin")
+            for m in models
+        ]
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def vessel_roster(
         self,
         info: Info,
@@ -703,27 +868,45 @@ class Query:
     ) -> list[CampaignAssignmentType]:
         from app.services.assignment import assignment_service
 
+        actor = info.context["current_user"]
         limit = min(max(limit, 1), 100)
         offset = max(offset, 0)
-        models = await assignment_service.list_assignments(
-            vessel_imo=imo, limit=limit, offset=offset
-        )
-        return [_model_to_graphql_assignment(m) for m in models]
+        try:
+            models = await assignment_service.list_assignments(
+                vessel_imo=imo,
+                limit=limit,
+                offset=offset,
+                actor_id=actor.id,
+                actor_role=actor.role,
+            )
+        except ValueError as exc:
+            from graphql import GraphQLError
+
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        return [
+            _model_to_graphql_assignment(m, include_commercial=actor.role == "admin")
+            for m in models
+        ]
 
     @strawberry.field
-    @require_auth
+    @require_staff
     async def vessel_record(
         self,
         info: Info,
         imo: str,
     ) -> Optional[VesselType]:
+        from graphql import GraphQLError
+
         from app.services.assignment import assignment_service
 
-        model = await assignment_service.get_vessel(imo)
+        try:
+            model = await assignment_service.get_vessel(imo)
+        except ValueError as exc:
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_vessel(model) if model else None
 
     @strawberry.field
-    @require_staff
+    @require_admin
     async def evaluate_assignment_compliance(
         self,
         info: Info,
@@ -742,7 +925,7 @@ class Query:
             end = date.fromisoformat(end_date)
         except Exception as exc:
             raise GraphQLError(
-                f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}
+                "Invalid date format", extensions={"code": "BAD_USER_INPUT"}
             ) from exc
 
         try:
@@ -752,6 +935,10 @@ class Query:
                 end_date=end,
             )
         except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Crew member not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
             raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
 
         checks = [
@@ -796,10 +983,19 @@ class Query:
         filter_dict = _parse_json_object(filters, field="filters") if filters else {}
 
         factory = get_session_factory()
-        async with factory() as session:
-            data = await report_service.build_report_data(
-                report_type.value, session, filters=filter_dict
-            )
+        try:
+            async with factory() as session:
+                data = await report_service.build_report_data(
+                    report_type.value,
+                    session,
+                    filters=filter_dict,
+                    actor_id=actor.id,
+                    actor_role=actor.role,
+                )
+        except ValueError as exc:
+            from graphql import GraphQLError
+
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
 
         # Optionally enrich with LLM via report_service; fall back to deterministic summary
         try:
@@ -839,10 +1035,13 @@ class Mutation:
 
         _s = get_settings()
 
-        # Login-specific rate limiting: 5 attempts / 5 min per (ip, email_lower)
+        if len(email) > MAX_LOGIN_EMAIL_LENGTH or len(password) > MAX_LOGIN_PASSWORD_LENGTH:
+            return AuthPayload(success=False, message="Invalid email or password")
+
+        # Login-specific rate limiting: 5 attempts / 5 min per (ip, canonical email).
         request = info.context.get("request")
         client_ip = request.client.host if request and request.client else "unknown"
-        login_key = f"login:{client_ip}:{email.lower()}"
+        login_key = f"login:{client_ip}:{email.strip().lower()}"
         try:
             if await cache_service.is_redis_available():
                 login_count = await cache_service.increment_rate_limit(login_key, 300)
@@ -862,7 +1061,7 @@ class Mutation:
             raise
         except Exception as e:
             logger = logging.getLogger(__name__)
-            logger.warning(f"Login rate limit check failed: {e}")
+            logger.warning("Login rate limit check failed: %s", type(e).__name__)
 
         result = await auth_service.authenticate(email, password)
         if result:
@@ -882,18 +1081,22 @@ class Mutation:
                             max_age=_s.SESSION_MAX_AGE,
                             path="/",
                         )
-            except Exception:
+            except Exception as exc:
                 logger = logging.getLogger(__name__)
-                logger.debug("Could not set session cookie on login response", exc_info=True)
+                logger.debug(
+                    "Could not set session cookie on login response (%s)",
+                    type(exc).__name__,
+                )
             return AuthPayload(
                 success=True,
                 message="Login successful",
-                token=token,
                 user=CrewMember(
                     id=result["user"]["id"],
                     full_name=result["user"]["full_name"],
                     email=result["user"]["email"],
                     role=result["user"].get("role", "user"),
+                    publication_status="draft",
+                    availability_status="unavailable",
                 ),
             )
         return AuthPayload(success=False, message="Invalid email or password")
@@ -907,6 +1110,10 @@ class Mutation:
 
             _s = _gs()
             response.delete_cookie(key=_s.SESSION_COOKIE_NAME, path="/")
+            # Authentication still accepts the legacy cookie name for
+            # backwards compatibility; logout must invalidate both names or
+            # a legacy-session browser remains authenticated after logout.
+            response.delete_cookie(key="session", path="/")
         # Revoke the session token server-side (jti blocklist)
         from app.auth.decorators import _extract_token
 
@@ -915,7 +1122,16 @@ class Mutation:
         if token:
             from app.auth.session import revoke_session_token
 
-            await revoke_session_token(token)
+            if not await revoke_session_token(token):
+                from graphql import GraphQLError
+
+                logging.getLogger(__name__).error(
+                    "Session revocation failed during logout; cookie was cleared"
+                )
+                raise GraphQLError(
+                    "Session revocation is temporarily unavailable; please try again",
+                    extensions={"code": "SERVICE_UNAVAILABLE"},
+                )
         return True
 
     @strawberry.mutation
@@ -935,21 +1151,27 @@ class Mutation:
         cv_submission: bool = False,
         confirm_distinct: bool = False,
     ) -> CrewMember:
-        dto = CrewMemberCreateDTO(
-            full_name=full_name,
-            email=email,
-            phone=phone,
-            nationality=nationality,
-            country_of_residence=country_of_residence,
-            date_of_birth=_parse_date(date_of_birth, field="date_of_birth"),
-            gender=gender,
-            languages=languages,
-            flying_point=flying_point,
-        )
+        from graphql import GraphQLError
+        from pydantic import ValidationError
+
+        try:
+            dto = CrewMemberCreateDTO(
+                full_name=full_name,
+                email=email,
+                phone=phone,
+                nationality=nationality,
+                country_of_residence=country_of_residence,
+                date_of_birth=_parse_date(date_of_birth, field="date_of_birth"),
+                gender=gender,
+                languages=languages,
+                flying_point=flying_point,
+            )
+        except ValidationError as exc:
+            raise GraphQLError(
+                "Invalid crew member input", extensions={"code": "BAD_USER_INPUT"}
+            ) from exc
         actor = info.context["current_user"]
         if actor.role == "staff" and not cv_submission:
-            from graphql import GraphQLError
-
             raise GraphQLError(
                 "Staff-created specialists require a CV submission",
                 extensions={"code": "CV_REQUIRED"},
@@ -968,7 +1190,14 @@ class Mutation:
                 str(exc),
                 extensions={"code": "POSSIBLE_DUPLICATE", "candidateId": exc.candidate_id},
             ) from exc
-        return _model_to_graphql_crew_member(crew)
+        except ValueError as exc:
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
+        tier = tier_for_role(actor.role)
+        return scrub_crew_member(
+            _model_to_graphql_crew_member(crew),
+            tier,
+            include_role=actor.role == "admin",
+        )
 
     @strawberry.mutation
     @require_admin
@@ -979,24 +1208,65 @@ class Mutation:
         approved_data: str,
         note: Optional[str] = None,
     ) -> bool:
+        _validate_review_note(note)
         parsed = _parse_json_object(approved_data, field="approved_data")
         actor = info.context["current_user"]
-        await cv_review_service.approve(
-            review_id, approved_data=parsed, reviewer_id=actor.id, note=note
-        )
+        from graphql import GraphQLError
+
+        try:
+            await cv_review_service.approve(
+                review_id, approved_data=parsed, reviewer_id=actor.id, note=note
+            )
+        except ValueError as exc:
+            message = str(exc)
+            lowered = message.lower()
+            if "not found" in lowered:
+                raise GraphQLError("CV review not found", extensions={"code": "NOT_FOUND"}) from exc
+            if "not awaiting" in lowered or "no longer awaiting" in lowered:
+                raise GraphQLError(
+                    "CV review is no longer available", extensions={"code": "CONFLICT"}
+                ) from exc
+            raise GraphQLError(message, extensions={"code": "BAD_USER_INPUT"}) from exc
         return True
 
     @strawberry.mutation
     @require_admin
     async def reject_cv_review(self, info: Info, review_id: str, note: str) -> bool:
+        _validate_review_note(note)
         actor = info.context["current_user"]
-        await cv_review_service.reject(review_id, reviewer_id=actor.id, note=note)
+        from graphql import GraphQLError
+
+        try:
+            await cv_review_service.reject(review_id, reviewer_id=actor.id, note=note)
+        except ValueError as exc:
+            message = str(exc)
+            lowered = message.lower()
+            if "not found" in lowered:
+                raise GraphQLError("CV review not found", extensions={"code": "NOT_FOUND"}) from exc
+            if "not awaiting" in lowered or "no longer awaiting" in lowered:
+                raise GraphQLError(
+                    "CV review is no longer available", extensions={"code": "CONFLICT"}
+                ) from exc
+            raise GraphQLError(message, extensions={"code": "BAD_USER_INPUT"}) from exc
         return True
 
     @strawberry.mutation
     @require_admin
     async def set_staff_role(self, info: Info, user_id: str, enabled: bool) -> CrewMember:
-        user = await crew_service.set_staff_role(user_id, enabled=enabled)
+        from graphql import GraphQLError
+
+        try:
+            user = await crew_service.set_staff_role(user_id, enabled=enabled)
+        except ValueError as exc:
+            message = str(exc)
+            if message == "User not found":
+                raise GraphQLError("User not found", extensions={"code": "NOT_FOUND"}) from exc
+            if "administrator" in message.lower():
+                raise GraphQLError(
+                    "Administrator roles cannot be changed here",
+                    extensions={"code": "FORBIDDEN"},
+                ) from exc
+            raise GraphQLError(message, extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_crew_member(user)
 
     @strawberry.mutation
@@ -1016,19 +1286,35 @@ class Mutation:
         flying_point: Optional[str] = None,
         availability_status: Optional[AvailabilityStatus] = None,
     ) -> CrewMember:
-        dto = CrewMemberUpdateDTO(
-            full_name=full_name,
-            email=email,
-            phone=phone,
-            nationality=nationality,
-            country_of_residence=country_of_residence,
-            date_of_birth=_parse_date(date_of_birth, field="date_of_birth"),
-            gender=gender,
-            languages=languages,
-            flying_point=flying_point,
-            availability_status=availability_status.value if availability_status else None,
-        )
-        crew = await crew_service.update_crew_member(id, dto.model_dump(exclude_none=True))
+        from graphql import GraphQLError
+        from pydantic import ValidationError
+
+        try:
+            dto = CrewMemberUpdateDTO(
+                full_name=full_name,
+                email=email,
+                phone=phone,
+                nationality=nationality,
+                country_of_residence=country_of_residence,
+                date_of_birth=_parse_date(date_of_birth, field="date_of_birth"),
+                gender=gender,
+                languages=languages,
+                flying_point=flying_point,
+                availability_status=availability_status.value if availability_status else None,
+            )
+            crew = await crew_service.update_crew_member(
+                id, dto.model_dump(exclude_none=True)
+            )
+        except ValidationError as exc:
+            raise GraphQLError(
+                "Invalid crew member input", extensions={"code": "BAD_USER_INPUT"}
+            ) from exc
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Crew member not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_crew_member(crew)
 
     @strawberry.mutation
@@ -1040,9 +1326,23 @@ class Mutation:
         database metadata so a failed remote deletion leaves the member and
         their documents recoverable.
         """
+        from graphql import GraphQLError
+
         current_user = info.context.get("current_user")
         requesting_user_id = current_user.id if current_user else None
-        return await crew_service.delete_crew_member(id, requesting_user_id)
+        try:
+            return await crew_service.delete_crew_member(id, requesting_user_id)
+        except ValueError as exc:
+            if id == requesting_user_id:
+                raise GraphQLError(
+                    "You cannot delete your own administrator account",
+                    extensions={"code": "FORBIDDEN"},
+                ) from exc
+            # Cleanup failures may contain provider paths or filenames. Keep
+            # those details in the service logs, not in the GraphQL payload.
+            raise GraphQLError(
+                "Crew member could not be deleted", extensions={"code": "UPSTREAM_ERROR"}
+            ) from exc
 
     @strawberry.mutation
     @require_admin
@@ -1055,34 +1355,15 @@ class Mutation:
         file_size: int,
         classification: Optional[DocumentClassification] = None,
     ) -> DocumentType:
-        from app.config import get_settings
-        from app.services.upload import safe_path_component
+        # GraphQL carries metadata only; it cannot safely persist the binary
+        # before creating the document row. Use the multipart REST endpoint,
+        # which validates and stores the file before enqueueing extraction.
+        from graphql import GraphQLError
 
-        _settings = get_settings()
-        safe_crew_id = safe_path_component(crew_id, "crew_id")
-        doc_id = str(uuid.uuid4())
-        storage_path = (
-            f"{_settings.DOCUMENT_STORAGE_PATH}/{safe_crew_id}/{doc_id}_{Path(file_name).name}"
+        raise GraphQLError(
+            "uploadDocument is retired. Upload the document binary to /api/documents/upload.",
+            extensions={"code": "BAD_USER_INPUT"},
         )
-
-        dto = DocumentCreateDTO(
-            crew_member_id=safe_crew_id,
-            file_name=file_name,
-            file_type=file_type,
-            file_size=file_size,
-            storage_path=storage_path,
-            classification=classification.value if classification else None,
-        )
-
-        doc = await document_service.create_document(
-            crew_id=safe_crew_id,
-            file_name=dto.file_name,
-            file_type=dto.file_type,
-            file_size=dto.file_size,
-            storage_path=dto.storage_path,
-            classification=dto.classification,
-        )
-        return _model_to_graphql_document(doc)
 
     @strawberry.mutation
     @require_admin
@@ -1092,17 +1373,37 @@ class Mutation:
         document_id: str,
         data: str,
     ) -> DocumentType:
-        confirmed = await document_service.confirm_extraction(
-            document_id, _parse_json_object(data, field="data")
-        )
+        from graphql import GraphQLError
+
+        try:
+            confirmed = await document_service.confirm_extraction(
+                document_id, _parse_json_object(data, field="data")
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if "not found" in message.lower():
+                raise GraphQLError("Document not found", extensions={"code": "NOT_FOUND"}) from exc
+            if "cannot be overwritten" in message.lower() or "currently in progress" in message.lower():
+                raise GraphQLError(
+                    "Document is no longer available for confirmation",
+                    extensions={"code": "CONFLICT"},
+                ) from exc
+            raise GraphQLError(message, extensions={"code": "BAD_USER_INPUT"}) from exc
         if not confirmed:
-            raise ValueError(f"Document {document_id} not found")
+            raise GraphQLError("Document not found", extensions={"code": "NOT_FOUND"})
         return _model_to_graphql_document(confirmed)
 
     @strawberry.mutation
     @require_admin
     async def reprocess_document(self, info: Info, document_id: str) -> DocumentType:
-        doc = await document_service.reprocess_document(document_id)
+        from graphql import GraphQLError
+
+        try:
+            doc = await document_service.reprocess_document(document_id)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError("Document not found", extensions={"code": "NOT_FOUND"}) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_document(doc)
 
     @strawberry.mutation
@@ -1113,9 +1414,18 @@ class Mutation:
         document_id: str,
         crew_id: str,
     ) -> DocumentType:
-        doc = await document_service.link_to_crew_member(document_id, crew_id)
+        from graphql import GraphQLError
+
+        try:
+            doc = await document_service.link_to_crew_member(document_id, crew_id)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Document or crew member not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         if not doc:
-            raise ValueError(f"Document {document_id} not found")
+            raise GraphQLError("Document not found", extensions={"code": "NOT_FOUND"})
         return _model_to_graphql_document(doc)
 
     @strawberry.mutation
@@ -1130,22 +1440,36 @@ class Mutation:
         issue_date: Optional[str] = None,
         expiry_date: Optional[str] = None,
     ) -> Certification:
-        dto = CertificationCreateDTO(
-            crew_member_id=crew_id,
-            cert_type=cert_type.value,
-            cert_number=cert_number,
-            issuing_body=issuing_body,
-            issue_date=_parse_date(issue_date, field="issue_date"),
-            expiry_date=_parse_date(expiry_date, field="expiry_date"),
-        )
-        cert = await certification_service.add_certification(
-            crew_id=dto.crew_member_id,
-            cert_type=dto.cert_type,
-            cert_number=dto.cert_number,
-            issuing_body=dto.issuing_body,
-            issue_date=dto.issue_date,
-            expiry_date=dto.expiry_date,
-        )
+        from graphql import GraphQLError
+        from pydantic import ValidationError
+
+        try:
+            dto = CertificationCreateDTO(
+                crew_member_id=crew_id,
+                cert_type=cert_type.value,
+                cert_number=cert_number,
+                issuing_body=issuing_body,
+                issue_date=_parse_date(issue_date, field="issue_date"),
+                expiry_date=_parse_date(expiry_date, field="expiry_date"),
+            )
+            cert = await certification_service.add_certification(
+                crew_id=dto.crew_member_id,
+                cert_type=dto.cert_type,
+                cert_number=dto.cert_number,
+                issuing_body=dto.issuing_body,
+                issue_date=dto.issue_date,
+                expiry_date=dto.expiry_date,
+            )
+        except ValidationError as exc:
+            raise GraphQLError(
+                "Invalid certification input", extensions={"code": "BAD_USER_INPUT"}
+            ) from exc
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Crew member not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
@@ -1156,9 +1480,18 @@ class Mutation:
         id: str,
         status: Optional[CertStatus] = None,
     ) -> Certification:
-        cert = await certification_service.update_certification(
-            id, status.value if status else None
-        )
+        from graphql import GraphQLError
+
+        try:
+            cert = await certification_service.update_certification(
+                id, status.value if status else None
+            )
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Certification not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
@@ -1169,7 +1502,16 @@ class Mutation:
         id: str,
         status: VerificationStatus,
     ) -> Certification:
-        cert = await certification_service.verify_certification(id, status.value)
+        from graphql import GraphQLError
+
+        try:
+            cert = await certification_service.verify_certification(id, status.value)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Certification not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_certification(cert)
 
     @strawberry.mutation
@@ -1181,12 +1523,20 @@ class Mutation:
         project_name: str,
         project_type: ProjectType,
     ) -> Project:
-        dto = ProjectCreateDTO(
-            client_name=client_name,
-            project_name=project_name,
-            project_type=project_type.value,
-        )
-        project = await project_service.create_project(dto_to_project_model(dto))
+        from graphql import GraphQLError
+        from pydantic import ValidationError
+
+        try:
+            dto = ProjectCreateDTO(
+                client_name=client_name,
+                project_name=project_name,
+                project_type=project_type.value,
+            )
+            project = await project_service.create_project(dto_to_project_model(dto))
+        except (ValidationError, ValueError) as exc:
+            raise GraphQLError(
+                "Invalid project input", extensions={"code": "BAD_USER_INPUT"}
+            ) from exc
         return _model_to_graphql_project(project)
 
     @strawberry.mutation
@@ -1197,7 +1547,14 @@ class Mutation:
         id: str,
         status: Optional[ProjectStatus] = None,
     ) -> Project:
-        project = await project_service.update_project(id, status.value if status else None)
+        from graphql import GraphQLError
+
+        try:
+            project = await project_service.update_project(id, status.value if status else None)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError("Project not found", extensions={"code": "NOT_FOUND"}) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_project(project)
 
     @strawberry.mutation
@@ -1208,7 +1565,16 @@ class Mutation:
         project_id: str,
         crew_ids: list[str],
     ) -> Project:
-        project = await project_service.assign_crew(project_id, crew_ids)
+        from graphql import GraphQLError
+
+        try:
+            project = await project_service.assign_crew(project_id, crew_ids)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
+                raise GraphQLError(
+                    "Project or crew member not found", extensions={"code": "NOT_FOUND"}
+                ) from exc
+            raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         return _model_to_graphql_project(project)
 
     @strawberry.mutation
@@ -1247,13 +1613,27 @@ class Mutation:
         from graphql import GraphQLError
 
         from app.services.assignment import assignment_service
+        from app.services.crew import crew_service
+
+        actor = info.context["current_user"]
+        if actor.role != "admin" and input.agreed_day_rate is not None:
+            raise GraphQLError(
+                "Only administrators may set an agreed day rate",
+                extensions={"code": "FORBIDDEN"},
+            )
+        if not await crew_service.can_access_profile(
+            input.crew_member_id,
+            actor_id=actor.id,
+            actor_role=actor.role,
+        ):
+            raise GraphQLError("Crew member not found", extensions={"code": "FORBIDDEN"})
 
         try:
             start = date.fromisoformat(input.start_date)
             end = date.fromisoformat(input.end_date)
         except Exception as exc:
             raise GraphQLError(
-                f"Invalid date format: {exc}", extensions={"code": "BAD_USER_INPUT"}
+                "Invalid date format", extensions={"code": "BAD_USER_INPUT"}
             ) from exc
 
         status_val = input.status.value if input.status else "proposed"
@@ -1270,11 +1650,15 @@ class Mutation:
                 agreed_day_rate=input.agreed_day_rate,
                 notes=input.notes,
                 status=status_val,
+                actor_id=actor.id,
+                actor_role=actor.role,
             )
+        except PermissionError as exc:
+            raise GraphQLError("Crew member not found", extensions={"code": "FORBIDDEN"}) from exc
         except ValueError as exc:
             raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
 
-        return _model_to_graphql_assignment(model)
+        return _model_to_graphql_assignment(model, include_commercial=actor.role == "admin")
 
     @strawberry.mutation
     @require_staff
@@ -1287,10 +1671,31 @@ class Mutation:
         from graphql import GraphQLError
 
         from app.services.assignment import assignment_service
+        from app.services.crew import crew_service
+
+        actor = info.context["current_user"]
+        assignment = await assignment_service.get_assignment(assignment_id)
+        if assignment is None:
+            raise GraphQLError("Campaign assignment not found", extensions={"code": "NOT_FOUND"})
+        if not await crew_service.can_access_profile(
+            assignment.crew_member_id,
+            actor_id=actor.id,
+            actor_role=actor.role,
+        ):
+            raise GraphQLError("Campaign assignment not found", extensions={"code": "FORBIDDEN"})
 
         try:
-            model = await assignment_service.update_status(assignment_id, status.value)
+            model = await assignment_service.update_status(
+                assignment_id,
+                status.value,
+                actor_id=actor.id,
+                actor_role=actor.role,
+            )
+        except PermissionError as exc:
+            raise GraphQLError(
+                "Campaign assignment not found", extensions={"code": "FORBIDDEN"}
+            ) from exc
         except ValueError as exc:
             raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
 
-        return _model_to_graphql_assignment(model)
+        return _model_to_graphql_assignment(model, include_commercial=actor.role == "admin")

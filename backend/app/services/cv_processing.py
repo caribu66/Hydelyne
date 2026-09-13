@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import date, datetime
 from typing import Any
@@ -13,9 +14,63 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_session_factory
 from app.domain.certifications import CERT_ALIASES
-from app.models import Certification, CrewMember, WorkHistory
+from app.domain.crew_accounts import is_contractor_profile
+from app.models import Certification, CrewMember, Document, WorkHistory
 
 logger = logging.getLogger(__name__)
+
+CV_SHORT_TEXT_MAX_LENGTH = 255
+CV_RESPONSIBILITIES_MAX_LENGTH = 20_000
+CV_LIST_MAX_ITEMS = 100
+CV_REVIEW_TEXT_MAX_LENGTH = 20_000
+CV_REVIEW_OBJECT_MAX_FIELDS = 100
+
+
+def _bounded_cv_text(value: object, max_length: int = CV_SHORT_TEXT_MAX_LENGTH) -> str | None:
+    """Return bounded scalar CV text suitable for fixed-width persistence."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized or len(normalized) > max_length:
+        return None
+    return normalized
+
+
+def _bounded_cv_values(value: object) -> list[str]:
+    """Return bounded scalar values from a model-produced list."""
+    if not isinstance(value, list):
+        return []
+    values: list[str] = []
+    for item in value:
+        bounded = _bounded_cv_text(item)
+        if bounded and bounded not in values:
+            values.append(bounded)
+        if len(values) >= CV_LIST_MAX_ITEMS:
+            break
+    return values
+
+
+def _bound_cv_review_payload(value: object, depth: int = 0) -> object:
+    """Bound deterministic parser output before it enters the review queue."""
+    if depth > 3:
+        return None
+    if isinstance(value, str):
+        return value[:CV_REVIEW_TEXT_MAX_LENGTH]
+    if isinstance(value, list):
+        return [_bound_cv_review_payload(item, depth + 1) for item in value[:CV_LIST_MAX_ITEMS]]
+    if isinstance(value, dict):
+        bounded: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= CV_REVIEW_OBJECT_MAX_FIELDS:
+                break
+            if isinstance(key, str):
+                bounded[key] = _bound_cv_review_payload(item, depth + 1)
+        return bounded
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return None
 
 
 class CVProcessingService:
@@ -33,6 +88,8 @@ class CVProcessingService:
 
         Returns summary of what was created/updated.
         """
+        if not isinstance(extracted_data, dict):
+            raise ValueError("Extracted CV data must be a JSON object")
         factory = get_session_factory()
 
         async with factory() as session:
@@ -43,6 +100,7 @@ class CVProcessingService:
                     selectinload(CrewMember.work_history),
                 )
                 .where(CrewMember.id == crew_member_id)
+                .with_for_update()
             )
             crew_member = crew.scalar_one_or_none()
 
@@ -77,14 +135,23 @@ class CVProcessingService:
         replace_existing: bool,
     ) -> dict[str, Any]:
         """Apply reviewed fields without committing the caller's transaction."""
+        if not isinstance(extracted_data, dict):
+            raise ValueError("Extracted CV data must be a JSON object")
+        if not is_contractor_profile(crew_member):
+            raise ValueError("Crew member not found")
         result_summary: dict[str, Any] = {
             "certifications_created": 0,
             "work_history_created": 0,
             "fields_updated": [],
         }
         if replace_existing:
-            self._clear_profile(crew_member)
-        self._update_crew_fields(crew_member, extracted_data, result_summary)
+            await self._clear_profile(session, crew_member)
+        self._update_crew_fields(
+            crew_member,
+            extracted_data,
+            result_summary,
+            replace_existing=replace_existing,
+        )
         await self._create_certifications(
             session, crew_member, extracted_data, document_id, result_summary
         )
@@ -96,16 +163,17 @@ class CVProcessingService:
         return result_summary
 
     @staticmethod
-    def _clear_profile(crew_member: CrewMember) -> None:
+    async def _clear_profile(session: AsyncSession, crew_member: CrewMember) -> None:
         """Clear canonical CV fields inside the import transaction.
 
         This is used only after explicit administrator approval. Keeping the
         clear and replacement in one transaction means an import error rolls
         the complete previous profile back instead of exposing partial data.
+
+        Preserve manually entered and independently verified evidence. Only
+        rows whose source document is itself a CV belong to this replacement.
         """
         for field in (
-            "email",
-            "phone",
             "nationality",
             "country_of_residence",
             "date_of_birth",
@@ -122,59 +190,111 @@ class CVProcessingService:
             "experience_months",
         ):
             setattr(crew_member, field, None)
-        crew_member.full_name = "Pending CV import"
-        crew_member.certifications.clear()
-        crew_member.work_history.clear()
+        referenced_document_ids = {
+            row.document_ref
+            for row in [*crew_member.certifications, *crew_member.work_history]
+            if row.document_ref
+        }
+        if not referenced_document_ids:
+            return
+
+        cv_document_ids = set(
+            (
+                await session.execute(
+                    select(Document.id).where(
+                        Document.id.in_(referenced_document_ids),
+                        Document.classification == "cv",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not cv_document_ids:
+            return
+
+        detached_certification_ids: list[str] = []
+        detached_expiry_dates = []
+        for certification in list(crew_member.certifications):
+            if certification.document_ref in cv_document_ids:
+                detached_certification_ids.append(certification.id)
+                detached_expiry_dates.append(certification.expiry_date)
+                crew_member.certifications.remove(certification)
+        for work_history in list(crew_member.work_history):
+            if work_history.document_ref in cv_document_ids:
+                crew_member.work_history.remove(work_history)
+
+        if detached_certification_ids:
+            from app.services.certification_projection import (
+                reconcile_medical_profile_after_detachment,
+            )
+
+            await reconcile_medical_profile_after_detachment(
+                session,
+                crew_id=crew_member.id,
+                detached_certification_ids=detached_certification_ids,
+                detached_expiry_dates=detached_expiry_dates,
+            )
 
     def _update_crew_fields(
         self,
         crew_member: CrewMember,
         data: dict[str, Any],
         summary: dict[str, Any],
+        *,
+        replace_existing: bool = False,
     ) -> None:
         """Update crew member basic fields from extracted data."""
         # A CV-only import creates a deliberately recognisable placeholder.
-        # Replace it only with a name actually extracted from the CV; never
-        # overwrite a name an operator already supplied.
-        if data.get("full_name") and crew_member.full_name.strip().lower() == "pending cv import":
-            crew_member.full_name = data["full_name"]
+        # Replacement approval may explicitly change an existing name, but an
+        # omitted name must preserve the operator's current value.
+        full_name = _bounded_cv_text(data.get("full_name"))
+        if full_name and (
+            replace_existing or crew_member.full_name.strip().lower() == "pending cv import"
+        ):
+            crew_member.full_name = full_name
             summary["fields_updated"].append("full_name")
 
-        if data.get("email") and not crew_member.email:
-            crew_member.email = data["email"]
+        email = _bounded_cv_text(data.get("email"))
+        if email and not crew_member.email:
+            crew_member.email = email
             summary["fields_updated"].append("email")
 
-        if data.get("phone") and not crew_member.phone:
-            crew_member.phone = data["phone"]
+        phone = _bounded_cv_text(data.get("phone"), 50)
+        if phone and not crew_member.phone:
+            crew_member.phone = phone
             summary["fields_updated"].append("phone")
 
-        if data.get("nationality") and not crew_member.nationality:
-            crew_member.nationality = data["nationality"]
+        nationality = _bounded_cv_text(data.get("nationality"), 100)
+        if nationality and not crew_member.nationality:
+            crew_member.nationality = nationality
             summary["fields_updated"].append("nationality")
 
-        if data.get("country_of_residence") and not crew_member.country_of_residence:
-            crew_member.country_of_residence = data["country_of_residence"]
+        country_of_residence = _bounded_cv_text(data.get("country_of_residence"), 100)
+        if country_of_residence and not crew_member.country_of_residence:
+            crew_member.country_of_residence = country_of_residence
             summary["fields_updated"].append("country_of_residence")
 
-        if data.get("gender") and not crew_member.gender:
-            crew_member.gender = data["gender"]
+        gender = _bounded_cv_text(data.get("gender"), 50)
+        if gender and not crew_member.gender:
+            crew_member.gender = gender
             summary["fields_updated"].append("gender")
 
-        if data.get("flying_point") and not crew_member.flying_point:
-            crew_member.flying_point = data["flying_point"]
+        flying_point = _bounded_cv_text(data.get("flying_point"))
+        if flying_point and not crew_member.flying_point:
+            crew_member.flying_point = flying_point
             summary["fields_updated"].append("flying_point")
 
         languages = data.get("languages")
         if languages and not crew_member.languages:
             if isinstance(languages, list):
-                crew_member.languages = [
-                    str(item).strip() for item in languages if str(item).strip()
-                ]
+                normalized_languages = _bounded_cv_values(languages)
             elif isinstance(languages, str):
-                crew_member.languages = [
-                    item.strip() for item in re.split(r",|;", languages) if item.strip()
-                ]
-            if crew_member.languages:
+                normalized_languages = _bounded_cv_values(re.split(r",|;", languages))
+            else:
+                normalized_languages = []
+            if normalized_languages:
+                crew_member.languages = normalized_languages
                 summary["fields_updated"].append("languages")
 
         if data.get("date_of_birth") and not crew_member.date_of_birth:
@@ -183,8 +303,9 @@ class CVProcessingService:
                 crew_member.date_of_birth = parsed_dob
                 summary["fields_updated"].append("date_of_birth")
 
-        if data.get("address") and not crew_member.address:
-            crew_member.address = data["address"]
+        address = _bounded_cv_text(data.get("address"), 20_000)
+        if address and not crew_member.address:
+            crew_member.address = address
             summary["fields_updated"].append("address")
 
         extracted_tags = self._cv_tags(data)
@@ -200,7 +321,7 @@ class CVProcessingService:
             crew_member.education = education
             summary["fields_updated"].append("education")
 
-        professional_summary = data.get("professional_summary")
+        professional_summary = _bounded_cv_text(data.get("professional_summary"), 20_000)
         if professional_summary and not crew_member.professional_summary:
             crew_member.professional_summary = professional_summary
             summary["fields_updated"].append("professional_summary")
@@ -251,9 +372,11 @@ class CVProcessingService:
         """Return stable, display-safe skills from the structured CV result."""
         values: list[str] = []
         for key in ("expertise", "skills", "specializations", "certifications"):
-            for value in data.get(key) or []:
-                if isinstance(value, str) and value.strip():
-                    values.append(value.strip())
+            for value in _bounded_cv_values(data.get(key)):
+                if value not in values:
+                    values.append(value)
+                if len(values) >= CV_LIST_MAX_ITEMS:
+                    return values
         return list(dict.fromkeys(values))
 
     @staticmethod
@@ -302,27 +425,24 @@ class CVProcessingService:
             if not isinstance(work, dict):
                 continue
             for field in ("country", "location"):
-                value = work.get(field)
-                if isinstance(value, str) and value.strip():
-                    locations.append(value.strip())
+                value = _bounded_cv_text(work.get(field))
+                if value and value not in locations:
+                    locations.append(value)
         return list(dict.fromkeys(locations))
 
     @staticmethod
     def _systems_experience(data: dict[str, Any]) -> list[str]:
         """Collect explicit software/equipment/system names from a CV."""
-        values = [
-            value.strip()
-            for value in (data.get("systems") or [])
-            if isinstance(value, str) and value.strip()
-        ]
+        values = _bounded_cv_values(data.get("systems"))
         pattern = re.compile(
             r"\b(PAMGuard|ADD(?:\s+Lofitech)?|QGIS|Microsoft Office(?: Suite)?)\b", re.I
         )
-        for value in data.get("skills") or []:
-            if isinstance(value, str):
-                match = pattern.search(value)
-                if match:
-                    values.append(match.group(1).strip())
+        for value in _bounded_cv_values(data.get("skills")):
+            match = pattern.search(value)
+            if match:
+                extracted = _bounded_cv_text(match.group(1))
+                if extracted:
+                    values.append(extracted)
         return list(dict.fromkeys(values))
 
     @staticmethod
@@ -332,7 +452,9 @@ class CVProcessingService:
         if isinstance(qualifications, list):
             for item in qualifications:
                 if isinstance(item, str) and item.strip():
-                    values.append(item.strip())
+                    bounded = _bounded_cv_text(item)
+                    if bounded:
+                        values.append(bounded)
                 elif isinstance(item, dict):
                     parts = [
                         str(item.get(key)).strip()
@@ -340,10 +462,13 @@ class CVProcessingService:
                         if item.get(key)
                     ]
                     if parts:
-                        values.append(" — ".join(parts))
-        for value in data.get("training_qualifications") or data.get("certifications") or []:
-            if isinstance(value, str) and value.strip():
-                values.append(value.strip())
+                        bounded = _bounded_cv_text(" — ".join(parts))
+                        if bounded:
+                            values.append(bounded)
+        for value in _bounded_cv_values(
+            data.get("training_qualifications") or data.get("certifications")
+        ):
+            values.append(value)
         return list(dict.fromkeys(values))
 
     @staticmethod
@@ -363,7 +488,9 @@ class CVProcessingService:
             if active and line and re.fullmatch(r"[A-Z][A-Z /&-]{3,}", line):
                 active = False
             if active and line and len(line) >= 3:
-                values.append(line)
+                bounded = _bounded_cv_text(line)
+                if bounded:
+                    values.append(bounded)
             if len(values) >= 50:
                 break
         return list(dict.fromkeys(values))
@@ -490,7 +617,10 @@ class CVProcessingService:
                 dict.fromkeys([*(extraction_result.get("systems") or []), *extracted_systems])
             )
         extraction_result["extraction_method"] = "deterministic"
-        return extraction_result
+        bounded_result = _bound_cv_review_payload(extraction_result)
+        if not isinstance(bounded_result, dict):
+            raise RuntimeError("Deterministic CV payload must remain a JSON object")
+        return {str(key): value for key, value in bounded_result.items()}
 
     @staticmethod
     def systems_from_text(text: str) -> list[str]:
@@ -513,7 +643,9 @@ class CVProcessingService:
             ):
                 break
             if active and line and len(line) > 2 and keywords.search(line):
-                values.append(line)
+                bounded = _bounded_cv_text(line)
+                if bounded:
+                    values.append(bounded)
             if len(values) >= 100:
                 break
         return list(dict.fromkeys(values))
@@ -530,20 +662,31 @@ class CVProcessingService:
         existing_certs = {c.cert_type for c in crew_member.certifications}
 
         certs_to_add = set()
-        for spec in data.get("specializations", []):
+        for spec in data.get("specializations") or []:
+            if not isinstance(spec, str):
+                continue
             spec_lower = spec.lower().strip()
             for key, cert_type in CERT_ALIASES.items():
                 if key in spec_lower:
                     certs_to_add.add(cert_type)
 
-        for skill in data.get("skills", []):
+        for skill in data.get("skills") or []:
+            if not isinstance(skill, str):
+                continue
             skill_lower = skill.lower().strip()
             for key, cert_type in CERT_ALIASES.items():
                 if key in skill_lower:
                     certs_to_add.add(cert_type)
 
-        training_values = data.get("training_qualifications") or []
-        for cert in [*data.get("certifications", []), *training_values]:
+        certification_values = data.get("certifications")
+        training_values = data.get("training_qualifications")
+        source_values = [
+            value
+            for values in (certification_values, training_values)
+            if isinstance(values, list)
+            for value in values
+        ]
+        for cert in source_values:
             if isinstance(cert, str):
                 cert_lower = cert.lower().strip()
                 for key, cert_type in CERT_ALIASES.items():
@@ -596,8 +739,12 @@ class CVProcessingService:
             "NEBOSH Diploma": ("nebosh",),
             "QPS QINSy": ("qps", "qinsy"),
         }.get(cert_type, (cert_type.lower(),))
-        expiry_map = data.get("certification_expiry_dates") or {}
-        issue_map = data.get("certification_issue_dates") or {}
+        expiry_map = data.get("certification_expiry_dates")
+        if not isinstance(expiry_map, dict):
+            expiry_map = {}
+        issue_map = data.get("certification_issue_dates")
+        if not isinstance(issue_map, dict):
+            issue_map = {}
         expiry = next(
             (
                 value
@@ -614,7 +761,10 @@ class CVProcessingService:
             ),
             None,
         )
-        for line in data.get("training_qualifications") or []:
+        training_values = data.get("training_qualifications")
+        if not isinstance(training_values, list):
+            training_values = []
+        for line in training_values:
             if not isinstance(line, str) or not any(alias in line.lower() for alias in aliases):
                 continue
             dates = re.findall(r"\b(?:\d{1,2}[/-])?\d{1,2}[/-]\d{2,4}\b|\b\d{4}\b", line)
@@ -624,7 +774,12 @@ class CVProcessingService:
                 issue = parsed[0]
             if len(parsed) > 1 and not expiry:
                 expiry = parsed[-1]
-        return cls._parse_date(issue), cls._parse_date(expiry)
+        issue_date = cls._parse_date(issue)
+        expiry_date = cls._parse_date(expiry)
+        if issue_date and expiry_date and expiry_date < issue_date:
+            logger.warning("Ignoring reversed CV certification expiry date")
+            expiry_date = None
+        return issue_date, expiry_date
 
     async def _create_work_history(
         self,
@@ -655,13 +810,31 @@ class CVProcessingService:
             for record in crew_member.work_history
         }
 
-        for work in data.get("work_history", []):
-            if isinstance(work, dict) and work.get("client"):
+        work_history = data.get("work_history")
+        if not isinstance(work_history, list):
+            work_history = []
+        for work in work_history:
+            if isinstance(work, dict):
+                client_name = _bounded_cv_text(work.get("client"))
+                if not client_name:
+                    continue
+                project_name = _bounded_cv_text(work.get("project"))
+                project_type = _bounded_cv_text(work.get("project_type"))
+                location = _bounded_cv_text(work.get("location"))
+                country = _bounded_cv_text(work.get("country"))
+                role = _bounded_cv_text(work.get("role"))
+                responsibilities = _bounded_cv_text(
+                    work.get("responsibilities"), CV_RESPONSIBILITIES_MAX_LENGTH
+                )
                 start_date = self._parse_date(work.get("start_date"))
+                end_date = self._parse_date(work.get("end_date"))
+                if start_date and end_date and end_date < start_date:
+                    logger.warning("Ignoring reversed CV work-history end date")
+                    end_date = None
                 work_key = (
-                    work.get("client", ""),
-                    work.get("project", ""),
-                    work.get("role", ""),
+                    client_name,
+                    project_name or "",
+                    role or "",
                     start_date,
                 )
                 if work_key in existing_work:
@@ -669,15 +842,15 @@ class CVProcessingService:
                 work_record = WorkHistory(
                     id=str(uuid.uuid4()),
                     crew_member_id=crew_member.id,
-                    client_name=work.get("client", ""),
-                    project_name=work.get("project", ""),
-                    project_type=work.get("project_type", ""),
-                    location=work.get("location", ""),
-                    country=work.get("country", ""),
-                    role=work.get("role", ""),
-                    responsibilities=work.get("responsibilities", ""),
+                    client_name=client_name,
+                    project_name=project_name,
+                    project_type=project_type,
+                    location=location,
+                    country=country,
+                    role=role,
+                    responsibilities=responsibilities,
                     start_date=start_date,
-                    end_date=self._parse_date(work.get("end_date")),
+                    end_date=end_date,
                     document_ref=document_id,
                 )
                 session.add(work_record)

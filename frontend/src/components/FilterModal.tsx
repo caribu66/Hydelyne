@@ -2,10 +2,11 @@ import { FC, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { X, RotateCcw, SlidersHorizontal } from 'lucide-react';
-import { FilterState, FilterPreset } from '../types';
+import { FilterState, FilterPreset, UserProfile } from '../types';
 import { FilterSidebar } from './FilterSidebar';
 
 interface FilterModalProps {
+  profiles: UserProfile[];
   isOpen: boolean;
   onClose: () => void;
   filters: FilterState;
@@ -17,6 +18,7 @@ interface FilterModalProps {
 }
 
 export const FilterModal: FC<FilterModalProps> = ({
+  profiles,
   isOpen,
   onClose,
   filters,
@@ -87,6 +89,7 @@ export const FilterModal: FC<FilterModalProps> = ({
             {/* Scrollable Filter Body */}
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
               <FilterSidebar
+                profiles={profiles}
                 filters={filters}
                 onUpdateFilters={onUpdateFilters}
                 onResetFilters={onResetFilters}

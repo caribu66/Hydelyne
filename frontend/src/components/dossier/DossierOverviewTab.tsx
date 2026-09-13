@@ -2,6 +2,8 @@ import { FC } from 'react';
 import { UserProfile, SpecialistDocument } from '../../types';
 import { HighlightText } from '../HighlightText';
 import { CertificationBadge } from '../CertificationBadge';
+import { formatExperience } from '../../utils/experience';
+import { availabilityLabel as getAvailabilityLabel } from '../../utils/profileLabels';
 import {
   Sparkles,
   Compass,
@@ -32,7 +34,8 @@ export const DossierOverviewTab: FC<DossierOverviewTabProps> = ({
   documents = [],
   onSelectTab,
 }) => {
-  const isAvailableNow = profile.availability?.toLowerCase().includes('immediately');
+  const displayedAvailability = getAvailabilityLabel(profile.availability);
+  const isAvailableNow = displayedAvailability.toLowerCase().includes('immediately');
   const readableSummary = summary?.trim();
   const hasReadableSummary = Boolean(
     readableSummary && !readableSummary.startsWith('{') && !readableSummary.startsWith('['),
@@ -63,10 +66,10 @@ export const DossierOverviewTab: FC<DossierOverviewTabProps> = ({
           <p className="mt-1 text-xs leading-relaxed text-secondary">
             {profile.name} brings{' '}
             <strong className="font-semibold text-primary">
-              {profile.yearsOfExperience} years
+              {formatExperience(profile.yearsOfExperience)} years
             </strong>{' '}
             of offshore experience in {profile.department.toLowerCase()} and is{' '}
-            {isAvailableNow ? 'available for immediate mobilization' : profile.availability.toLowerCase()}.
+            {isAvailableNow ? 'available for immediate mobilization' : displayedAvailability.toLowerCase()}.
           </p>
         </div>
       </div>
@@ -131,7 +134,7 @@ export const DossierOverviewTab: FC<DossierOverviewTabProps> = ({
               isAvailableNow ? 'text-positive' : 'text-primary'
             }`}
           >
-            {profile.availability}
+            {displayedAvailability}
           </span>
           <span className="mt-1 block text-xs text-secondary">
             {credentialCount} credentials · {documents.length} docs

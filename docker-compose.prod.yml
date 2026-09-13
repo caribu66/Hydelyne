@@ -43,6 +43,9 @@ services:
 
   flower:
     ports: !reset []
+    # Do not start the monitoring UI in production unless it is explicitly
+    # enabled from a trusted network: `--profile observability`.
+    profiles: ["observability"]
     environment:
       RUN_MIGRATIONS: "false"
     restart: unless-stopped

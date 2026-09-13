@@ -1,10 +1,12 @@
 """Security regression tests: path traversal prevention."""
 
 import io
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.services.upload import DocumentUploadService, safe_path_component
+from app.services.upload import DocumentUploadService, is_managed_dropbox_path, safe_path_component
 
 # ---------------------------------------------------------------------------
 # safe_path_component unit tests
@@ -21,6 +23,7 @@ from app.services.upload import DocumentUploadService, safe_path_component
         "/etc/passwd",
         "crew/../../../etc",
         "crew\x00",
+        "crew\n",
         "",
         "a" * 300,
     ],
@@ -53,6 +56,38 @@ def test_safe_path_component_accepts_uuid():
 def test_safe_path_component_accepts_dashed_name():
     val = "test-crew-id"
     assert safe_path_component(val, "crew_id") == val
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "/hydenlyne/crew/documents/cv/file.pdf",
+        "/hydenlyne/crew/legacy/file.pdf",
+    ],
+)
+def test_managed_dropbox_path_accepts_safe_paths(value):
+    assert is_managed_dropbox_path(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "/hydenlyne/crew/../../other/file.pdf",
+        "/hydenlyne/crew/documents/../secrets/file.pdf",
+        "/hydenlyne//documents/cv/file.pdf",
+        "/hydenlyne/crew",
+    ],
+)
+def test_managed_dropbox_path_rejects_remote_traversal(value):
+    assert not is_managed_dropbox_path(value)
+
+
+@pytest.mark.asyncio
+async def test_delete_from_dropbox_rejects_unmanaged_path(upload_service):
+    upload_service.dropbox_available = True
+    with patch("app.services.upload.dropbox_request", new_callable=AsyncMock) as request:
+        assert not await upload_service.delete_from_dropbox("/hydenlyne/crew/../../secret.pdf")
+        request.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +143,21 @@ def test_get_file_rejects_absolute_path(upload_service):
 def test_get_file_rejects_dotdot_filename(upload_service):
     result = upload_service.get_file("/hydenlyne/crew/..")
     assert result is None
+
+
+def test_get_file_rejects_cache_symlink_escape(upload_service, tmp_path: Path):
+    """A cache-directory symlink must not turn a managed read into file read."""
+    cache_path = tmp_path / "cache"
+    escape_path = tmp_path / "cache-escape"
+    cache_path.mkdir()
+    escape_path.mkdir()
+    secret = escape_path / "secret.pdf"
+    secret.write_bytes(b"private")
+    (cache_path / "crew").symlink_to(escape_path, target_is_directory=True)
+    upload_service.cache_path = cache_path
+
+    assert upload_service.get_file("/hydenlyne/crew/secret.pdf") is None
+    assert upload_service.delete_file("/hydenlyne/crew/secret.pdf") is False
 
 
 # ---------------------------------------------------------------------------

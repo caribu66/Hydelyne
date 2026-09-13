@@ -2,6 +2,7 @@ import { FC } from 'react';
 import { UserProfile, SpecialistDocument } from '../../types';
 import { CertificationBadge } from '../CertificationBadge';
 import { DossierCollection } from '../DossierCollection';
+import { certificationExpiryStatus } from '../../utils/certificationUtils';
 import {
   CheckCircle2,
   XCircle,
@@ -99,7 +100,14 @@ export const DossierCredentialsTab: FC<DossierCredentialsTabProps> = ({
             renderItems={(certifications) => (
               <div className="flex flex-wrap gap-2">
                 {certifications.map((cert) => (
-                  <CertificationBadge key={cert} certification={cert} size="md" />
+                  <CertificationBadge
+                    key={cert}
+                    certification={cert}
+                    verified={profile.certificationDetails?.some(
+                      (detail) => detail.name === cert && detail.verificationStatus === 'verified',
+                    )}
+                    size="md"
+                  />
                 ))}
               </div>
             )}
@@ -129,6 +137,15 @@ export const DossierCredentialsTab: FC<DossierCredentialsTabProps> = ({
                     'unverified';
                   const effectiveStatus =
                     localVerificationOverrides[cert.id]?.status ?? cert.status;
+                  const expiryStatus = certificationExpiryStatus(cert.expiryDate);
+                  const displayStatus =
+                    effectiveStatus === 'rejected'
+                      ? effectiveStatus
+                      : expiryStatus === 'expired' || expiryStatus === 'expiring_soon'
+                        ? expiryStatus
+                        : expiryStatus === 'invalid'
+                          ? 'invalid'
+                        : effectiveStatus;
 
                   const linkedDoc = documents.find(
                     (d) =>
@@ -169,14 +186,20 @@ export const DossierCredentialsTab: FC<DossierCredentialsTabProps> = ({
                                 Pending Verification
                               </span>
                             )}
-                            {effectiveStatus === 'expired' && (
+                            {displayStatus === 'expired' && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium font-mono bg-negative/10 text-negative border border-negative/20">
                                 Expired
                               </span>
                             )}
-                            {effectiveStatus === 'expiring_soon' && (
+                            {displayStatus === 'expiring_soon' && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium font-mono bg-warning/10 text-warning border border-warning/20">
                                 Expiring Soon
+                              </span>
+                            )}
+                            {displayStatus === 'invalid' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium font-mono bg-warning/10 text-warning border border-warning/20">
+                                <AlertCircle className="w-3 h-3" />
+                                Invalid expiry date
                               </span>
                             )}
                           </div>

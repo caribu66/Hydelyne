@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -16,6 +17,70 @@ from app.services.compliance import (
 )
 from app.services.crew import certification_service
 from app.tasks.document_tasks import check_expiring_certifications
+
+
+def test_compliance_alert_query_excludes_login_account_rows():
+    """The Celery alert evaluator must not mutate account-owned certifications."""
+
+    class EmptyResult:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeSession:
+        statements = []
+
+        def execute(self, statement):
+            self.statements.append(statement)
+            return EmptyResult()
+
+    fake_session = FakeSession()
+    with patch.object(compliance_service, "_publish_alerts_sync"):
+        result = compliance_service.evaluate_and_update_compliance_sync(
+            fake_session, reference_date=date.today()
+        )
+
+    assert result["updated"] == 0
+    sql = str(fake_session.statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "password_hash IS NULL" in sql
+    assert "role NOT IN ('staff', 'admin')" in sql
+
+
+@pytest.mark.asyncio
+async def test_expiration_updater_query_excludes_login_account_rows():
+    """The periodic updater must not mutate certifications owned by accounts."""
+
+    class EmptyResult:
+        def scalars(self):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeSession:
+        statements = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            return EmptyResult()
+
+    fake_session = FakeSession()
+    with patch(
+        "app.services.crew.get_session_factory", return_value=lambda: fake_session
+    ):
+        assert await certification_service.check_and_update_expiration_status() == 0
+
+    sql = str(fake_session.statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "password_hash IS NULL" in sql
+    assert "role NOT IN ('staff', 'admin')" in sql
 
 
 def test_classify_certification_expiry_windows():
@@ -146,6 +211,13 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         expiry_date=date(2026, 7, 1),
         status="expired",
     )
+    rejected_future = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="Rejected BOSIET",
+        expiry_date=date(2026, 9, 20),
+        status="rejected",
+    )
 
     db_session.add_all(
         [
@@ -155,6 +227,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
             cert_90d,
             cert_ok,
             cert_already_expired,
+            rejected_future,
         ]
     )
     await db_session.commit()
@@ -187,6 +260,11 @@ async def test_evaluate_and_update_compliance_sync(db_session):
     expired_types = {a["cert_type"] for a in expired_alerts}
     assert "OGUK Medical" in expired_types
     assert "CA-EBS" in expired_types
+    assert "Rejected BOSIET" not in {
+        cert_type
+        for window_alerts in result["alerts"].values()
+        for cert_type in (alert["cert_type"] for alert in window_alerts)
+    }
 
     # Verify DB persistence
     await db_session.refresh(cert_expired)
@@ -194,6 +272,9 @@ async def test_evaluate_and_update_compliance_sync(db_session):
 
     await db_session.refresh(cert_30d)
     assert cert_30d.status == "expiring_soon"
+
+    await db_session.refresh(rejected_future)
+    assert rejected_future.status == "rejected"
 
     await db_session.refresh(cert_60d)
     assert cert_60d.status == "valid"
@@ -209,6 +290,160 @@ async def test_evaluate_and_update_compliance_sync(db_session):
     assert logs[0]["from_status"] == "valid"
     assert logs[0]["to_status"] == "expired"
     assert logs[0]["cert_type"] == "OGUK Medical"
+
+
+@pytest.mark.asyncio
+async def test_sync_compliance_reactivates_renewed_certificates(db_session):
+    """Renewed evidence must recover from stale expiry lifecycle states."""
+    crew = CrewMember(id=str(uuid.uuid4()), full_name="Renewed Compliance Crew")
+    expiring = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="BOSIET",
+        expiry_date=date(2027, 3, 1),
+        status="expiring_soon",
+    )
+    expired = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="HUET",
+        expiry_date=date(2026, 10, 15),
+        status="expired",
+    )
+    db_session.add_all([crew, expiring, expired])
+    await db_session.commit()
+
+    from app.services.sync_processor import get_sync_session
+
+    sync_session = get_sync_session()
+    try:
+        result = compliance_service.evaluate_and_update_compliance_sync(
+            sync_session, reference_date=date(2026, 9, 1)
+        )
+    finally:
+        sync_session.close()
+
+    assert result["updated"] == 2
+    await db_session.refresh(expiring)
+    await db_session.refresh(expired)
+    assert expiring.status == "valid"
+    assert expired.status == "valid"
+
+
+@pytest.mark.asyncio
+async def test_sync_expiration_keeps_newer_medical_projection(db_session):
+    """The synchronous compliance worker must preserve newer medical evidence."""
+    crew = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Sync Overlapping Medical Crew",
+        medical_status="fit",
+        medical_expiry=date(2026, 12, 1),
+    )
+    old_cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="OGUK Medical",
+        expiry_date=date(2026, 8, 20),
+        status="valid",
+        verification_status="verified",
+    )
+    current_cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="OGUK Medical",
+        expiry_date=date(2026, 12, 1),
+        status="valid",
+        verification_status="verified",
+    )
+    db_session.add_all([crew, old_cert, current_cert])
+    await db_session.commit()
+
+    from app.services.sync_processor import get_sync_session
+
+    sync_session = get_sync_session()
+    try:
+        compliance_service.evaluate_and_update_compliance_sync(
+            sync_session, reference_date=date(2026, 9, 1)
+        )
+    finally:
+        sync_session.close()
+
+    await db_session.refresh(old_cert)
+    await db_session.refresh(crew)
+    assert old_cert.status == "expired"
+    assert crew.medical_expiry == current_cert.expiry_date
+    assert crew.medical_status == "fit"
+
+
+@pytest.mark.asyncio
+async def test_compliance_alerts_exclude_unpublished_profiles(db_session):
+    """Draft contractor evidence may be updated but must not enter shared alerts."""
+    crew = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Unpublished Compliance Draft",
+        email="draft@example.com",
+        publication_status="draft",
+        submitted_by="staff-1",
+    )
+    cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="BOSIET",
+        expiry_date=date(2026, 9, 20),
+        status="valid",
+        verification_status="verified",
+        cert_number="PRIVATE-DRAFT-CERT",
+    )
+    db_session.add_all([crew, cert])
+    await db_session.commit()
+
+    from app.services.sync_processor import get_sync_session
+
+    sync_session = get_sync_session()
+    try:
+        result = compliance_service.evaluate_and_update_compliance_sync(
+            sync_session, reference_date=date(2026, 9, 1)
+        )
+    finally:
+        sync_session.close()
+
+    alert_items = [alert for alerts in result["alerts"].values() for alert in alerts]
+    assert all(alert["crew_member_id"] != crew.id for alert in alert_items)
+    assert all(alert["cert_number"] != "PRIVATE-DRAFT-CERT" for alert in alert_items)
+
+    await db_session.refresh(cert)
+    assert cert.status == "expiring_soon"
+
+
+@pytest.mark.asyncio
+async def test_compliance_alerts_exclude_unverified_evidence(db_session):
+    """Unverified lifecycle rows must not become shared compliance alerts."""
+    crew = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Unverified Compliance Evidence",
+        publication_status="approved",
+    )
+    cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="BOSIET",
+        expiry_date=date.today() + timedelta(days=10),
+        status="expiring_soon",
+        verification_status="unverified",
+    )
+    db_session.add_all([crew, cert])
+    await db_session.commit()
+
+    from app.services.sync_processor import get_sync_session
+
+    sync_session = get_sync_session()
+    try:
+        result = compliance_service.evaluate_and_update_compliance_sync(sync_session)
+    finally:
+        sync_session.close()
+
+    alert_items = [alert for alerts in result["alerts"].values() for alert in alerts]
+    assert all(alert["crew_member_id"] != crew.id for alert in alert_items)
 
 
 @pytest.mark.asyncio
@@ -287,3 +522,70 @@ async def test_async_check_and_update_expiration_status_transitions_expiring_soo
 
     await db_session.refresh(crew)
     assert crew.medical_status == "expired"
+
+
+@pytest.mark.asyncio
+async def test_async_expiration_checker_reactivates_renewed_certificates(db_session):
+    """The async checker must restore date-valid renewed certificates."""
+    crew = CrewMember(id=str(uuid.uuid4()), full_name="Async Renewed Crew")
+    expiring = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="BOSIET",
+        expiry_date=date.today() + timedelta(days=180),
+        status="expiring_soon",
+    )
+    expired = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="HUET",
+        expiry_date=date.today() + timedelta(days=90),
+        status="expired",
+    )
+    db_session.add_all([crew, expiring, expired])
+    await db_session.commit()
+
+    updated = await certification_service.check_and_update_expiration_status()
+
+    assert updated >= 2
+    await db_session.refresh(expiring)
+    await db_session.refresh(expired)
+    assert expiring.status == "valid"
+    assert expired.status == "valid"
+
+
+@pytest.mark.asyncio
+async def test_expiring_old_medical_does_not_hide_newer_valid_medical(db_session):
+    """Root medical status must follow the newest remaining medical evidence."""
+    crew = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Overlapping Medical Crew",
+        medical_status="fit",
+        medical_expiry=date.today() + timedelta(days=180),
+    )
+    old_cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="OGUK Medical",
+        expiry_date=date.today() - timedelta(days=1),
+        status="valid",
+        verification_status="verified",
+    )
+    current_cert = Certification(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        cert_type="OGUK Medical",
+        expiry_date=date.today() + timedelta(days=180),
+        status="valid",
+        verification_status="verified",
+    )
+    db_session.add_all([crew, old_cert, current_cert])
+    await db_session.commit()
+
+    await certification_service.check_and_update_expiration_status()
+
+    await db_session.refresh(old_cert)
+    await db_session.refresh(crew)
+    assert old_cert.status == "expired"
+    assert crew.medical_expiry == current_cert.expiry_date
+    assert crew.medical_status == "fit"

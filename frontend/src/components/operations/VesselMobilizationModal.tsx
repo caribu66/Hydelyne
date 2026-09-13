@@ -25,8 +25,12 @@ import {
   calculateCampaignWindow,
   evaluateCandidatePreflightCompliance,
   getRoleKeyword,
+  validateAgreedDayRate,
   validateAssignmentInput,
 } from '../../utils/assignmentUtils'
+import { copyTextToClipboard } from '../../utils/clipboard'
+import { isoDateAfterDays } from '../../utils/operationsHome'
+import { apolloResultHasErrors } from '../../utils/sessionScope'
 
 export interface VesselForMobilization {
   imo: string
@@ -41,6 +45,8 @@ interface VesselMobilizationModalProps {
   onClose: () => void
   vessel: VesselForMobilization | null
   onShowToast: (message: string) => void
+  isAdmin: boolean
+  sessionKey?: string | null
   onSuccess?: (assignment: CampaignAssignment) => void
 }
 
@@ -61,6 +67,8 @@ export const VesselMobilizationModal: FC<VesselMobilizationModalProps> = ({
   onClose,
   vessel,
   onShowToast,
+  isAdmin,
+  sessionKey = null,
   onSuccess,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -68,22 +76,32 @@ export const VesselMobilizationModal: FC<VesselMobilizationModalProps> = ({
 
   const [roleOnBoard, setRoleOnBoard] = useState('Client Representative')
   const [customRole, setCustomRole] = useState('')
-  const [deploymentPort, setDeploymentPort] = useState('Aberdeen, Scotland')
-  const [projectName, setProjectName] = useState('Johan Sverdrup 4D OBN Survey')
+  const [deploymentPort, setDeploymentPort] = useState('')
+  const [projectName, setProjectName] = useState('')
   const [startDate, setStartDate] = useState(() => {
-    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    return d.toISOString().slice(0, 10)
+    return isoDateAfterDays(7)
   })
   const [durationDays, setDurationDays] = useState(28)
   const [candidateQuery, setCandidateQuery] = useState('')
   const [filterByRole, setFilterByRole] = useState(true)
   const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null)
-  const [agreedDayRate, setAgreedDayRate] = useState(850)
+  const [agreedDayRate, setAgreedDayRate] = useState<number | null>(null)
   const [specialInstructions, setSpecialInstructions] = useState('')
 
   const [submittedRef, setSubmittedRef] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isCopied, setIsCopied] = useState(false)
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(null)
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousSessionKeyRef = useRef<string | null>(null)
+  const refreshPendingSessionKeyRef = useRef<string | null>(null)
+  const currentSessionKeyRef = useRef(sessionKey)
+  const currentVesselImoRef = useRef(vessel?.imo ?? null)
+  const currentIsOpenRef = useRef(isOpen)
+  const operationVersionRef = useRef(0)
+  currentSessionKeyRef.current = sessionKey
+  currentVesselImoRef.current = vessel?.imo ?? null
+  currentIsOpenRef.current = isOpen
 
   const effectiveRole = roleOnBoard === 'Custom' ? customRole.trim() : roleOnBoard
   const roleKeyword = useMemo(() => getRoleKeyword(effectiveRole), [effectiveRole])
@@ -105,19 +123,73 @@ export const VesselMobilizationModal: FC<VesselMobilizationModalProps> = ({
   }, [startDate, durationDays])
 
   // Query candidates
-  const { data: crewData, loading: crewLoading } = useQuery(CREW_MEMBERS_QUERY, {
+  const {
+    data: crewData,
+    loading: crewLoading,
+    error: crewError,
+    refetch: refetchCrew,
+  } = useQuery(CREW_MEMBERS_QUERY, {
     variables: {
       search: effectiveSearch,
       limit: 30,
     },
-    skip: !isOpen || !vessel,
-    fetchPolicy: 'cache-and-network',
+    skip: !isOpen || !vessel || !sessionKey,
+    fetchPolicy: 'network-only',
   })
 
+  useEffect(() => {
+    const previousSessionKey = previousSessionKeyRef.current
+    previousSessionKeyRef.current = sessionKey
+    if (previousSessionKey === sessionKey) return
+    setLoadedSessionKey(null)
+    refreshPendingSessionKeyRef.current = null
+    if (
+      !sessionKey
+      || previousSessionKey === null
+      || previousSessionKey === sessionKey
+      || !isOpen
+      || !vessel
+    ) return
+
+    refreshPendingSessionKeyRef.current = sessionKey
+    let active = true
+    void refetchCrew({ search: effectiveSearch, limit: 30 })
+      .then((result) => {
+        if (apolloResultHasErrors(result)) throw new Error('Crew refresh failed')
+        if (active && refreshPendingSessionKeyRef.current === sessionKey) {
+          setLoadedSessionKey(sessionKey)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (refreshPendingSessionKeyRef.current === sessionKey) {
+          refreshPendingSessionKeyRef.current = null
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [effectiveSearch, isOpen, refetchCrew, sessionKey, vessel])
+
+  useEffect(() => {
+    if (
+      isOpen
+      && sessionKey
+      && !crewLoading
+      && refreshPendingSessionKeyRef.current !== sessionKey
+    ) setLoadedSessionKey(sessionKey)
+  }, [crewLoading, isOpen, sessionKey])
+
   const candidates = useMemo(() => {
-    if (!crewData?.crewMembers) return []
+    if (
+      !sessionKey
+      || loadedSessionKey !== sessionKey
+      || crewLoading
+      || crewError
+      || !crewData?.crewMembers
+    ) return []
     return backendCrewListToProfiles(crewData.crewMembers)
-  }, [crewData])
+  }, [crewData, crewError, crewLoading, loadedSessionKey, sessionKey])
 
   const selectedCandidate = useMemo(() => {
     return candidates.find((c) => c.id === selectedCrewId) || null
@@ -143,15 +215,29 @@ export const VesselMobilizationModal: FC<VesselMobilizationModalProps> = ({
   })
 
   useEffect(() => {
+    operationVersionRef.current += 1
+    if (copyFeedbackTimerRef.current !== null) {
+      clearTimeout(copyFeedbackTimerRef.current)
+      copyFeedbackTimerRef.current = null
+    }
     if (isOpen) {
+      const nextStartDate = isoDateAfterDays(7)
+      setRoleOnBoard('Client Representative')
+      setCustomRole('')
+      setDeploymentPort('')
+      setProjectName('')
+      setStartDate(nextStartDate)
+      setDurationDays(28)
       setSubmittedRef(null)
       setErrorMessage(null)
       setSelectedCrewId(null)
       setCandidateQuery('')
       setFilterByRole(true)
       setSpecialInstructions('')
+      setAgreedDayRate(null)
+      setIsCopied(false)
     }
-  }, [isOpen, vessel])
+  }, [isOpen, sessionKey, vessel?.imo])
 
   if (!isOpen || !vessel) return null
 
@@ -159,9 +245,32 @@ export const VesselMobilizationModal: FC<VesselMobilizationModalProps> = ({
     e.preventDefault()
     setErrorMessage(null)
 
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return
+    const operationVersion = ++operationVersionRef.current
+    const vesselImo = vessel.imo
+    const operationIsCurrent = () => (
+      operationVersion === operationVersionRef.current
+      && currentIsOpenRef.current
+      && currentSessionKeyRef.current === sessionKey
+      && currentVesselImoRef.current === vesselImo
+    )
+
     if (!selectedCrewId || !selectedCandidate) {
       setErrorMessage('Please select a specialist consultant to mobilize')
       return
+    }
+
+    if (selectedCompliance?.status === 'critical') {
+      setErrorMessage('This specialist has a critical compliance issue. Resolve the credential before confirming mobilization.')
+      return
+    }
+
+    if (isAdmin) {
+      const rateValidation = validateAgreedDayRate(agreedDayRate)
+      if (!rateValidation.valid && rateValidation.error) {
+        setErrorMessage(rateValidation.error)
+        return
+      }
     }
 
     const validation = validateAssignmentInput({
@@ -193,27 +302,32 @@ export const VesselMobilizationModal: FC<VesselMobilizationModalProps> = ({
             roleOnBoard: effectiveRole,
             startDate,
             endDate,
-            agreedDayRate,
+            ...(isAdmin && agreedDayRate != null ? { agreedDayRate } : {}),
             notes: notesPayload,
             status: 'CONFIRMED' as CampaignAssignmentStatus,
           },
         },
       })
 
+      if (!operationIsCurrent()) return
+      if (apolloResultHasErrors(res)) throw new Error('Assignment creation returned errors')
+
       const assignment = res.data?.createCampaignAssignment
-      if (assignment) {
-        const refCode = buildMobilizationReference(assignment.id)
-        setSubmittedRef(refCode)
-        onShowToast(`Mobilization ${refCode} confirmed for ${selectedCandidate.name} on ${vessel.name}`)
-        onSuccess?.(assignment)
+      if (!assignment || typeof assignment.id !== 'string' || !assignment.id.trim()) {
+        throw new Error('The campaign assignment was not returned. Please try again.')
       }
+      const refCode = buildMobilizationReference(assignment.id)
+      setSubmittedRef(refCode)
+      onShowToast(`Mobilization ${refCode} confirmed for ${selectedCandidate.name} on ${vessel.name}`)
+      onSuccess?.(assignment)
     } catch (err: unknown) {
+      if (!operationIsCurrent()) return
       const msg = err instanceof Error ? err.message : 'Failed to record campaign assignment'
       setErrorMessage(msg)
     }
   }
 
-  const handleCopySummary = () => {
+  const handleCopySummary = async () => {
     const summary = `
 [HYDENLYNE MOBILIZATION DISPATCH - ${submittedRef}]
 VESSEL: ${vessel.name} (IMO: ${vessel.imo}, Flag: ${vessel.flag || 'Unspecified'})
@@ -221,17 +335,24 @@ SPECIALIST: ${selectedCandidate?.name} (${selectedCandidate?.title})
 ROLE: ${effectiveRole}
 PORT: ${deploymentPort}
 ROTATION: ${startDate} → ${endDate} (${durationDays} days)
-DAY RATE: £${agreedDayRate}/day
-PRE-FLIGHT COMPLIANCE: ${selectedCompliance?.badgeLabel || 'Verified'}
-PROJECT: ${projectName || 'Offshore Campaign'}
-INSTRUCTIONS: ${specialInstructions || 'Standard offshore mobilization'}
+DAY RATE: ${isAdmin && agreedDayRate != null ? `£${agreedDayRate}/day` : 'Set by administrator'}
+	PRE-FLIGHT COMPLIANCE: ${selectedCompliance?.badgeLabel || 'Not checked'}
+PROJECT: ${projectName || 'Not recorded'}
+INSTRUCTIONS: ${specialInstructions || 'Not recorded'}
 STATUS: CONFIRMED
     `.trim()
 
-    void navigator.clipboard?.writeText(summary)
-    setIsCopied(true)
-    onShowToast('Mobilization dispatch summary copied to clipboard')
-    setTimeout(() => setIsCopied(false), 2000)
+    if (await copyTextToClipboard(summary)) {
+      setIsCopied(true)
+      onShowToast('Mobilization dispatch summary copied to clipboard')
+      if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current)
+      copyFeedbackTimerRef.current = setTimeout(() => {
+        copyFeedbackTimerRef.current = null
+        setIsCopied(false)
+      }, 2000)
+    } else {
+      onShowToast('Could not copy the mobilization summary. Please try again.')
+    }
   }
 
   return (
@@ -317,7 +438,9 @@ STATUS: CONFIRMED
                   </div>
                   <div className="flex justify-between">
                     <span className="text-secondary">Agreed Rate:</span>
-                    <span className="text-primary font-mono">£{agreedDayRate}/day</span>
+                    <span className="text-primary font-mono">
+                      {isAdmin && agreedDayRate != null ? `£${agreedDayRate}/day` : 'Set by administrator'}
+                    </span>
                   </div>
                 </div>
 
@@ -779,7 +902,7 @@ STATUS: CONFIRMED
                                     type="button"
                                     onClick={() => {
                                       setSelectedCrewId(c.id)
-                                      if (c.dayRate) setAgreedDayRate(c.dayRate)
+                                      setAgreedDayRate(c.dayRate ?? null)
                                     }}
                                     className="inline-flex min-h-8 items-center rounded-lg bg-surface border border-border-subtle px-2.5 py-1 text-xs font-medium text-secondary hover:text-primary hover:bg-surface-selected transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                                   >
@@ -802,7 +925,7 @@ STATUS: CONFIRMED
                   </h3>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
+                    {isAdmin && <div>
                       <label htmlFor="mob-day-rate" className="block text-xs font-medium text-secondary mb-1">
                         Agreed day rate (£/day)
                       </label>
@@ -811,12 +934,15 @@ STATUS: CONFIRMED
                         type="number"
                         min="100"
                         step="25"
-                        value={agreedDayRate}
-                        onChange={(e) => setAgreedDayRate(parseFloat(e.target.value) || 0)}
+                        value={agreedDayRate ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value.trim()
+                          setAgreedDayRate(value ? Number(value) : null)
+                        }}
                         required
                         className="w-full min-h-9 rounded-lg border border-border-subtle bg-surface-raised px-2.5 py-1 text-xs text-primary font-mono focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                       />
-                    </div>
+                    </div>}
 
                     <div>
                       <label htmlFor="mob-notes" className="block text-xs font-medium text-secondary mb-1">

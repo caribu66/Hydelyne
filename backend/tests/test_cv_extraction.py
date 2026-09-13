@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from app.services.cv_processing import cv_processing_service
+
 SAMPLE_CV_TEXT = """HELENA LINDQVIST
 PERSONAL INFORMATION
 NATIONALITY: Polish
@@ -52,7 +54,6 @@ async def test_cv_processing_and_crew_query_resolve_aliases_identically():
     from app.database import get_session_factory
     from app.models import CrewMember
     from app.services.crew_query import normalize_cert_name
-    from app.services.cv_processing import cv_processing_service
 
     factory = get_session_factory()
     crew_id = str(uuid.uuid4())
@@ -89,6 +90,20 @@ async def test_cv_processing_and_crew_query_resolve_aliases_identically():
 
         await session.delete(updated)
         await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_reviewed_extraction_rejects_login_account_target():
+    from types import SimpleNamespace
+
+    with pytest.raises(ValueError, match="Crew member not found"):
+        await cv_processing_service.apply_reviewed_extraction(
+            session=SimpleNamespace(),
+            crew_member=SimpleNamespace(password_hash="hashed", role="staff"),
+            extracted_data={},
+            document_id=None,
+            replace_existing=False,
+        )
 
 
 @pytest.mark.llm
@@ -171,6 +186,99 @@ async def test_cv_processing_creates_certifications():
         await session.commit()
 
 
+@pytest.mark.asyncio
+async def test_replacing_cv_preserves_non_cv_certifications_and_work_history():
+    """A replacement CV must not delete independently sourced evidence."""
+    import uuid
+    from datetime import date
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.database import get_session_factory
+    from app.models import Certification, CrewMember, Document, WorkHistory
+    from app.services.cv_processing import cv_processing_service
+
+    factory = get_session_factory()
+    crew_id = str(uuid.uuid4())
+    old_cv_id = str(uuid.uuid4())
+    async with factory() as session:
+        crew = CrewMember(
+            id=crew_id,
+            full_name="Existing Specialist",
+            role="user",
+            medical_expiry=date(2028, 1, 1),
+            medical_status="fit",
+        )
+        old_cv = Document(
+            id=old_cv_id,
+            crew_member_id=crew_id,
+            file_name="old-cv.pdf",
+            file_type="pdf",
+            file_size=100,
+            storage_type="local",
+            storage_path="/tmp/old-cv.pdf",
+            classification="cv",
+            extraction_status="approved",
+        )
+        session.add_all([crew, old_cv])
+        await session.flush()
+        session.add_all(
+            [
+                Certification(
+                    crew_member_id=crew_id,
+                    cert_type="STCW",
+                    document_ref=old_cv_id,
+                ),
+                Certification(
+                    crew_member_id=crew_id,
+                    cert_type="OGUK Medical",
+                    expiry_date=date(2028, 1, 1),
+                    document_ref=old_cv_id,
+                ),
+                Certification(
+                    crew_member_id=crew_id,
+                    cert_type="BOSIET",
+                    status="valid",
+                    verification_status="verified",
+                ),
+                WorkHistory(
+                    crew_member_id=crew_id,
+                    client_name="Old CV Client",
+                    document_ref=old_cv_id,
+                ),
+                WorkHistory(
+                    crew_member_id=crew_id,
+                    client_name="Manual Client",
+                ),
+            ]
+        )
+        await session.commit()
+
+    await cv_processing_service.process_cv_extraction(
+        crew_id,
+        {"certifications": ["FOET"]},
+        str(uuid.uuid4()),
+        replace_existing=True,
+    )
+
+    async with factory() as session:
+        crew = (
+            await session.execute(
+                select(CrewMember)
+                .options(
+                    selectinload(CrewMember.certifications), selectinload(CrewMember.work_history)
+                )
+                .where(CrewMember.id == crew_id)
+            )
+        ).scalar_one()
+        assert {cert.cert_type for cert in crew.certifications} == {"BOSIET", "FOET"}
+        assert {work.client_name for work in crew.work_history} == {"Manual Client"}
+        assert crew.full_name == "Existing Specialist"
+        assert crew.medical_expiry is None
+        assert crew.medical_status is None
+
+
 def test_cv_geography_preserves_work_history_countries_and_locations():
     from app.services.cv_processing import CVProcessingService
 
@@ -185,6 +293,99 @@ def test_cv_geography_preserves_work_history_countries_and_locations():
     )
 
     assert geography == ["Denmark", "North Sea", "Senegal"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, {"client": "Acme"}, "x" * 256],
+)
+def test_cv_work_history_text_boundary_rejects_invalid_or_oversized_values(value):
+    from app.services.cv_processing import _bounded_cv_text
+
+    assert _bounded_cv_text(value) is None
+
+
+def test_cv_work_history_text_boundary_normalizes_valid_values():
+    from app.services.cv_processing import _bounded_cv_text
+
+    assert _bounded_cv_text("  Acme Offshore  ") == "Acme Offshore"
+    assert _bounded_cv_text("x" * 20_000, 20_000) == "x" * 20_000
+    assert _bounded_cv_text("x" * 20_001, 20_000) is None
+
+
+def test_cv_certification_dates_ignore_reversed_expiry():
+    from datetime import date
+
+    from app.services.cv_processing import CVProcessingService
+
+    assert CVProcessingService._certification_dates(
+        "BOSIET",
+        {
+            "certification_issue_dates": {"BOSIET": "2026-09-12"},
+            "certification_expiry_dates": {"BOSIET": "2026-09-11"},
+        },
+    ) == (date(2026, 9, 12), None)
+
+
+def test_cv_profile_text_boundary_ignores_malformed_model_fields():
+    from app.models import CrewMember
+    from app.services.cv_processing import CVProcessingService
+
+    crew = CrewMember(id="crew-1", full_name="Existing Specialist", role="user")
+    summary = {"fields_updated": []}
+    CVProcessingService()._update_crew_fields(
+        crew,
+        {
+            "email": ["not-an-email"],
+            "phone": "x" * 51,
+            "nationality": "x" * 101,
+            "languages": [{"unexpected": "object"}, "x" * 256],
+            "professional_summary": {"unexpected": "object"},
+        },
+        summary,
+    )
+
+    assert crew.email is None
+    assert crew.phone is None
+    assert crew.nationality is None
+    assert crew.languages is None
+    assert crew.professional_summary is None
+    assert summary["fields_updated"] == []
+
+
+@pytest.mark.asyncio
+async def test_cv_certification_boundary_ignores_malformed_collections():
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.models import Certification, CrewMember
+    from app.services.cv_processing import CVProcessingService
+
+    class RecordingSession(AsyncSession):
+        def __init__(self):
+            self.added: list[Certification] = []
+
+        def add(self, value: Certification) -> None:
+            self.added.append(value)
+
+    session = RecordingSession()
+    summary = {"certifications_created": 0}
+    await CVProcessingService()._create_certifications(
+        session,
+        CrewMember(id="crew-1", full_name="Test Crew", role="user"),
+        {
+            "specializations": [{"unexpected": "object"}],
+            "skills": [None],
+            "certifications": None,
+            "training_qualifications": ["BOSIET"],
+            "certification_expiry_dates": [],
+            "certification_issue_dates": "not-a-map",
+        },
+        None,
+        summary,
+    )
+
+    assert [cert.cert_type for cert in session.added] == ["BOSIET"]
+    assert summary["certifications_created"] == 1
 
 
 def test_merge_table_extraction_fills_personal_info_from_pdf():
@@ -454,6 +655,46 @@ def test_extract_cv_deterministically_flags_review_for_non_pdf_cv():
     assert needs_review == ["all"]
 
 
+@pytest.mark.parametrize("score", [True, float("nan"), float("inf"), 2.0, -1.0])
+def test_malformed_confidence_cannot_auto_accept_extraction(score):
+    from app.services.extraction import extraction_service
+
+    status, needs_review = extraction_service.determine_review_status(
+        {"confidence": {"expiry_date": score}}
+    )
+
+    assert status == "needs_review"
+    assert needs_review == ["expiry_date"]
+
+
+def test_non_object_confidence_requires_review():
+    from app.services.extraction import extraction_service
+
+    status, needs_review = extraction_service.determine_review_status({"confidence": "high"})
+
+    assert status == "needs_review"
+    assert needs_review == ["confidence"]
+
+
+def test_valid_json_non_object_payload_is_reviewed_instead_of_crashing():
+    from app.services.extraction import extraction_service
+
+    result = extraction_service.parse_response({"response": "[]"})
+
+    assert result["needs_review"] == ["all"]
+    assert "error" in result
+
+
+@pytest.mark.parametrize("response", [{"unexpected": "object"}, ["unexpected"], None])
+def test_non_string_llm_response_is_reviewed_instead_of_crashing(response):
+    from app.services.extraction import extraction_service
+
+    result = extraction_service.parse_response({"response": response})
+
+    assert result["needs_review"] == ["all"]
+    assert "error" in result
+
+
 def test_extract_cv_deterministically_flags_review_when_template_not_recognized():
     """A PDF that doesn't match the expected template (table extraction
     finds no personal info or work history) also goes to review, not the LLM."""
@@ -472,3 +713,38 @@ def test_extract_cv_deterministically_flags_review_when_template_not_recognized(
     assert result["extraction_method"] == "deterministic_failed"
     status, needs_review = extraction_service.determine_review_status(result)
     assert status == "needs_review"
+
+
+def test_deterministic_cv_text_fallback_bounds_review_payload_lines():
+    from app.services.cv_processing import CVProcessingService
+
+    training = CVProcessingService.training_from_text("TRAINING\nCourse 1" + "x" * 1_000)
+    systems = CVProcessingService.systems_from_text(
+        "SYSTEMS EXPERIENCE\nQGIS 1" + "x" * 1_000
+    )
+
+    assert all(len(value) <= 255 for value in training)
+    assert all(len(value) <= 255 for value in systems)
+
+
+def test_deterministic_cv_payload_bounds_table_strings_before_review_persistence():
+    from app.services.cv_processing import CVProcessingService
+    from app.services.cv_table_extractor import CVTableExtraction, PersonalRecord, ProjectRecord
+
+    oversized = "x" * 30_000
+    table_result = CVTableExtraction(
+        personal=PersonalRecord({"NATIONALITY": oversized}),
+        professional_summary=oversized,
+        projects=[ProjectRecord(client="Client", country="UK", position="Surveyor")],
+    )
+
+    with patch(
+        "app.services.cv_table_extractor.extract_cv_tables",
+        return_value=table_result,
+    ):
+        result = CVProcessingService.extract_cv_deterministically(
+            _helena_pdf_path(), "pdf", ""
+        )
+
+    assert len(result["professional_summary"]) == 20_000
+    assert len(result["nationality"]) == 20_000

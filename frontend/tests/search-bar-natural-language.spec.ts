@@ -71,7 +71,6 @@ const mockCrewMembers = [
 
 async function authenticate(page: Page) {
   await page.addInitScript(() => {
-    localStorage.setItem('hydenlyne_token', 'test-token');
     localStorage.setItem(
       'hydenlyne_user',
       JSON.stringify({

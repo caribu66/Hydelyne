@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 serializer = URLSafeTimedSerializer(settings.SESSION_SECRET_KEY)
 MAX_SESSION_AGE = settings.SESSION_MAX_AGE
+MAX_LOGIN_EMAIL_LENGTH = 320
+MAX_LOGIN_PASSWORD_LENGTH = 1024
+MAX_PASSWORD_HASH_ITERATIONS = 1_000_000
 
 
 def hash_password(password: str) -> str:
@@ -31,6 +34,8 @@ def verify_password(password: str, stored_hash: str) -> bool:
         if stored_hash.startswith("pbkdf2_sha256$"):
             _, iter_str, salt, pw_hash = stored_hash.split("$", 3)
             iterations = int(iter_str)
+            if not 1 <= iterations <= MAX_PASSWORD_HASH_ITERATIONS:
+                return False
             dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
             return hmac.compare_digest(dk.hex(), pw_hash)
         # Legacy format: salt$sha256
@@ -41,6 +46,11 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return False
 
 
+# Perform the same expensive verification work for unknown accounts as for a
+# real account, preventing login timing from revealing whether an email exists.
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(32))
+
+
 def create_session_token(user_id: str) -> str:
     """Create a signed session token with a unique token id (jti)."""
     token_id = secrets.token_hex(16)
@@ -48,17 +58,30 @@ def create_session_token(user_id: str) -> str:
     return serializer.dumps(payload)
 
 
-def verify_session_token(token: str) -> Optional[tuple[str, Optional[str]]]:
+def verify_session_token(token: str) -> Optional[tuple[str, str]]:
     """Verify a session token's signature and expiry.
 
-    Returns ``(user_id, jti)`` on success, or ``None`` on failure.
+    Returns ``(user_id, jti)`` on success, or ``None`` on failure. Both
+    identifiers are required; accepting a signed legacy payload without a
+    jti would create a session that can never be revoked.
     Does NOT check the Redis revocation blocklist — callers should do that
     via :func:`is_token_revoked`.
     """
     try:
         data = serializer.loads(token, max_age=MAX_SESSION_AGE)
-        return data.get("user_id"), data.get("jti")
-    except (SignatureExpired, BadSignature):
+        if not isinstance(data, dict):
+            return None
+        user_id = data.get("user_id")
+        jti = data.get("jti")
+        if (
+            not isinstance(user_id, str)
+            or not user_id.strip()
+            or not isinstance(jti, str)
+            or not jti.strip()
+        ):
+            return None
+        return user_id, jti
+    except (SignatureExpired, BadSignature, TypeError, AttributeError):
         return None
 
 
@@ -69,8 +92,11 @@ async def is_token_revoked(jti: Optional[str]) -> bool:
     revoked. Logging out a compromised session must never silently succeed
     because the revocation store is down. See ADR-0002.
     """
-    if not jti:
-        return False
+    if not isinstance(jti, str) or not jti.strip():
+        # A session without a revocation identifier is not safely revocable.
+        # Reject it rather than turning a malformed/legacy token into a
+        # permanent authenticated session.
+        return True
     try:
         from app.services.cache import cache_service
 
@@ -84,7 +110,10 @@ async def is_token_revoked(jti: Optional[str]) -> bool:
         redis = await cache_service._get_redis()
         return await redis.get(key) is not None
     except Exception as e:
-        logger.warning("security_degradation: revocation lookup failed, failing closed: %s", e)
+        logger.warning(
+            "security_degradation: revocation lookup failed, failing closed: %s",
+            type(e).__name__,
+        )
         return True
 
 
@@ -109,5 +138,7 @@ async def revoke_session_token(token: str) -> bool:
         # Expire the blocklist entry at the token's natural expiry
         return await cache_service.set(key, "revoked", ttl=timedelta(seconds=MAX_SESSION_AGE))
     except Exception as e:
-        logger.warning("security_degradation: revoke_session_token failed: %s", e)
+        logger.warning(
+            "security_degradation: revoke_session_token failed: %s", type(e).__name__
+        )
         return False

@@ -71,8 +71,8 @@ class CacheService:
             value = await redis.get(key)
             if value:
                 return json.loads(value)
-        except Exception as e:
-            logger.warning(f"Cache get failed: {e}")
+        except Exception as exc:
+            logger.warning("Cache get failed (%s)", type(exc).__name__)
         return None
 
     async def set(
@@ -87,8 +87,8 @@ class CacheService:
             ttl_seconds = int((ttl or self.DEFAULT_TTL).total_seconds())
             await redis.set(key, json.dumps(value, default=str), ex=ttl_seconds)
             return True
-        except Exception as e:
-            logger.warning(f"Cache set failed: {e}")
+        except Exception as exc:
+            logger.warning("Cache set failed (%s)", type(exc).__name__)
             return False
 
     async def delete(self, key: str) -> bool:
@@ -97,8 +97,8 @@ class CacheService:
             redis = await self._get_redis()
             await redis.delete(key)
             return True
-        except Exception as e:
-            logger.warning(f"Cache delete failed: {e}")
+        except Exception as exc:
+            logger.warning("Cache delete failed (%s)", type(exc).__name__)
             return False
 
     async def invalidate_pattern(self, pattern: str) -> int:
@@ -111,8 +111,8 @@ class CacheService:
             if keys:
                 await redis.delete(*keys)
             return len(keys)
-        except Exception as e:
-            logger.warning(f"Cache invalidation failed: {e}")
+        except Exception as exc:
+            logger.warning("Cache invalidation failed (%s)", type(exc).__name__)
             return 0
 
     async def get_or_set(
@@ -151,9 +151,13 @@ class CacheService:
             count = int(await redis.incr(key))
             if count == 1:
                 await redis.expire(key, window_seconds)
+            elif int(await redis.ttl(key)) < 0:
+                # Repair counters whose initial EXPIRE failed without turning
+                # the fixed window into a sliding window.
+                await redis.expire(key, window_seconds)
             return count
-        except Exception as e:
-            logger.warning(f"Rate limit increment failed: {e}")
+        except Exception as exc:
+            logger.warning("Rate limit increment failed (%s)", type(exc).__name__)
             return None
 
 

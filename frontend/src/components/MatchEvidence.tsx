@@ -1,6 +1,7 @@
 import { FC } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { formatExperience } from '../utils/experience';
 
 interface MatchEvidenceProps {
   profile: UserProfile;
@@ -47,7 +48,7 @@ export const MatchEvidence: FC<MatchEvidenceProps> = ({
         evidence.push(exactMatch || requested);
       });
   }
-  if (criteria.min_experience_years != null) evidence.push(`${profile.yearsOfExperience} years’ experience`);
+  if (criteria.min_experience_years != null) evidence.push(`${formatExperience(profile.yearsOfExperience)} years’ experience`);
   if (criteria.location) evidence.push(String(criteria.location));
   if (criteria.availability) evidence.push('Availability confirmed');
   if (criteria.project_type) evidence.push(String(criteria.project_type));

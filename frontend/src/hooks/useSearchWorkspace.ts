@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { UserProfile, SortOption, FilterState } from '../types'
 import { FILTER_PRESETS } from '../data/mockProfiles'
 import { filterProfiles, getActiveFilterCount, INITIAL_FILTER_STATE, sortProfiles } from '../utils/filterUtils'
@@ -10,6 +10,58 @@ interface UseSearchWorkspaceOptions {
   aiQueryData: CrewQueryResult | null
   aiQueryActive: boolean
   isAuthenticated: boolean
+}
+
+function mapAIAvailability(value?: string): UserProfile['availability'] {
+  switch (value?.toLowerCase()) {
+    case 'available':
+      return 'Available immediately'
+    case 'on_assignment':
+      return 'Employed (Not looking)'
+    case 'unavailable':
+      return 'Unavailable'
+    default:
+      return 'Unavailable'
+  }
+}
+
+/** Resolve the backend's authoritative AI result set against the loaded roster. */
+export function selectAIResultProfiles(
+  allProfiles: UserProfile[],
+  aiResults: CrewQueryResult['results'],
+): UserProfile[] {
+  const localMap = new Map(allProfiles.map((profile) => [profile.id, profile]))
+  return aiResults.map((ai) => {
+    const local = localMap.get(ai.id)
+    if (local) return local
+
+    return {
+      id: ai.id,
+      name: ai.name,
+      title: ai.tags?.[0] ? `${ai.tags[0]} Contractor` : 'Contractor',
+      avatar: '',
+      company: 'Company not recorded',
+      department: '',
+      location: ai.country_of_residence ?? 'Location not recorded',
+      remoteType: 'On-site',
+      yearsOfExperience: ai.experience_years
+        ?? (ai.experience_months != null ? Math.round(ai.experience_months / 12) : null),
+      skills: ai.tags ?? [],
+      bio: ai.professional_summary ?? 'Professional summary not recorded.',
+      availability: mapAIAvailability(ai.availability),
+      education: ai.education ?? 'Education not recorded',
+      nationality: ai.nationality,
+      countryOfResidence: ai.country_of_residence,
+      languages: ai.languages,
+      flyingPoint: ai.flying_point,
+      geographicalExperience: ai.geographical_experience,
+      systemsExperience: ai.systems_experience,
+      trainingQualifications: ai.training_qualifications,
+      email: ai.email ?? '',
+      certifications: ai.certifications ?? [],
+      workHistory: [],
+    }
+  })
 }
 
 export interface UseSearchWorkspaceReturn {
@@ -29,7 +81,7 @@ export interface UseSearchWorkspaceReturn {
   sortBy: SortOption
   setSortBy: (s: SortOption) => void
   selectedProfileId: string | null
-  setSelectedProfileId: (id: string | null) => void
+  setSelectedProfileId: Dispatch<SetStateAction<string | null>>
   isResultsUpdating: boolean
   isSearchActive: boolean
   results: UserProfile[]
@@ -120,55 +172,15 @@ export function useSearchWorkspace({
 
     // Search query filter
     if (committedQuery.trim()) {
-      const aiMatchedIds = aiQueryData?.results?.map((result) => result.id) ?? []
       const aiMatchesCurrentQuery = aiQueryActive
         && aiQueryData?.query.trim().toLowerCase() === committedQuery.trim().toLowerCase()
 
-        if (aiMatchesCurrentQuery && aiMatchedIds.length > 0) {
-          // Trust the backend AI result set as the source of truth. If a
-          // matched specialist is not in the currently loaded local roster,
-          // synthesize a minimal profile from the AI payload so the result is
-          // not silently dropped.
-          const localMap = new Map(allProfiles.map((p) => [p.id, p]))
-          list = aiMatchedIds
-            .map((id) => localMap.get(id))
-            .filter((profile): profile is UserProfile => profile !== undefined)
-          const missingIds = aiMatchedIds.filter((id) => !localMap.has(id))
-          if (missingIds.length > 0) {
-            const aiResultMap = new Map(aiQueryData.results.map((r) => [r.id, r]))
-            const synthesized: UserProfile[] = []
-            for (const id of missingIds) {
-              const ai = aiResultMap.get(id)
-              if (!ai) continue
-              const availability = (ai.availability ?? 'Unavailable') as UserProfile['availability']
-              synthesized.push({
-                id: ai.id,
-                name: ai.name,
-                // The AI payload carries no title/company/location evidence —
-                // never fabricate them from the name or availability string.
-                title: 'Contractor',
-                avatar: '',
-                company: '',
-                department: '',
-                location: '',
-                remoteType: 'On-site',
-                yearsOfExperience: Math.round((ai.experience_months ?? 0) / 12),
-                skills: ai.certifications ?? [],
-                bio: '',
-                availability,
-                education: '',
-                nationality: undefined,
-                countryOfResidence: undefined,
-                email: ai.email ?? '',
-                certifications: ai.certifications ?? [],
-                workHistory: [],
-              })
-            }
-            list = [...list, ...synthesized]
-            // The AI id-set replaces the keyword match, not the user's
-            // facet filters — re-apply them so chips stay truthful.
-            list = filterProfiles(list, { ...filters, keyword: '' })
-          }
+        if (aiMatchesCurrentQuery) {
+          // Trust the backend AI result set as the source of truth, including
+          // an intentional empty result set. Otherwise a no-match response
+          // falls through to local keyword matching and shows unrelated rows.
+          list = selectAIResultProfiles(allProfiles, aiQueryData.results)
+          list = filterProfiles(list, { ...filters, keyword: '' })
         } else {
         list = filterProfiles(list, {
           keyword: committedQuery.trim(),

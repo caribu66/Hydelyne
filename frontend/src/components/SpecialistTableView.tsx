@@ -2,6 +2,9 @@ import { FC, useState, useMemo, MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
 import { HighlightText } from './HighlightText';
+import { formatExperience, numericExperience } from '../utils/experience';
+import { availabilityLabel } from '../utils/profileLabels';
+import { copyTextToClipboard } from '../utils/clipboard';
 import { CertificationBadge } from './CertificationBadge';
 import {
   MapPin,
@@ -40,7 +43,7 @@ function sortValue(profile: UserProfile, field: SortField): string | number {
     case 'department':
       return profile.department;
     case 'experience':
-      return profile.yearsOfExperience;
+      return numericExperience(profile.yearsOfExperience);
     case 'dayRate':
       return profile.dayRate ?? 0;
     case 'rating':
@@ -115,12 +118,19 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
     });
   }, [profiles, sortField, sortDirection]);
 
-  const handleCopyEmail = (profile: UserProfile, e: MouseEvent) => {
+  const handleCopyEmail = async (profile: UserProfile, e: MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard?.writeText(profile.email);
-    setCopiedId(profile.id);
-    onShowToast(`Copied ${profile.email}`);
-    setTimeout(() => setCopiedId(null), 1800);
+    if (await copyTextToClipboard(profile.email)) {
+      setCopiedId(profile.id);
+      onShowToast(`Copied ${profile.email}`);
+      setTimeout(() => {
+        setCopiedId((currentCopiedId) => (
+          currentCopiedId === profile.id ? null : currentCopiedId
+        ));
+      }, 1800);
+    } else {
+      onShowToast('Could not copy the email address. Please try again.');
+    }
   };
 
   const renderSortIndicator = (field: SortField) => {
@@ -342,7 +352,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                               <HighlightText text={profile.name} query={searchQuery} />
                             </span>
                             {profile.isHighlyRecommended && (
-                              <BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" />
+                              <span title="Strong match"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                             )}
                           </div>
                           <p className="text-xs text-secondary truncate max-w-[200px]">
@@ -365,7 +375,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                     {colVisibility.mobilization && (
                       <td className="py-3 px-3 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded-md font-medium text-xs ${isAvailableNow ? 'badge-positive' : 'badge-neutral'}`}>
-                          {profile.availability.replace('Available ', '')}
+                          {availabilityLabel(profile.availability).replace('Available ', '')}
                         </span>
                       </td>
                     )}
@@ -383,7 +393,7 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                     {/* Offshore Exp */}
                     {colVisibility.experience && (
                       <td className="py-3 px-3 whitespace-nowrap font-mono text-secondary">
-                        <span className="font-semibold text-primary">{profile.yearsOfExperience}</span>y exp
+                        <span className="font-semibold text-primary">{formatExperience(profile.yearsOfExperience)}</span>{profile.yearsOfExperience == null ? '' : 'y exp'}
                       </td>
                     )}
 
@@ -410,14 +420,14 @@ export const SpecialistTableView: FC<SpecialistTableViewProps> = ({
                     {/* Day Rate */}
                     {colVisibility.dayRate && (
                       <td className="py-3 px-3 whitespace-nowrap font-mono font-medium text-primary">
-                        {profile.dayRate ? `£${profile.dayRate}/d` : 'Negotiable'}
+                        {profile.dayRate != null ? `£${profile.dayRate}/d` : 'Negotiable'}
                       </td>
                     )}
 
                     {/* Rating */}
                     {colVisibility.rating && (
                       <td className="py-3 px-3 whitespace-nowrap font-mono text-warning">
-                        ★ {profile.rating ? profile.rating.toFixed(1) : '4.9'}
+                        ★ {profile.rating != null ? profile.rating.toFixed(1) : '—'}
                       </td>
                     )}
 

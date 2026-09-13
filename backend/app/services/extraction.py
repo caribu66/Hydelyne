@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Any
 
@@ -16,6 +17,82 @@ CONFIDENCE_REVIEW_THRESHOLD = 0.50
 # Vision payload guard: base64 inflates raw bytes by ~33% before they enter
 # the LLM request, so cap source images well below the 50 MB upload limit.
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_EXTRACTION_RESPONSE_LENGTH = 100_000
+MAX_EXTRACTED_STRING_LENGTH = 10_000
+MAX_EXTRACTED_LIST_ITEMS = 100
+MAX_EXTRACTED_OBJECT_FIELDS = 100
+
+EXTRACTION_FIELDS = frozenset(
+    {
+        "document_type",
+        "certificate_type",
+        "certificate_number",
+        "issuing_body",
+        "holder_name",
+        "issue_date",
+        "expiry_date",
+        "renewal_date",
+        "training_provider",
+        "certification_level",
+        "confidence",
+        "needs_review",
+        "document_mismatch",
+        "notes",
+        "classification",
+        "reasoning",
+        "language",
+        "full_name",
+        "email",
+        "phone",
+        "nationality",
+        "country_of_residence",
+        "date_of_birth",
+        "gender",
+        "flying_point",
+        "address",
+        "qualifications",
+        "skills",
+        "expertise",
+        "systems",
+        "training_qualifications",
+        "certifications",
+        "specializations",
+        "work_history",
+        "languages",
+        "total_years_experience",
+        "certification_expiry_dates",
+        "certification_issue_dates",
+        "id_type",
+        "document_number",
+        "issuing_authority",
+        "visa_type",
+        "client_name",
+        "project_name",
+        "project_type",
+        "location",
+        "country",
+        "start_date",
+        "end_date",
+        "personnel",
+        "requirements",
+        "status",
+        "crew_member_name",
+        "evaluation_date",
+        "rating",
+        "competencies",
+        "strengths",
+        "areas_for_improvement",
+        "recommend_for_future",
+        "form_type",
+        "insurance_provider",
+        "insurance_policy_number",
+        "insurance_expiry",
+        "medical_status",
+        "next_of_kin_name",
+        "next_of_kin_phone",
+        "error",
+    }
+)
 
 EXTRACTION_PROMPTS = {
     "certificate": """You are extracting structured data from a training certificate or certification document.
@@ -222,6 +299,18 @@ class ExtractionService:
         result = ollama_client.extract_sync(prompt)
         return self.parse_response(result)
 
+    @staticmethod
+    def classification_from_result(result: dict[str, Any]) -> str:
+        """Return a safe classification value from untrusted model output."""
+        value = result.get("classification")
+        return value if isinstance(value, str) else "other"
+
+    @staticmethod
+    def confidence_from_result(result: dict[str, Any]) -> dict[str, Any]:
+        """Return dictionary-shaped confidence data for JSON persistence."""
+        value = result.get("confidence")
+        return value if isinstance(value, dict) else {}
+
     async def extract_document(
         self,
         text: str,
@@ -305,7 +394,10 @@ class ExtractionService:
         try:
             prompt = prompt.format(document_text="[IMAGE]")
         except Exception as e:
-            logger.warning(f"Vision prompt formatting failed, using raw template: {e}")
+            logger.warning(
+                "Vision prompt formatting failed, using raw template: %s",
+                type(e).__name__,
+            )
         result = ollama_client.extract_sync(
             prompt, model=ollama_client.vision_model, images=[image_data]
         )
@@ -322,13 +414,26 @@ class ExtractionService:
         # per-field signal, so treat it as absent rather than letting .items()
         # raise and fail the whole extraction.
         confidence = extracted_data.get("confidence")
-        if not isinstance(confidence, dict):
+        if confidence is None:
             confidence = {}
+        elif not isinstance(confidence, dict):
+            return "needs_review", ["confidence"]
         needs_review = []
+        malformed_confidence_fields = []
 
         for field, score in confidence.items():
-            if isinstance(score, (int, float)) and score < CONFIDENCE_REVIEW_THRESHOLD:
+            if (
+                isinstance(score, bool)
+                or not isinstance(score, (int, float))
+                or not math.isfinite(float(score))
+                or not 0.0 <= float(score) <= 1.0
+            ):
+                malformed_confidence_fields.append(field)
+            elif score < CONFIDENCE_REVIEW_THRESHOLD:
                 needs_review.append(field)
+
+        if malformed_confidence_fields:
+            return "needs_review", malformed_confidence_fields
 
         if needs_review:
             return "needs_review", needs_review
@@ -336,7 +441,9 @@ class ExtractionService:
         low_confidence_fields = [
             f
             for f, s in confidence.items()
-            if isinstance(s, (int, float)) and s < CONFIDENCE_AUTO_ACCEPT
+            if isinstance(s, (int, float))
+            and not isinstance(s, bool)
+            and s < CONFIDENCE_AUTO_ACCEPT
         ]
 
         if low_confidence_fields:
@@ -349,31 +456,51 @@ class ExtractionService:
         """Parse and validate LLM response."""
         response_text = result.get("response", "")
 
-        if not response_text:
+        if not isinstance(response_text, str) or not response_text.strip():
             return {"error": "Empty response from LLM", "needs_review": ["all"]}
+        if len(response_text) > MAX_EXTRACTION_RESPONSE_LENGTH:
+            return {"error": "LLM response is too large", "needs_review": ["all"]}
 
         try:
-            data = json.loads(response_text)
+            data = ExtractionService._load_json_response(response_text)
             return ExtractionService._normalize_extracted_payload(data)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, ValueError):
             start = response_text.find("{")
             end = response_text.rfind("}")
             if start != -1 and end != -1:
                 try:
-                    data = json.loads(response_text[start : end + 1])
+                    data = ExtractionService._load_json_response(response_text[start : end + 1])
                     return ExtractionService._normalize_extracted_payload(data)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, ValueError):
                     pass
 
             return {
                 "error": "Invalid JSON from LLM",
-                "raw_response": response_text[:500],
                 "needs_review": ["all"],
             }
 
     @staticmethod
-    def _normalize_extracted_payload(data: dict[str, Any]) -> dict[str, Any]:
+    def _load_json_response(response_text: str) -> Any:
+        """Load strict JSON so non-standard numeric constants never reach persistence."""
+
+        def reject_non_standard_number(value: str) -> None:
+            raise ValueError(f"Non-standard JSON number: {value}")
+
+        return json.loads(response_text, parse_constant=reject_non_standard_number)
+
+    @staticmethod
+    def _normalize_extracted_payload(data: Any) -> dict[str, Any]:
         """Normalize common extraction quirks so downstream code sees clean values."""
+        if not isinstance(data, dict):
+            return {
+                "error": "LLM response must be a JSON object",
+                "needs_review": ["all"],
+            }
+        data = {
+            key: ExtractionService._bound_json_value(value)
+            for key, value in data.items()
+            if key in EXTRACTION_FIELDS
+        }
         languages = data.get("languages")
         if isinstance(languages, list):
             normalized: list[str] = []
@@ -392,6 +519,28 @@ class ExtractionService:
             if normalized:
                 data["languages"] = normalized
         return data
+
+    @staticmethod
+    def _bound_json_value(value: Any, depth: int = 0) -> Any:
+        """Bound nested model output before it is persisted as extraction data."""
+        if depth >= 3:
+            return None
+        if isinstance(value, str):
+            return value[:MAX_EXTRACTED_STRING_LENGTH]
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        if isinstance(value, list):
+            return [
+                ExtractionService._bound_json_value(item, depth + 1)
+                for item in value[:MAX_EXTRACTED_LIST_ITEMS]
+            ]
+        if isinstance(value, dict):
+            return {
+                key: ExtractionService._bound_json_value(item, depth + 1)
+                for key, item in list(value.items())[:MAX_EXTRACTED_OBJECT_FIELDS]
+                if isinstance(key, str)
+            }
+        return value
 
 
 extraction_service = ExtractionService()

@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 # A process-local test database avoids inheriting an interrupted run's SQLite
 # write lock from the repository checkout.
-DEFAULT_TEST_DATABASE_URL = f"sqlite+aiosqlite:////tmp/hydenlyne-test-{os.getpid()}.db"
+# PIDs are not globally unique in managed/sandboxed runners. A PID-only path
+# lets separate pytest processes inherit one another's SQLite locks and makes
+# the autouse cleanup fixture hang before the first test body runs.
+DEFAULT_TEST_DATABASE_URL = f"sqlite+aiosqlite:////tmp/hydenlyne-test-{uuid.uuid4().hex}.db"
 
 # Set env vars before any app.* import so settings pick them up. ``get_settings``
 # is called at import time in ``app.config``, ``app.database``, ``app.main`` and
@@ -46,11 +49,22 @@ TEST_DATABASE_URL = os.getenv(
 )
 
 try:
-    test_engine = create_async_engine(TEST_DATABASE_URL, future=True)
+    # asyncpg connections bind to the creating event loop, and pytest-asyncio
+    # gives each test a fresh function-scoped loop: a pooled connection
+    # checked out on one loop explodes on the next ("attached to a different
+    # loop"). NullPool gives every checkout a loop-local connection, which is
+    # required for both PostgreSQL and SQLite test runs.
+    from sqlalchemy.pool import NullPool
+
+    # Do not reuse SQLite connections across pytest-asyncio event loops either.
+    # A connection retained by the async pool can leave aiosqlite's worker
+    # thread waiting on the loop that created it during import-time setup.
+    _poolclass = {"poolclass": NullPool}
+    test_engine = create_async_engine(TEST_DATABASE_URL, future=True, **_poolclass)
 except Exception:
     # Fallback to sqlite if asyncpg/postgres not available
     TEST_DATABASE_URL = DEFAULT_TEST_DATABASE_URL
-    test_engine = create_async_engine(TEST_DATABASE_URL, future=True)
+    test_engine = create_async_engine(TEST_DATABASE_URL, future=True, poolclass=NullPool)
 
 test_session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -91,6 +105,11 @@ meilisearch_client.delete_crew_member = AsyncMock(return_value=True)
 # Individual tests can monkeypatch cache_service.is_redis_available / specific
 # methods to exercise Redis-backed behavior (see test_login_rate_limit.py).
 cache_service.is_redis_available = AsyncMock(return_value=False)
+# Cache invalidation is a best-effort side effect in application services. A
+# health mock alone does not stop an actual ``delete`` call from opening a
+# five-second localhost socket timeout, which can make DB tests appear hung.
+cache_service.delete = AsyncMock(return_value=True)
+
 
 # Patch app's DB globals to use test DB so all `get_session_factory` calls use test DB
 import app.database as app_db
@@ -110,11 +129,22 @@ async def _init_test_db():
         await conn.run_sync(Base.metadata.create_all)
 
 
-try:
-    asyncio.get_event_loop().run_until_complete(_init_test_db())
-except RuntimeError:
-    # Already in event loop (pytest-asyncio will handle)
-    pass
+sync_test_engine = None
+if TEST_DATABASE_URL.startswith("sqlite+aiosqlite"):
+    # Import-time async setup can deadlock before pytest has installed its
+    # event-loop fixtures. Use a short-lived synchronous SQLite engine for
+    # schema creation; test queries still use the async engine below.
+    from sqlalchemy import create_engine
+
+    # Do not retain a synchronous SQLite connection beside the async engine;
+    # a pooled cleanup connection can keep a file lock while the first test
+    # session attempts its write.
+    sync_test_engine = create_engine(
+        TEST_DATABASE_URL.replace("+aiosqlite", ""), poolclass=NullPool
+    )
+    Base.metadata.create_all(sync_test_engine)
+else:
+    asyncio.run(_init_test_db())
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -124,10 +154,16 @@ async def _ensure_tables():
     # another's queries — e.g. a ranked/limited search silently swallowing a
     # just-inserted row behind leftover rows an earlier test committed.
     # A row-level delete is far cheaper than drop_all/create_all per test.
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
+    if sync_test_engine is not None:
+        with sync_test_engine.begin() as conn:
+            Base.metadata.create_all(conn)
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(table.delete())
+    else:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            for table in reversed(Base.metadata.sorted_tables):
+                await conn.execute(table.delete())
     yield
 
 

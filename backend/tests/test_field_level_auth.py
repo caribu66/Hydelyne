@@ -92,6 +92,7 @@ async def _create_crew_with_sensitive_fields(db_session) -> str:
         project_name="North Sea Job",
         country="UK",
         role="Surveyor",
+        document_ref="work-history-source.pdf",
     )
     db_session.add(wh)
     await db_session.commit()
@@ -105,13 +106,13 @@ async def _create_crew_with_sensitive_fields(db_session) -> str:
 _ROSTER_QUERY = """
 query Roster {
     crewMembers(limit: 10, offset: 0) {
-        id fullName nationality countryOfResidence gender languages flyingPoint
+        id fullName role nationality countryOfResidence gender languages flyingPoint
         email phone dateOfBirth availabilityStatus tags
         passport { number expiry issuingCountry }
         visa { type expiry }
         medical { status expiry provider }
         insurance { provider policyNumber coverage expiry }
-        workHistory { id clientName }
+        workHistory { id clientName documentRef }
         certifications { id certType certNumber issuingBody renewalDate documentRef }
         internalNotes
     }
@@ -150,10 +151,11 @@ async def test_roster_as_T1_redacts_C2_and_C3(client, db_session, monkeypatch):
     # C1 fields must remain
     assert target["fullName"] == "Sensitive Fields Crew"
     assert target["nationality"] == "British"
+    assert target["role"] is None
 
 
 @pytest.mark.asyncio
-async def test_roster_as_staff_shows_C2_but_not_C3(client, db_session, monkeypatch):
+async def test_roster_as_staff_is_C1_only(client, db_session, monkeypatch):
     crew_id = await _create_crew_with_sensitive_fields(db_session)
     staff = _make_user("staff")
     monkeypatch.setattr(
@@ -165,19 +167,41 @@ async def test_roster_as_staff_shows_C2_but_not_C3(client, db_session, monkeypat
     assert "errors" not in body, body
     target = next((m for m in body["data"]["crewMembers"] if m["id"] == crew_id), None)
     assert target is not None
-    # T2 sees C2
-    assert target["email"] == "sensitive@example.com"
-    assert target["phone"] == "+44 7000 999999"
-    assert len(target["workHistory"]) == 1
-    assert target["certifications"][0]["certNumber"] == "BOSIET-123"
-    # T2 must not see C3
+    # Bulk roster is a C1-only discovery surface. T2 access is reserved for
+    # the explicit crewMember detail query.
+    assert target["email"] is None
+    assert target["phone"] is None
+    assert target["workHistory"] == []
+    assert target["certifications"][0]["certNumber"] is None
     assert target["dateOfBirth"] is None
     assert target["passport"] is None
     assert target["medical"] is None
+    assert target["role"] is None
+
+    search_resp = await client.post(
+        "/graphql",
+        json={
+            "query": """
+                query Search {
+                    searchCrew(query: "Sensitive Fields Crew") {
+                        id email phone dateOfBirth
+                    }
+                }
+            """
+        },
+    )
+    search_body = search_resp.json()
+    assert "errors" not in search_body, search_body
+    search_target = next(
+        member for member in search_body["data"]["searchCrew"] if member["id"] == crew_id
+    )
+    assert search_target["email"] is None
+    assert search_target["phone"] is None
+    assert search_target["dateOfBirth"] is None
 
 
 @pytest.mark.asyncio
-async def test_roster_as_admin_shows_all(client, db_session, monkeypatch):
+async def test_roster_as_admin_is_also_C1_only(client, db_session, monkeypatch):
     crew_id = await _create_crew_with_sensitive_fields(db_session)
     admin = _make_user("admin")
     monkeypatch.setattr(
@@ -189,11 +213,47 @@ async def test_roster_as_admin_shows_all(client, db_session, monkeypatch):
     assert "errors" not in body, body
     target = next((m for m in body["data"]["crewMembers"] if m["id"] == crew_id), None)
     assert target is not None
-    assert target["email"] == "sensitive@example.com"
-    assert target["dateOfBirth"] is not None
-    assert target["passport"] is not None
-    assert target["passport"]["number"] == "GBR123456"
-    assert target["medical"] is not None
+    assert target["email"] is None
+    assert target["dateOfBirth"] is None
+    assert target["passport"] is None
+    assert target["medical"] is None
+    assert target["role"] is None
+
+
+@pytest.mark.asyncio
+async def test_staff_create_crew_response_redacts_c3_fields(client, db_session, monkeypatch):
+    staff = _make_user("staff")
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token", AsyncMock(return_value=staff)
+    )
+
+    response = await client.post(
+        "/graphql",
+        json={
+            "query": """
+                mutation {
+                    createCrewMember(
+                        fullName: "New Draft Specialist"
+                        email: "draft@example.com"
+                        dateOfBirth: "1985-05-15"
+                        cvSubmission: true
+                    ) {
+                        id
+                        email
+                        dateOfBirth
+                        passport { number }
+                    }
+                }
+            """
+        },
+    )
+
+    body = response.json()
+    assert "errors" not in body, body
+    created = body["data"]["createCrewMember"]
+    assert created["email"] == "draft@example.com"
+    assert created["dateOfBirth"] is None
+    assert created["passport"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +328,7 @@ async def test_detail_as_staff_shows_C2_not_C3(client, db_session, monkeypatch):
     m = body["data"]["crewMember"]
     assert m["email"] == "sensitive@example.com"
     assert m["passport"] is None
+    assert m["workHistory"][0]["documentRef"] == "work-history-source.pdf"
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +469,35 @@ async def test_document_single_T1_returns_null(client, db_session, monkeypatch):
     assert body["data"]["document"] is None
 
 
+@pytest.mark.asyncio
+async def test_document_single_staff_hides_orphan_document(client, db_session, monkeypatch):
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=None,
+        file_name="orphan.pdf",
+        file_type="pdf",
+        file_size=123,
+        storage_type="local",
+        storage_path="/tmp/orphan.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("staff")),
+    )
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": "query($id: String!) { document(id: $id) { id fileName } }",
+            "variables": {"id": doc.id},
+        },
+    )
+    body = resp.json()
+    assert "errors" not in body
+    assert body["data"]["document"] is None
+
+
 # ---------------------------------------------------------------------------
 # GraphQL: compliance + expiring + report gating
 # ---------------------------------------------------------------------------
@@ -438,6 +528,44 @@ async def test_expiring_certifications_T2_allowed(client, monkeypatch):
     )
     body = resp.json()
     assert "errors" not in body
+
+
+@pytest.mark.asyncio
+async def test_expiring_certifications_staff_cannot_read_another_draft(
+    client, db_session, monkeypatch
+):
+    staff_id = str(uuid.uuid4())
+    other_staff_id = str(uuid.uuid4())
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("staff", staff_id)),
+    )
+    draft = CrewMember(
+        id=str(uuid.uuid4()),
+        full_name="Other Staff Draft",
+        role="user",
+        publication_status="draft",
+        submitted_by=other_staff_id,
+    )
+    db_session.add(draft)
+    await db_session.flush()
+    db_session.add(
+        Certification(
+            id=str(uuid.uuid4()),
+            crew_member_id=draft.id,
+            cert_type="BOSIET",
+            expiry_date=__import__("datetime").date.today(),
+            status="expiring_soon",
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(
+        "/graphql", json={"query": "query { expiringCertifications(days: 30) { id } }"}
+    )
+    body = resp.json()
+    assert "errors" not in body
+    assert body["data"]["expiringCertifications"] == []
 
 
 @pytest.mark.asyncio
@@ -586,6 +714,37 @@ async def test_rest_download_T2_forbidden(client, db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_rest_download_rejects_storage_content_with_wrong_magic_bytes(
+    client, db_session, monkeypatch
+):
+    crew_id = await _create_crew_with_sensitive_fields(db_session)
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew_id,
+        file_name="secret.pdf",
+        file_type="pdf",
+        file_size=10,
+        storage_type="local",
+        storage_path="/tmp/secret.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    monkeypatch.setattr(
+        "app.services.upload.document_upload_service.get_file_async",
+        AsyncMock(return_value=b"not a pdf"),
+    )
+
+    resp = await client.get(f"/api/documents/{doc.id}/download")
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Stored document failed validation"
+
+
+@pytest.mark.asyncio
 async def test_rest_status_T1_forbidden(client, db_session, monkeypatch):
     crew_id = await _create_crew_with_sensitive_fields(db_session)
     doc = Document(
@@ -608,6 +767,27 @@ async def test_rest_status_T1_forbidden(client, db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_rest_status_staff_hides_orphan_document(client, db_session, monkeypatch):
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=None,
+        file_name="orphan.pdf",
+        file_type="pdf",
+        file_size=10,
+        storage_type="local",
+        storage_path="/tmp/orphan.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("staff")),
+    )
+    resp = await client.get(f"/api/documents/{doc.id}/status")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_rest_document_search_T1_forbidden(client, monkeypatch):
     monkeypatch.setattr(
         "app.services.crew.auth_service.get_user_from_token",
@@ -618,7 +798,29 @@ async def test_rest_document_search_T1_forbidden(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rest_document_search_T2_strips_C3(client, monkeypatch):
+async def test_rest_document_search_T2_strips_C3(client, db_session, monkeypatch):
+    visible_crew_id = str(uuid.uuid4())
+    document_id = "doc-1"
+    db_session.add(
+        CrewMember(
+            id=visible_crew_id,
+            full_name="Visible Approved Crew",
+            publication_status="approved",
+        )
+    )
+    db_session.add(
+        Document(
+            id=document_id,
+            crew_member_id=visible_crew_id,
+            file_name="a.pdf",
+            file_type="application/pdf",
+            file_size=1,
+            storage_type="local",
+            storage_path="/tmp/a.pdf",
+            extraction_status="extracted",
+        )
+    )
+    await db_session.commit()
     monkeypatch.setattr(
         "app.services.crew.auth_service.get_user_from_token",
         AsyncMock(return_value=_make_user("staff")),
@@ -628,20 +830,297 @@ async def test_rest_document_search_T2_strips_C3(client, monkeypatch):
         "search_documents",
         new=AsyncMock(
             return_value={
-                "hits": [{"id": "doc-1", "extracted_data": {"secret": "x"}, "file_name": "a.pdf"}],
+                "hits": [
+                    {
+                        "id": "doc-1",
+                        "crew_member_id": visible_crew_id,
+                        "extracted_data": {"secret": "x"},
+                        "file_name": "a.pdf",
+                    }
+                ],
                 "estimated_total_hits": 1,
             }
         ),
-    ):
+    ) as search_documents:
         resp = await client.get("/api/search/documents?q=test")
     assert resp.status_code == 200
     hits = resp.json()["hits"]
     assert hits[0].get("extracted_data") is None
     assert hits[0]["file_name"] == "a.pdf"
+    assert search_documents.call_args.kwargs["searchable_attributes"] == [
+        "file_name",
+        "file_type",
+        "classification",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_rest_crew_search_strips_denied_fields(client, monkeypatch):
+async def test_rest_document_search_staff_scope_excludes_another_draft(
+    client, db_session, monkeypatch
+):
+    actor = _make_user("staff")
+    approved_id = str(uuid.uuid4())
+    other_draft_id = str(uuid.uuid4())
+    approved_document_id = "approved-doc"
+    private_document_id = "private-doc"
+    db_session.add_all(
+        [
+            CrewMember(id=approved_id, full_name="Approved", publication_status="approved"),
+            CrewMember(
+                id=other_draft_id,
+                full_name="Private Draft",
+                publication_status="draft",
+                submitted_by=str(uuid.uuid4()),
+            ),
+        ]
+    )
+    db_session.add_all(
+        [
+            Document(
+                id=approved_document_id,
+                crew_member_id=approved_id,
+                file_name="approved.pdf",
+                file_type="application/pdf",
+                file_size=1,
+                storage_type="local",
+                storage_path="/tmp/approved.pdf",
+                extraction_status="extracted",
+            ),
+            Document(
+                id=private_document_id,
+                crew_member_id=other_draft_id,
+                file_name="private.pdf",
+                file_type="application/pdf",
+                file_size=1,
+                storage_type="local",
+                storage_path="/tmp/private.pdf",
+                extraction_status="extracted",
+            ),
+        ]
+    )
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=actor),
+    )
+    with patch.object(
+        meilisearch_client,
+        "search_documents",
+        new=AsyncMock(
+            return_value={
+                "hits": [
+                    {"id": "approved-doc", "crew_member_id": approved_id},
+                    {"id": "private-doc", "crew_member_id": other_draft_id},
+                ],
+                "estimated_total_hits": 2,
+            }
+        ),
+    ) as mocked:
+        resp = await client.get("/api/search/documents?q=test")
+
+    assert resp.status_code == 200
+    assert [hit["id"] for hit in resp.json()["hits"]] == ["approved-doc"]
+    assert f'crew_member_id IN ["{approved_id}"]' in mocked.call_args.kwargs["filters"]
+
+
+@pytest.mark.asyncio
+async def test_rest_document_search_admin_excludes_deleted_and_pending_projection_hits(
+    client, db_session, monkeypatch
+):
+    crew_id = str(uuid.uuid4())
+    db_session.add(
+        CrewMember(id=crew_id, full_name="Admin Search Crew", publication_status="approved")
+    )
+    db_session.add(
+        Document(
+            id="searchable-doc",
+            crew_member_id=crew_id,
+            file_name="searchable.pdf",
+            file_type="application/pdf",
+            file_size=1,
+            storage_type="local",
+            storage_path="/tmp/searchable.pdf",
+            extraction_status="approved",
+            extracted_data={"current": "yes"},
+            extracted_text="current extracted text",
+            extraction_confidence={"current": 0.99},
+        )
+    )
+    db_session.add(
+        Document(
+            id="pending-doc",
+            crew_member_id=crew_id,
+            file_name="pending.pdf",
+            file_type="application/pdf",
+            file_size=1,
+            storage_type="local",
+            storage_path="/tmp/pending.pdf",
+            extraction_status="pending",
+        )
+    )
+    db_session.add(
+        Document(
+            id="orphan-doc",
+            crew_member_id=None,
+            file_name="orphan.pdf",
+            file_type="application/pdf",
+            file_size=1,
+            storage_type="local",
+            storage_path="/tmp/orphan.pdf",
+            extraction_status="extracted",
+        )
+    )
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    with patch.object(
+        meilisearch_client,
+        "search_documents",
+        new=AsyncMock(
+            return_value={
+                "hits": [
+                    {
+                        "id": "searchable-doc",
+                        "crew_member_id": crew_id,
+                        "file_name": "stale-name.pdf",
+                        "extracted_data": {"stale": "yes"},
+                        "extracted_text": "stale extracted text",
+                    },
+                    {"id": "orphan-doc", "crew_member_id": None},
+                    {"id": "deleted-doc", "crew_member_id": crew_id},
+                    {"id": "pending-doc", "crew_member_id": crew_id},
+                ],
+                "estimated_total_hits": 4,
+            }
+        ),
+    ):
+        resp = await client.get("/api/search/documents?q=test")
+
+    assert resp.status_code == 200
+    assert [hit["id"] for hit in resp.json()["hits"]] == ["searchable-doc", "orphan-doc"]
+    # The page has two authoritative hits, but the provider estimate still
+    # describes the full result set rather than this filtered page.
+    assert resp.json()["estimated_total_hits"] == 4
+    searchable_hit = resp.json()["hits"][0]
+    assert searchable_hit["file_name"] == "searchable.pdf"
+    assert searchable_hit["extracted_data"] == {"current": "yes"}
+    assert searchable_hit["extracted_text"] == "current extracted text"
+
+
+@pytest.mark.asyncio
+async def test_rest_document_search_admin_excludes_documents_owned_by_drafts(
+    client, db_session, monkeypatch
+):
+    approved_id = str(uuid.uuid4())
+    draft_id = str(uuid.uuid4())
+    db_session.add_all(
+        [
+            CrewMember(id=approved_id, full_name="Approved", publication_status="approved"),
+            CrewMember(id=draft_id, full_name="Unpublished", publication_status="draft"),
+            Document(
+                id="approved-search-doc",
+                crew_member_id=approved_id,
+                file_name="approved.pdf",
+                file_type="application/pdf",
+                file_size=1,
+                storage_type="local",
+                storage_path="/tmp/approved.pdf",
+                extraction_status="extracted",
+            ),
+            Document(
+                id="draft-search-doc",
+                crew_member_id=draft_id,
+                file_name="draft.pdf",
+                file_type="application/pdf",
+                file_size=1,
+                storage_type="local",
+                storage_path="/tmp/draft.pdf",
+                extraction_status="extracted",
+            ),
+        ]
+    )
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    with patch.object(
+        meilisearch_client,
+        "search_documents",
+        new=AsyncMock(
+            return_value={
+                "hits": [
+                    {"id": "approved-search-doc", "crew_member_id": approved_id},
+                    {"id": "draft-search-doc", "crew_member_id": draft_id},
+                ],
+                "estimated_total_hits": 2,
+            }
+        ),
+    ):
+        response = await client.get("/api/search/documents?q=search")
+
+    assert response.status_code == 200
+    assert [hit["id"] for hit in response.json()["hits"]] == ["approved-search-doc"]
+
+
+@pytest.mark.asyncio
+async def test_rest_document_search_rechecks_requested_crew_against_source(
+    client, db_session, monkeypatch
+):
+    """A stale projection must not satisfy a filter for a former owner."""
+    former_owner_id = str(uuid.uuid4())
+    current_owner_id = str(uuid.uuid4())
+    db_session.add_all(
+        [
+            CrewMember(id=former_owner_id, full_name="Former Owner", publication_status="approved"),
+            CrewMember(
+                id=current_owner_id, full_name="Current Owner", publication_status="approved"
+            ),
+            Document(
+                id="reassigned-doc",
+                crew_member_id=current_owner_id,
+                file_name="reassigned.pdf",
+                file_type="application/pdf",
+                file_size=1,
+                storage_type="local",
+                storage_path="/tmp/reassigned.pdf",
+                extraction_status="extracted",
+            ),
+        ]
+    )
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    with patch.object(
+        meilisearch_client,
+        "search_documents",
+        new=AsyncMock(
+            return_value={
+                "hits": [{"id": "reassigned-doc", "crew_member_id": former_owner_id}],
+                "estimated_total_hits": 1,
+            }
+        ),
+    ):
+        response = await client.get(
+            "/api/search/documents",
+            params={"q": "reassigned", "crew_id": former_owner_id},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["hits"] == []
+    # The provider estimate is retained because this response represents only
+    # one page, even though that stale hit was removed from the returned data.
+    assert response.json()["estimated_total_hits"] == 1
+
+
+@pytest.mark.asyncio
+async def test_rest_crew_search_strips_denied_fields(client, db_session, monkeypatch):
+    db_session.add(CrewMember(id="crew-1", full_name="A", publication_status="approved"))
+    await db_session.commit()
     monkeypatch.setattr(
         "app.services.crew.auth_service.get_user_from_token",
         AsyncMock(return_value=_make_user("user")),
@@ -651,7 +1130,17 @@ async def test_rest_crew_search_strips_denied_fields(client, monkeypatch):
         "search_crew_members",
         new=AsyncMock(
             return_value={
-                "hits": [{"id": "crew-1", "full_name": "A", "email": "a@b.com", "phone": "123"}],
+                "hits": [
+                    {
+                        "id": "crew-1",
+                        "full_name": "A",
+                        "email": "a@b.com",
+                        "phone": "123",
+                        "internal_notes": "private",
+                        "role": "admin",
+                        "submitted_by": "owner",
+                    }
+                ],
                 "estimated_total_hits": 1,
             }
         ),
@@ -661,6 +1150,9 @@ async def test_rest_crew_search_strips_denied_fields(client, monkeypatch):
     hits = resp.json()["hits"]
     assert "email" not in hits[0]
     assert "phone" not in hits[0]
+    assert "internal_notes" not in hits[0]
+    assert "role" not in hits[0]
+    assert "submitted_by" not in hits[0]
 
 
 # ---------------------------------------------------------------------------
@@ -724,3 +1216,68 @@ async def test_dropbox_download_T1_forbidden(client, monkeypatch):
     )
     resp = await client.post(f"/api/dropbox/download/{doc_id}")
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_dropbox_download_admin_returns_file_bytes(client, db_session, monkeypatch):
+    crew = CrewMember(id=str(uuid.uuid4()), full_name="Dropbox Download Crew")
+    db_session.add(crew)
+    await db_session.flush()
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        file_name="certificate.pdf",
+        file_type="pdf",
+        file_size=4,
+        storage_type="dropbox",
+        storage_path="/hydenlyne/crew/certificate.pdf",
+        dropbox_path="/hydenlyne/crew/certificate.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    with patch(
+        "app.api.dropbox.download_dropbox_content",
+        new=AsyncMock(return_value=(200, b"%PDF-1.4")),
+    ):
+        result = await client.post(f"/api/dropbox/download/{doc.id}")
+
+    assert result.status_code == 200
+    assert result.content == b"%PDF-1.4"
+    assert result.headers["content-disposition"].startswith(
+        'attachment; filename="certificate.pdf"'
+    )
+
+
+@pytest.mark.asyncio
+async def test_dropbox_download_admin_rejects_wrong_magic_bytes(client, db_session, monkeypatch):
+    crew = CrewMember(id=str(uuid.uuid4()), full_name="Invalid Dropbox Crew")
+    db_session.add(crew)
+    await db_session.flush()
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew.id,
+        file_name="certificate.pdf",
+        file_type="pdf",
+        file_size=10,
+        storage_type="dropbox",
+        storage_path="/hydenlyne/crew/certificate.pdf",
+        dropbox_path="/hydenlyne/crew/certificate.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    with patch(
+        "app.api.dropbox.download_dropbox_content",
+        new=AsyncMock(return_value=(200, b"not a pdf")),
+    ):
+        result = await client.post(f"/api/dropbox/download/{doc.id}")
+
+    assert result.status_code == 422
+    assert result.json()["detail"] == "Stored document failed validation"

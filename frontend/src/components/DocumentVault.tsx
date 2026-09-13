@@ -1,10 +1,18 @@
-import { FC, useState, useMemo, MouseEvent } from 'react';
+import { FC, useEffect, useMemo, useRef, useState, MouseEvent } from 'react';
 import { UserProfile, SpecialistDocument, DocumentCategory } from '../types';
 import { getDocumentComplianceStatus } from '../hooks/useSpecialistDocuments';
+import type { DocumentMutationResult } from '../hooks/useSpecialistDocuments';
+import {
+  documentTimestamp,
+  formatDocumentDate,
+  formatDocumentDateTime,
+  isDocumentAuditCleared,
+  resolveSelectedDocument,
+} from './documentVaultUtils';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DocumentUploadModal } from './DocumentUploadModal';
 import { documentMatchesQuery, hasOriginalDocumentFile } from '../utils/documentUtils';
-import { createDocumentRequest } from '../lib/documentsApi';
+import { createDocumentRequest, downloadDocumentFile } from '../lib/documentsApi';
 import {
   FileText,
   ShieldCheck,
@@ -29,12 +37,13 @@ export type DocumentSortOption = 'uploaded-desc' | 'uploaded-asc' | 'expiry-asc'
 interface DocumentVaultProps {
   profile: UserProfile;
   documents: SpecialistDocument[];
-  onAddDocument: () => void;
-  onRemoveDocument: (docId: string) => void | Promise<void>;
-  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
+  onAddDocument: () => void | Promise<void>;
+  onRemoveDocument: (docId: string) => void | Promise<void | DocumentMutationResult>;
+  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void | DocumentMutationResult>;
   onShowToast: (msg: string) => void;
   canManageDocuments?: boolean;
   canRequestDocuments?: boolean;
+  sessionKey?: string | null;
   compact?: boolean;
 }
 
@@ -47,6 +56,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   onShowToast,
   canManageDocuments = false,
   canRequestDocuments = false,
+  sessionKey = null,
   compact = false,
 }) => {
   const [selectedDoc, setSelectedDoc] = useState<SpecialistDocument | null>(null);
@@ -54,14 +64,32 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [sortOption, setSortOption] = useState<DocumentSortOption>('uploaded-desc');
   const [searchQuery, setSearchQuery] = useState('');
+  const currentSessionKeyRef = useRef(sessionKey);
+  currentSessionKeyRef.current = sessionKey;
+
+  useEffect(() => {
+    setSelectedDoc(null);
+    setIsUploadOpen(false);
+    setActiveCategory('all');
+    setSortOption('uploaded-desc');
+    setSearchQuery('');
+  }, [profile.id, sessionKey]);
+
+  useEffect(() => {
+    setSelectedDoc((selected) => resolveSelectedDocument(selected, documents));
+  }, [documents]);
 
   const handleRequestDocument = async () => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     try {
       const request = await createDocumentRequest(profile.id);
+      if (currentSessionKeyRef.current !== sessionKey) return;
       const link = `${window.location.origin}/upload/${encodeURIComponent(request.token)}`;
       await navigator.clipboard.writeText(link);
+      if (currentSessionKeyRef.current !== sessionKey) return;
       onShowToast('Secure upload link copied — it expires in 14 days');
     } catch (error) {
+      if (currentSessionKeyRef.current !== sessionKey) return;
       onShowToast(error instanceof Error ? error.message : 'Could not create a secure upload link');
     }
   };
@@ -70,6 +98,14 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   const totalCount = documents.length;
   const expiredCount = documents.filter((d) => getDocumentComplianceStatus(d).status === 'expired').length;
   const expiringSoonCount = documents.filter((d) => getDocumentComplianceStatus(d).status === 'expiring_soon').length;
+  const invalidExpiryCount = documents.filter((d) => getDocumentComplianceStatus(d).status === 'invalid').length;
+  const reviewRequiredCount = documents.filter((d) => !d.isVerified).length;
+  const auditCleared = isDocumentAuditCleared(
+    documents.map((document) => ({
+      isVerified: document.isVerified,
+      complianceStatus: getDocumentComplianceStatus(document).status,
+    })),
+  );
 
   // Auto-sort documents by upload date (newest first) by default
   const sortedAndFilteredDocs = useMemo(() => {
@@ -82,20 +118,22 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
       })
       .sort((a, b) => {
         if (sortOption === 'uploaded-desc') {
-          const timeA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : (a.issueDate ? new Date(a.issueDate).getTime() : 0);
-          const timeB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : (b.issueDate ? new Date(b.issueDate).getTime() : 0);
+          const timeA = documentTimestamp(a.uploadedAt) ?? documentTimestamp(a.issueDate) ?? 0;
+          const timeB = documentTimestamp(b.uploadedAt) ?? documentTimestamp(b.issueDate) ?? 0;
           return timeB - timeA;
         }
         if (sortOption === 'uploaded-asc') {
-          const timeA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : (a.issueDate ? new Date(a.issueDate).getTime() : 0);
-          const timeB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : (b.issueDate ? new Date(b.issueDate).getTime() : 0);
+          const timeA = documentTimestamp(a.uploadedAt) ?? documentTimestamp(a.issueDate) ?? 0;
+          const timeB = documentTimestamp(b.uploadedAt) ?? documentTimestamp(b.issueDate) ?? 0;
           return timeA - timeB;
         }
         if (sortOption === 'expiry-asc') {
-          if (!a.expiryDate && !b.expiryDate) return 0;
-          if (!a.expiryDate) return 1;
-          if (!b.expiryDate) return -1;
-          return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+          const timeA = documentTimestamp(a.expiryDate);
+          const timeB = documentTimestamp(b.expiryDate);
+          if (timeA === null && timeB === null) return 0;
+          if (timeA === null) return 1;
+          if (timeB === null) return -1;
+          return timeA - timeB;
         }
         if (sortOption === 'title-asc') {
           return a.title.localeCompare(b.title);
@@ -108,21 +146,6 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
   const clearFilters = () => {
     setActiveCategory('all');
     setSearchQuery('');
-  };
-
-  const formatUploadDate = (isoString?: string): string => {
-    if (!isoString) return 'Archived';
-    try {
-      const date = new Date(isoString);
-      if (isNaN(date.getTime())) return 'Archived';
-      return date.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return 'Archived';
-    }
   };
 
   const getCategoryIcon = (category: DocumentCategory) => {
@@ -142,30 +165,38 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
     }
   };
 
-  const handleDownloadSingle = (doc: SpecialistDocument, e: MouseEvent) => {
+  const handleDownloadSingle = async (doc: SpecialistDocument, e: MouseEvent) => {
     e.stopPropagation();
-    if (!hasOriginalDocumentFile(doc)) {
-      onShowToast(`Original file unavailable for “${doc.title}”. Export the compliance record instead.`);
-      return;
-    }
-
-    if (doc.fileUrl) {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    if (doc.fileUrl && hasOriginalDocumentFile(doc)) {
       const a = window.document.createElement('a');
       a.href = doc.fileUrl;
       a.download = doc.fileName || `${doc.title}.pdf`;
       window.document.body.appendChild(a);
       a.click();
-      window.document.body.removeChild(a);
-      onShowToast(`Downloaded ${doc.fileName}`);
+      a.remove();
+    } else if (canManageDocuments) {
+      try {
+        await downloadDocumentFile(doc.id, doc.fileName || `${doc.title}.pdf`);
+        if (currentSessionKeyRef.current !== sessionKey) return;
+      } catch (error) {
+        if (currentSessionKeyRef.current !== sessionKey) return;
+        onShowToast(error instanceof Error ? error.message : 'Could not download the original file');
+        return;
+      }
+    } else {
+      onShowToast(`Original file unavailable for “${doc.title}”. Export the compliance record instead.`);
       return;
     }
+    if (currentSessionKeyRef.current === sessionKey) onShowToast(`Downloaded ${doc.fileName}`);
   };
 
   const handleDownloadAllBundle = () => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     const summary = documents
       .map((d, i) => {
         const compliance = getDocumentComplianceStatus(d);
-        return `[${i + 1}] ${d.title}\nCategory: ${d.category.toUpperCase()} | File: ${d.fileName}\nUploaded: ${new Date(d.uploadedAt).toLocaleString()} | Validity: ${compliance.label} | Issued: ${d.issueDate || 'N/A'}\nNotes: ${d.notes || 'None'}\n`;
+        return `[${i + 1}] ${d.title}\nCategory: ${d.category.toUpperCase()} | File: ${d.fileName}\nUploaded: ${formatDocumentDateTime(d.uploadedAt)} | Validity: ${compliance.label} | Issued: ${d.issueDate || 'N/A'}\nNotes: ${d.notes || 'None'}\n`;
       })
       .join('\n----------------------------------------\n');
 
@@ -174,7 +205,7 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
 CONTRACTOR: ${profile.name}
 DISCIPLINE: ${profile.department} (${profile.title})
 TOTAL CREDENTIALS: ${documents.length}
-MOBILISATION COMPLIANCE: ${expiredCount === 0 ? '100% AUDIT COMPLIANT (CLEARED)' : 'ACTION REQUIRED'}
+MOBILISATION COMPLIANCE: ${auditCleared ? '100% AUDIT COMPLIANT (CLEARED)' : 'ACTION REQUIRED'}
 GENERATED AT: ${new Date().toLocaleString()}
 ===================================================
 
@@ -182,7 +213,7 @@ DOCUMENT REGISTRATION INVENTORY:
 ----------------------------------------
 ${summary}
 ===================================================
-All documents have been digitally archived for offshore mobilization verification.`;
+Documents listed above are recorded in the document vault for compliance review.`;
 
     const blob = new Blob([manifest], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -192,7 +223,7 @@ All documents have been digitally archived for offshore mobilization verificatio
     window.document.body.appendChild(a);
     a.click();
     window.document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
     onShowToast(`Exported complete compliance bundle for ${profile.name.split(' ')[0]}`);
   };
 
@@ -212,12 +243,18 @@ All documents have been digitally archived for offshore mobilization verificatio
               </span>
             </div>
             <p className="text-xs text-secondary">
-              {expiredCount > 0 ? (
+              {totalCount === 0 ? (
+                <span className="text-secondary font-medium">No compliance documents recorded</span>
+              ) : expiredCount > 0 ? (
                 <span className="text-danger font-medium">⚠️ {expiredCount} document expired</span>
               ) : expiringSoonCount > 0 ? (
                 <span className="text-warning font-medium">⚠️ {expiringSoonCount} document expiring soon</span>
+              ) : invalidExpiryCount > 0 ? (
+                <span className="text-warning font-medium">⚠️ {invalidExpiryCount} document{invalidExpiryCount === 1 ? '' : 's'} have an invalid expiry date</span>
+              ) : reviewRequiredCount > 0 ? (
+                <span className="text-warning font-medium">⚠️ {reviewRequiredCount} document{reviewRequiredCount === 1 ? '' : 's'} need{reviewRequiredCount === 1 ? 's' : ''} compliance review</span>
               ) : (
-                <span className="text-positive font-medium">✓ 100% offshore mobilization compliant</span>
+                <span className="text-positive font-medium">✓ All recorded documents verified and current</span>
               )}
             </p>
           </div>
@@ -407,9 +444,9 @@ All documents have been digitally archived for offshore mobilization verificatio
                       <span className="font-mono text-secondary">{doc.fileName}</span>
                       {doc.fileSize && <span>• {doc.fileSize}</span>}
                       <span>•</span>
-                      <span className="flex items-center gap-1 font-mono text-secondary" title={`Uploaded: ${new Date(doc.uploadedAt).toLocaleString()}`}>
+                      <span className="flex items-center gap-1 font-mono text-secondary" title={`Uploaded: ${formatDocumentDateTime(doc.uploadedAt)}`}>
                         <Clock className="w-3 h-3 text-secondary" />
-                        <span>Uploaded {formatUploadDate(doc.uploadedAt)}</span>
+                        <span>Uploaded {formatDocumentDate(doc.uploadedAt)}</span>
                       </span>
                       <span>•</span>
                       <span className={`px-2 py-0.2 rounded text-xs font-semibold border ${compliance.badgeClass}`}>
@@ -425,9 +462,9 @@ All documents have been digitally archived for offshore mobilization verificatio
                     type="button"
                     onClick={(e) => handleDownloadSingle(doc, e)}
                     aria-label={`Download ${doc.title}`}
-                    disabled={!hasOriginalDocumentFile(doc)}
+                    disabled={!hasOriginalDocumentFile(doc) && !canManageDocuments}
                     className="p-1.5 rounded-lg bg-surface-raised hover:bg-surface-selected text-secondary hover:text-primary transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface-raised"
-                    title={hasOriginalDocumentFile(doc) ? 'Download original file' : 'Original file unavailable; export the compliance record instead'}
+                    title={hasOriginalDocumentFile(doc) || canManageDocuments ? 'Download original file' : 'Original file unavailable; export the compliance record instead'}
                   >
                     <Download className="w-3.5 h-3.5" />
                   </button>
@@ -478,6 +515,7 @@ All documents have been digitally archived for offshore mobilization verificatio
         profile={profile}
         onAddDocument={onAddDocument}
         onShowToast={onShowToast}
+        sessionKey={sessionKey}
       />}
 
       {/* Preview Modal */}
@@ -490,6 +528,8 @@ All documents have been digitally archived for offshore mobilization verificatio
         onShowToast={onShowToast}
         onReviewAction={canManageDocuments ? onReviewDocument : undefined}
         canReview={canManageDocuments}
+        canDownloadOriginal={canManageDocuments}
+        sessionKey={sessionKey}
       />
     </div>
   );

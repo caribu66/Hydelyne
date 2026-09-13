@@ -1,5 +1,7 @@
 import { FC, useEffect } from 'react';
 import { UserProfile } from '../types';
+import { formatExperience } from '../utils/experience';
+import { availabilityLabel } from '../utils/profileLabels';
 import {
   Check,
   Printer,
@@ -74,9 +76,10 @@ export const DossierPrintView: FC<DossierPrintViewProps> = ({ profile, onClose }
 
             <div className="text-right space-y-1 text-xs text-muted font-mono">
               <div className="font-bold text-on-action text-sm">
-                £{profile.dayRate || 850}/day <span className="font-normal text-xs text-muted">(Standard Day Rate)</span>
+                {profile.dayRate != null ? `£${profile.dayRate}/day` : 'Rate on request'}{' '}
+                <span className="font-normal text-xs text-muted">(Commercial terms)</span>
               </div>
-              <div>Status: {profile.availability}</div>
+              <div>Status: {availabilityLabel(profile.availability)}</div>
               <div>Base: {profile.location}</div>
               <div>Doc Ref: HYD-DOS-{profile.id.slice(0, 8).toUpperCase()}</div>
             </div>
@@ -86,7 +89,7 @@ export const DossierPrintView: FC<DossierPrintViewProps> = ({ profile, onClose }
           <div className="grid grid-cols-4 gap-4 p-4 rounded-[10px] bg-action border border-border-strong text-xs">
             <div>
               <span className="text-xs uppercase font-bold text-muted block">Total Experience</span>
-              <span className="text-base font-bold text-on-action font-mono">{profile.yearsOfExperience} Years</span>
+              <span className="text-base font-bold text-on-action font-mono">{formatExperience(profile.yearsOfExperience)}{profile.yearsOfExperience == null ? '' : ' Years'}</span>
             </div>
             <div>
               <span className="text-xs uppercase font-bold text-muted block">Discipline</span>
@@ -94,11 +97,13 @@ export const DossierPrintView: FC<DossierPrintViewProps> = ({ profile, onClose }
             </div>
             <div>
               <span className="text-xs uppercase font-bold text-muted block">Client Satisfaction</span>
-              <span className="text-base font-bold text-on-action font-mono">{profile.rating || 4.9} / 5.0</span>
+              <span className="text-base font-bold text-on-action font-mono">
+                {profile.rating != null ? `${profile.rating} / 5.0` : 'Not recorded'}
+              </span>
             </div>
             <div>
               <span className="text-xs uppercase font-bold text-muted block">Accreditation</span>
-              <span className="text-sm font-semibold text-positive">Verified Offshore</span>
+              <span className="text-sm font-semibold text-muted">Not recorded</span>
             </div>
           </div>
 
@@ -194,7 +199,7 @@ export const DossierPrintView: FC<DossierPrintViewProps> = ({ profile, onClose }
 
           {/* Footer Notice */}
           <div className="pt-6 border-t border-border-strong flex items-center justify-between text-xs text-muted font-mono">
-            <span>Verified by Hydenlyne Quality Assurance & Compliance</span>
+            <span>Prepared from the available contractor record</span>
             <span>https://hydenlyne.com • operations@hydenlyne.com</span>
           </div>
         </div>

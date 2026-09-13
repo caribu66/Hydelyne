@@ -67,6 +67,40 @@ export function formatProjectSearchQuery(project: {
   return parts.join(' ').trim()
 }
 
+export function formatCalendarDate(value: string | null | undefined): string {
+  if (!value) return '—'
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (dateOnly) {
+    const [, yearText, monthText, dayText] = dateOnly
+    const year = Number(yearText)
+    const month = Number(monthText)
+    const day = Number(dayText)
+    const localDate = new Date(year, month - 1, day)
+    if (
+      localDate.getFullYear() === year
+      && localDate.getMonth() === month - 1
+      && localDate.getDate() === day
+    ) {
+      return localDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    }
+    return value
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+export function isoDateAfterDays(days: number, now: Date = new Date()): string {
+  if (!Number.isInteger(days)) throw new Error('days must be an integer')
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days)
+  const year = date.getFullYear().toString().padStart(4, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const day = date.getDate().toString().padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function formatExpiringCertSearchQuery(certType?: string): string {
   if (certType && certType.trim()) return `Who has ${certType.trim()} expiring soon?`
   return 'Who has certifications expiring soon?'

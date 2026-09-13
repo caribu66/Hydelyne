@@ -1,181 +1,266 @@
-"""Tests for the Phase 2 core: ConsultantKnowledgeService, the single access
-layer future features should call instead of reaching into Postgres/
-Meilisearch/Qdrant/Ollama directly. See backend/docs/consultant-knowledge-core.md.
-"""
-
-import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import select
 
-from app.config import get_settings
-from app.database import get_session_factory
-from app.models import Certification, CrewMember, Document, WorkHistory
-from app.services.consultant_knowledge import consultant_knowledge_service, qdrant_service
+from app.services.consultant_knowledge import consultant_knowledge_service
 
 
-async def _create_crew_with_relations(session) -> str:
-    crew_id = str(uuid.uuid4())
-    session.add(
-        CrewMember(
-            id=crew_id,
-            full_name="Knowledge Core Test Crew",
-            email="knowledge-core@example.com",
-            role="user",
-        )
+class _Result:
+    def __init__(self, value):
+        self.value = value
+
+    def scalar_one_or_none(self):
+        return self.value
+
+
+class _Session:
+    def __init__(self, current):
+        self.current = current
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
+    async def execute(self, _statement):
+        return _Result(self.current)
+
+
+def _session_factory(current):
+    return lambda: _Session(current)
+
+
+@pytest.mark.asyncio
+async def test_meilisearch_indexing_reloads_latest_profile_before_write():
+    stale_caller_object = SimpleNamespace(
+        id="crew-1",
+        full_name="Old Name",
+        publication_status="approved",
     )
-    session.add(
-        Certification(
-            id=str(uuid.uuid4()),
-            crew_member_id=crew_id,
-            cert_type="BOSIET",
-            status="valid",
-        )
+    latest_source_row = SimpleNamespace(
+        id="crew-1",
+        full_name="New Name",
+        nationality=None,
+        country_of_residence=None,
+        availability_status="available",
+        tags=[],
+        gender=None,
+        languages=None,
+        flying_point=None,
+        education=None,
+        geographical_experience=None,
+        systems_experience=None,
+        training_qualifications=None,
+        professional_summary=None,
+        publication_status="approved",
     )
-    session.add(
-        WorkHistory(
-            id=str(uuid.uuid4()),
-            crew_member_id=crew_id,
-            client_name="Acme Offshore",
-            role="Surveyor",
-        )
+    index = AsyncMock(return_value={"task_uid": 1})
+
+    with (
+        patch("app.database.get_session_factory", return_value=_session_factory(latest_source_row)),
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.index_crew_member",
+            index,
+        ),
+    ):
+        result = await consultant_knowledge_service.index_crew_member(stale_caller_object)
+
+    assert result is True
+    indexed = index.await_args.args[0]
+    assert indexed["full_name"] == "New Name"
+
+
+@pytest.mark.asyncio
+async def test_meilisearch_indexing_corrects_profile_changed_during_write():
+    first_source_row = SimpleNamespace(
+        id="crew-1",
+        full_name="Old Name",
+        nationality=None,
+        country_of_residence=None,
+        availability_status="available",
+        tags=[],
+        gender=None,
+        languages=None,
+        flying_point=None,
+        education=None,
+        geographical_experience=None,
+        systems_experience=None,
+        training_qualifications=None,
+        professional_summary=None,
+        publication_status="approved",
     )
-    session.add(
-        Document(
-            id=str(uuid.uuid4()),
-            crew_member_id=crew_id,
-            file_name="cv.pdf",
-            file_type="pdf",
-            file_size=1024,
-            storage_type="local",
-            storage_path="/tmp/cv.pdf",
-            classification="cv",
-            extraction_status="extracted",
-        )
-    )
-    await session.commit()
-    return crew_id
+    latest_source_row = SimpleNamespace(**{**vars(first_source_row), "full_name": "New Name"})
+    index = AsyncMock(side_effect=[{"task_uid": 1}, {"task_uid": 2}])
 
+    class _ChangingSession:
+        calls = 0
 
-@pytest.mark.asyncio
-async def test_get_profile_returns_crew_certifications_work_history_and_documents():
-    factory = get_session_factory()
-    async with factory() as session:
-        crew_id = await _create_crew_with_relations(session)
+        async def __aenter__(self):
+            return self
 
-    async with factory() as session:
-        profile = await consultant_knowledge_service.get_profile(crew_id, db_session=session)
+        async def __aexit__(self, *_args):
+            return False
 
-    assert profile is not None
-    assert profile.crew_member.id == crew_id
-    assert profile.crew_member.full_name == "Knowledge Core Test Crew"
-    assert len(profile.crew_member.certifications) == 1
-    assert profile.crew_member.certifications[0].cert_type == "BOSIET"
-    assert len(profile.crew_member.work_history) == 1
-    assert profile.crew_member.work_history[0].client_name == "Acme Offshore"
-    assert len(profile.documents) == 1
-    assert profile.documents[0].file_name == "cv.pdf"
-    assert profile.documents[0].classification == "cv"
+        async def execute(self, _statement):
+            self.calls += 1
+            return _Result(first_source_row if self.calls == 1 else latest_source_row)
 
+    changing_session = _ChangingSession()
+    with (
+        patch("app.database.get_session_factory", return_value=lambda: changing_session),
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.index_crew_member",
+            index,
+        ),
+    ):
+        result = await consultant_knowledge_service.index_crew_member(first_source_row)
 
-@pytest.mark.asyncio
-async def test_get_profile_returns_none_for_unknown_crew_id():
-    factory = get_session_factory()
-    async with factory() as session:
-        profile = await consultant_knowledge_service.get_profile(
-            str(uuid.uuid4()), db_session=session
-        )
-
-    assert profile is None
-
-
-@pytest.mark.asyncio
-async def test_summarize_returns_graceful_message_for_unknown_crew_id():
-    """The not-found branch returns without ever calling Ollama, so this
-    stays a fast, always-run test; the LLM-backed narrative branch is
-    exercised manually/under `pytest -m llm` alongside crew_query.py's own
-    Ollama-dependent tests."""
-    factory = get_session_factory()
-    async with factory() as session:
-        summary = await consultant_knowledge_service.summarize(
-            str(uuid.uuid4()), db_session=session
-        )
-
-    assert "No crew member found" in summary
-
-
-@pytest.mark.asyncio
-async def test_semantic_search_mode_is_disabled_by_default():
-    """Documents the Phase 3 checkpoint: the code is wired, but stays
-    inert (raises rather than silently degrading) until
-    ENABLE_SEMANTIC_SEARCH is explicitly turned on."""
-    settings = get_settings()
-    assert settings.ENABLE_SEMANTIC_SEARCH is False
-
-    factory = get_session_factory()
-    async with factory() as session:
-        with pytest.raises(NotImplementedError):
-            await consultant_knowledge_service.search(
-                "anything", db_session=session, mode="semantic"
-            )
-
-
-@pytest.mark.asyncio
-async def test_semantic_search_activates_once_flag_is_enabled():
-    """When ENABLE_SEMANTIC_SEARCH is on, search(mode="semantic") actually
-    calls Qdrant instead of raising — proving the gate itself is wired
-    correctly, not just the off-path stub."""
-    settings = get_settings()
-    factory = get_session_factory()
-    fake_hits = [{"id": "doc-1", "score": 0.91, "metadata": {"file_name": "cv.pdf"}}]
-
-    with patch.object(
-        qdrant_service, "search_similar", new=AsyncMock(return_value=fake_hits)
-    ) as mock_search:
-        settings.ENABLE_SEMANTIC_SEARCH = True
-        try:
-            async with factory() as session:
-                result = await consultant_knowledge_service.search(
-                    "offshore wind survey experience", db_session=session, mode="semantic"
-                )
-        finally:
-            settings.ENABLE_SEMANTIC_SEARCH = False
-
-    mock_search.assert_awaited_once()
-    assert result.mode == "semantic"
-    assert result.results == fake_hits
-
-
-@pytest.mark.asyncio
-async def test_similar_documents_is_a_phase_3_gated_stub_until_enabled():
-    factory = get_session_factory()
-    async with factory() as session:
-        crew_id = await _create_crew_with_relations(session)
-        result = await session.execute(select(Document).where(Document.crew_member_id == crew_id))
-        document_id = result.scalar_one().id
-
-    async with factory() as session:
-        # Off by default: no Qdrant call at all.
-        assert (
-            await consultant_knowledge_service.similar_documents(document_id, db_session=session)
-            == []
-        )
-
-    settings = get_settings()
-    fake_hits = [
-        {"id": document_id, "score": 1.0, "metadata": {}},  # the document itself
-        {"id": "other-doc", "score": 0.8, "metadata": {}},
+    assert result is True
+    assert [call.args[0]["full_name"] for call in index.await_args_list] == [
+        "Old Name",
+        "New Name",
     ]
-    with patch.object(qdrant_service, "search_similar", new=AsyncMock(return_value=fake_hits)):
-        settings.ENABLE_SEMANTIC_SEARCH = True
-        try:
-            async with factory() as session:
-                results = await consultant_knowledge_service.similar_documents(
-                    document_id, db_session=session
-                )
-        finally:
-            settings.ENABLE_SEMANTIC_SEARCH = False
 
-    # The source document is excluded from its own "similar" results.
-    assert results == [{"id": "other-doc", "score": 0.8, "metadata": {}}]
+
+@pytest.mark.asyncio
+async def test_meilisearch_does_not_index_staff_accounts():
+    staff_source_row = SimpleNamespace(
+        id="staff-1",
+        full_name="Staff Account",
+        publication_status="approved",
+        role="staff",
+        password_hash=None,
+    )
+    index = AsyncMock()
+    delete = AsyncMock(return_value=True)
+
+    with (
+        patch("app.database.get_session_factory", return_value=_session_factory(staff_source_row)),
+        patch("app.services.consultant_knowledge.meilisearch_client.index_crew_member", index),
+        patch("app.services.consultant_knowledge.meilisearch_client.delete_crew_member", delete),
+    ):
+        result = await consultant_knowledge_service.index_crew_member(staff_source_row)
+
+    assert result is True
+    index.assert_not_awaited()
+    delete.assert_awaited_once_with("staff-1")
+
+
+@pytest.mark.asyncio
+async def test_meilisearch_removal_restores_profile_approved_during_delete():
+    approved_source_row = SimpleNamespace(
+        id="crew-1",
+        full_name="Reapproved Name",
+        nationality=None,
+        country_of_residence=None,
+        availability_status="available",
+        tags=[],
+        gender=None,
+        languages=None,
+        flying_point=None,
+        education=None,
+        geographical_experience=None,
+        systems_experience=None,
+        training_qualifications=None,
+        professional_summary=None,
+        publication_status="approved",
+    )
+    delete = AsyncMock(return_value=True)
+    index = AsyncMock(return_value={"task_uid": 2})
+
+    with (
+        patch(
+            "app.database.get_session_factory", return_value=_session_factory(approved_source_row)
+        ),
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.delete_crew_member",
+            delete,
+        ),
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.index_crew_member",
+            index,
+        ),
+    ):
+        result = await consultant_knowledge_service.remove_from_index("crew-1")
+
+    assert result is True
+    delete.assert_awaited_once_with("crew-1")
+    index.assert_awaited_once()
+    assert index.await_args.args[0]["full_name"] == "Reapproved Name"
+
+
+@pytest.mark.asyncio
+async def test_document_projection_is_written_after_successful_extraction():
+    document = SimpleNamespace(
+        id="document-1",
+        crew_member_id=None,
+        file_name="certificate.pdf",
+        file_type="pdf",
+        file_size=12,
+        classification="certificate",
+        extraction_status="extracted",
+        extracted_data={"certificate_type": "STCW"},
+        uploaded_by="admin",
+        version_number=1,
+    )
+    index = AsyncMock(return_value={"task_uid": 1})
+
+    with (
+        patch("app.database.get_session_factory", return_value=_session_factory(document)),
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.index_document",
+            index,
+        ),
+    ):
+        result = await consultant_knowledge_service.reconcile_document_index(document.id)
+
+    assert result is True
+    index.assert_awaited_once()
+    assert index.await_args.args[0]["id"] == document.id
+    assert "extracted_data" not in index.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_document_removal_reindexes_if_approval_races_delete():
+    approved_document = SimpleNamespace(
+        id="document-1",
+        crew_member_id=None,
+        file_name="certificate.pdf",
+        file_type="pdf",
+        file_size=12,
+        classification="certificate",
+        extraction_status="approved",
+        extracted_data={"certificate_type": "STCW"},
+        uploaded_by="admin",
+        version_number=1,
+    )
+
+    class _ChangingSession:
+        calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def execute(self, _statement):
+            self.calls += 1
+            return _Result(None if self.calls == 1 else approved_document)
+
+    delete = AsyncMock(return_value=True)
+    index = AsyncMock(return_value={"task_uid": 1})
+    session = _ChangingSession()
+
+    with (
+        patch("app.database.get_session_factory", return_value=lambda: session),
+        patch("app.services.consultant_knowledge.meilisearch_client.delete_document", delete),
+        patch("app.services.consultant_knowledge.meilisearch_client.index_document", index),
+    ):
+        result = await consultant_knowledge_service.reconcile_document_index("document-1")
+
+    assert result is True
+    delete.assert_awaited_once_with("document-1")
+    index.assert_awaited_once()

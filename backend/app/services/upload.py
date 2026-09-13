@@ -13,13 +13,19 @@ import httpx
 from fastapi import UploadFile
 
 from app.config import get_settings
-from app.services.dropbox_auth import dropbox_request, token_provider
+from app.services.dropbox_auth import (
+    download_dropbox_content,
+    dropbox_request_status,
+    token_provider,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".eml", ".msg"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".jpg", ".jpeg", ".png", ".eml"}
 MAX_FILE_SIZE = 50 * 1024 * 1024
+MAX_FILENAME_LENGTH = 255
+MAX_STORAGE_FILENAME_LENGTH = 180
 CHUNK_SIZE = 8192
 
 SAFE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -28,7 +34,6 @@ MAX_PATH_COMPONENT_LEN = 255
 MAGIC_SIGNATURES = {
     ".pdf": [b"%PDF"],
     ".docx": [b"PK\x03\x04"],
-    ".doc": [b"\xd0\xcf\x11\xe0"],
     ".jpg": [b"\xff\xd8\xff"],
     ".jpeg": [b"\xff\xd8\xff"],
     ".png": [b"\x89PNG\r\n\x1a\n"],
@@ -44,7 +49,6 @@ MAGIC_SIGNATURES = {
         b"Message-ID:",
         b"To:",
     ],
-    ".msg": [b"\xd0\xcf\x11\xe0"],
 }
 
 
@@ -61,7 +65,7 @@ def safe_path_component(value: str, label: str = "path_component") -> str:
     """
     if not value or not isinstance(value, str):
         raise ValueError(f"Invalid {label}: must be a non-empty string")
-    if not SAFE_PATH_RE.match(value):
+    if SAFE_PATH_RE.fullmatch(value) is None:
         raise ValueError(f"Invalid {label}: contains forbidden characters")
     if ".." in value:
         raise ValueError(f"Invalid {label}: traversal sequence not allowed")
@@ -81,7 +85,26 @@ def storage_filename(value: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._")
     if not normalized:
         raise ValueError("Invalid filename")
+    if len(normalized) > MAX_STORAGE_FILENAME_LENGTH:
+        stem, suffix = Path(normalized).stem, Path(normalized).suffix
+        stem_limit = MAX_STORAGE_FILENAME_LENGTH - len(suffix)
+        normalized = f"{stem[:stem_limit]}{suffix}".strip("._")
     return safe_path_component(normalized, "filename")
+
+
+def is_managed_dropbox_path(value: str) -> bool:
+    """Return whether *value* is a safe path inside Hydenlyne's Dropbox root."""
+    if not value.startswith("/hydenlyne/"):
+        return False
+    parts = value[1:].split("/")
+    if len(parts) < 4 or parts[0] != "hydenlyne":
+        return False
+    try:
+        for part in parts:
+            safe_path_component(part, "dropbox_path")
+    except ValueError:
+        return False
+    return True
 
 
 def _validate_magic_bytes(ext: str, magic: bytes) -> bool:
@@ -124,15 +147,34 @@ class DocumentUploadService:
         """
         if not file.filename:
             return False, "No filename provided"
+        return self.validate_file_content(file.filename, file_content)
 
-        ext = Path(file.filename).suffix.lower()
+    def validate_file_content(
+        self, file_name: str, file_content: Optional[bytes]
+    ) -> tuple[bool, str]:
+        """Validate a stored or downloaded file against its filename.
+
+        Webhook metadata is not a trusted upload boundary. Callers processing
+        externally changed Dropbox files must validate the downloaded bytes
+        before passing them to parsers or vision models.
+        """
+        if not isinstance(file_name, str) or not file_name:
+            return False, "No filename provided"
+        if len(file_name) > MAX_FILENAME_LENGTH:
+            return False, f"Filename must be {MAX_FILENAME_LENGTH} characters or fewer"
+
+        ext = Path(file_name).suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
             return False, f"File type {ext} not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
 
-        if file_content is not None:
-            magic = file_content[:16]
-            if magic and not _validate_magic_bytes(ext, magic):
-                return False, f"File content does not match extension {ext}"
+        if file_content is None:
+            return True, ""
+        if not file_content:
+            return False, "File is empty"
+        if len(file_content) > MAX_FILE_SIZE:
+            return False, f"File exceeds maximum size of {MAX_FILE_SIZE} bytes"
+        if not _validate_magic_bytes(ext, file_content[:16]):
+            return False, f"File content does not match extension {ext}"
 
         return True, ""
 
@@ -158,6 +200,8 @@ class DocumentUploadService:
         """
         if not file.filename:
             raise ValueError("No filename provided")
+        if len(file.filename) > MAX_FILENAME_LENGTH:
+            raise ValueError(f"Filename must be {MAX_FILENAME_LENGTH} characters or fewer")
         safe_crew_id = safe_path_component(crew_id, "crew_id")
         safe_classification = (
             safe_path_component(classification, "classification") if classification else None
@@ -184,9 +228,12 @@ class DocumentUploadService:
         with open(tmp_path, "rb") as f:
             header = f.read(16)
         ext = Path(file.filename).suffix.lower()
-        if not _validate_magic_bytes(ext, header):
+        if not header or not _validate_magic_bytes(ext, header):
             tmp_path.unlink(missing_ok=True)
-            raise ValueError(f"File content does not match extension {ext}")
+            message = (
+                "File is empty" if not header else f"File content does not match extension {ext}"
+            )
+            raise ValueError(message)
 
         try:
             file_content = tmp_path.read_bytes()
@@ -195,8 +242,12 @@ class DocumentUploadService:
 
         # Save to local cache
         crew_cache_dir = self.cache_path / safe_crew_id
+        if not self._is_within_cache(crew_cache_dir):
+            raise ValueError("Invalid local cache path")
         crew_cache_dir.mkdir(parents=True, exist_ok=True)
         local_cache_path = crew_cache_dir / f"{document_id}_{safe_filename}"
+        if not self._is_within_cache(local_cache_path):
+            raise ValueError("Invalid local cache path")
         local_cache_path.write_bytes(file_content)
 
         # Upload to Dropbox if available
@@ -218,8 +269,9 @@ class DocumentUploadService:
         storage_path = dropbox_path or str(local_cache_path)
 
         logger.info(
-            f"Saved file {safe_filename} for crew {safe_crew_id} "
-            f"(dropbox={'yes' if dropbox_path else 'no'}, cache=yes)"
+            "Managed document stored for crew %s (dropbox=%s, cache=yes)",
+            safe_crew_id,
+            "yes" if dropbox_path else "no",
         )
         return document_id, storage_path, total_size
 
@@ -243,7 +295,7 @@ class DocumentUploadService:
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await dropbox_request(
+                status_code = await dropbox_request_status(
                     client,
                     "POST",
                     "https://content.dropboxapi.com/2/files/upload",
@@ -262,11 +314,11 @@ class DocumentUploadService:
                     timeout=60.0,
                 )
 
-                if response.status_code == 200:
+                if status_code == 200:
                     logger.info("Uploaded managed document to Dropbox")
                     return dropbox_path
                 else:
-                    logger.warning("Dropbox upload failed with status %s", response.status_code)
+                    logger.warning("Dropbox upload failed with status %s", status_code)
         except Exception as e:
             logger.warning("Dropbox upload error (%s)", type(e).__name__)
 
@@ -285,23 +337,27 @@ class DocumentUploadService:
         if local_path and local_path.exists():
             # Resolve and verify the path stays within cache_path
             resolved = local_path.resolve()
-            if not str(resolved).startswith(str(self.cache_path.resolve())):
+            if not self._is_within_cache(resolved):
                 logger.warning("Refusing out-of-cache document read")
                 return None
-            return local_path.read_bytes()
+            content = local_path.read_bytes()
+            if len(content) > MAX_FILE_SIZE:
+                logger.warning("Refusing oversized cached document")
+                return None
+            return content
 
         # Try to download from Dropbox and cache locally
         # NOTE: sync context only — async callers must use get_file_async
         # (asyncio.run() fails inside a running event loop).
-        if self.dropbox_available and storage_path.startswith("/hydenlyne/"):
-            content = self._download_from_dropbox_sync(storage_path)
-            if content:
+        if self.dropbox_available and is_managed_dropbox_path(storage_path):
+            downloaded_content = self._download_from_dropbox_sync(storage_path)
+            if downloaded_content:
                 if local_path:
                     resolved = local_path.resolve()
-                    if str(resolved).startswith(str(self.cache_path.resolve())):
+                    if self._is_within_cache(resolved):
                         local_path.parent.mkdir(parents=True, exist_ok=True)
-                        local_path.write_bytes(content)
-                return content
+                        local_path.write_bytes(downloaded_content)
+                return downloaded_content
 
         return None
 
@@ -310,20 +366,24 @@ class DocumentUploadService:
         local_path = self._get_local_cache_path(storage_path)
         if local_path and local_path.exists():
             resolved = local_path.resolve()
-            if not str(resolved).startswith(str(self.cache_path.resolve())):
+            if not self._is_within_cache(resolved):
                 logger.warning("Refusing out-of-cache document read")
                 return None
-            return local_path.read_bytes()
+            content = local_path.read_bytes()
+            if len(content) > MAX_FILE_SIZE:
+                logger.warning("Refusing oversized cached document")
+                return None
+            return content
 
-        if self.dropbox_available and storage_path.startswith("/hydenlyne/"):
-            content = await self._download_from_dropbox(storage_path)
-            if content:
+        if self.dropbox_available and is_managed_dropbox_path(storage_path):
+            downloaded_content = await self._download_from_dropbox(storage_path)
+            if downloaded_content:
                 if local_path:
                     resolved = local_path.resolve()
-                    if str(resolved).startswith(str(self.cache_path.resolve())):
+                    if self._is_within_cache(resolved):
                         local_path.parent.mkdir(parents=True, exist_ok=True)
-                        local_path.write_bytes(content)
-                return content
+                        local_path.write_bytes(downloaded_content)
+                return downloaded_content
 
         return None
 
@@ -342,7 +402,7 @@ class DocumentUploadService:
     def delete_file(self, storage_path: str) -> bool:
         """Delete file from local cache."""
         local_path = self._get_local_cache_path(storage_path)
-        if local_path and local_path.exists():
+        if local_path and local_path.exists() and self._is_within_cache(local_path):
             local_path.unlink()
             return True
         return False
@@ -354,12 +414,12 @@ class DocumentUploadService:
         Callers should stop the deletion if this returns ``False`` so the
         record continues to point at recoverable content.
         """
-        if not self.dropbox_available or not dropbox_path.startswith("/hydenlyne/"):
+        if not self.dropbox_available or not is_managed_dropbox_path(dropbox_path):
             return False
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await dropbox_request(
+                status_code = await dropbox_request_status(
                     client,
                     "POST",
                     "https://api.dropboxapi.com/2/files/delete_v2",
@@ -367,15 +427,11 @@ class DocumentUploadService:
                     json={"path": dropbox_path},
                     timeout=60.0,
                 )
-                if response.status_code == 200:
+                if status_code == 200:
                     return True
-                logger.warning(
-                    "Dropbox delete failed (%s): %s",
-                    response.status_code,
-                    response.text[:200],
-                )
+                logger.warning("Dropbox delete failed with status %s", status_code)
         except Exception as e:
-            logger.warning("Dropbox delete error: %s", e)
+            logger.warning("Dropbox delete error: %s", type(e).__name__)
         return False
 
     def _get_local_cache_path(self, storage_path: str) -> Optional[Path]:
@@ -408,6 +464,18 @@ class DocumentUploadService:
             return None
         return self.cache_path / crew_id / filename
 
+    def _is_within_cache(self, path: Path) -> bool:
+        """Return whether a resolved path is inside the cache directory.
+
+        Path-aware containment is required here; string-prefix checks allow a
+        sibling such as ``cache-escape`` and do not safely handle symlinks.
+        """
+        try:
+            path.resolve().relative_to(self.cache_path.resolve())
+        except ValueError:
+            return False
+        return True
+
     def _download_from_dropbox_sync(self, dropbox_path: str) -> Optional[bytes]:
         """Synchronous Dropbox download (for use in sync context)."""
         import asyncio
@@ -420,31 +488,28 @@ class DocumentUploadService:
 
     async def _download_from_dropbox(self, dropbox_path: str) -> Optional[bytes]:
         """Download file from Dropbox and cache locally."""
-        if not self.dropbox_available:
+        if not self.dropbox_available or not is_managed_dropbox_path(dropbox_path):
             return None
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await dropbox_request(
+                status_code, content = await download_dropbox_content(
                     client,
                     "POST",
                     "https://content.dropboxapi.com/2/files/download",
+                    max_bytes=MAX_FILE_SIZE,
                     headers={"Dropbox-API-Arg": json_module.dumps({"path": dropbox_path})},
-                    timeout=60.0,
                 )
 
-                if response.status_code == 200:
-                    content = response.content
+                if status_code == 200 and content is not None:
                     # Cache locally
                     local_path = self._get_local_cache_path(dropbox_path)
-                    if local_path:
+                    if local_path and self._is_within_cache(local_path):
                         local_path.parent.mkdir(parents=True, exist_ok=True)
                         local_path.write_bytes(content)
                     return content
                 else:
-                    logger.warning(
-                        f"Dropbox download failed ({response.status_code}): {response.text[:200]}"
-                    )
+                    logger.warning("Dropbox download failed with status %s", status_code)
         except Exception as e:
             logger.warning("Dropbox download error (%s)", type(e).__name__)
 

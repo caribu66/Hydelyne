@@ -1,4 +1,5 @@
 import { UserProfile, FilterState, AIOverviewData } from '../types';
+import { numericExperience } from './experience';
 import { ALL_SKILLS, ALL_LOCATIONS, ALL_COMPANIES } from '../data/mockProfiles';
 import { escapeRegExp, getSearchTerms } from './searchTerms';
 
@@ -20,9 +21,22 @@ export const INITIAL_FILTER_STATE: FilterState = {
  * Natural language parser that extracts structured intent from conversational prompts
  * e.g., "Senior remote PyTorch engineers in London with 5+ years exp"
  */
-export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
+export function parseNaturalLanguageQuery(
+  query: string,
+  profiles: UserProfile[] = [],
+): Partial<FilterState> {
   const clean = query.trim().toLowerCase();
   if (!clean) return {};
+
+  const availableSkills = profiles.length
+    ? Array.from(new Set(profiles.flatMap((profile) => profile.skills))).sort()
+    : ALL_SKILLS;
+  const availableLocations = profiles.length
+    ? Array.from(new Set(profiles.map((profile) => profile.location))).sort()
+    : ALL_LOCATIONS;
+  const availableCompanies = profiles.length
+    ? Array.from(new Set(profiles.map((profile) => profile.company))).sort()
+    : ALL_COMPANIES;
 
   const detected: Partial<FilterState> = {
     selectedSkills: [],
@@ -33,7 +47,7 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
   };
 
   // 1. Detect Skills
-  ALL_SKILLS.forEach((skill) => {
+  availableSkills.forEach((skill) => {
     const sLower = skill.toLowerCase();
     const regex = new RegExp(`\\b${escapeRegExp(sLower)}\\b`, 'i');
     if (regex.test(clean)) {
@@ -53,7 +67,7 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
   }
 
   // 3. Detect Locations
-  ALL_LOCATIONS.forEach((loc) => {
+  availableLocations.forEach((loc) => {
     const cityName = loc.split(',')[0]?.trim().toLowerCase();
     if (cityName && (clean.includes(cityName) || clean.includes(loc.toLowerCase()))) {
       detected.locations?.push(loc);
@@ -61,7 +75,7 @@ export function parseNaturalLanguageQuery(query: string): Partial<FilterState> {
   });
 
   // 4. Detect Companies
-  ALL_COMPANIES.forEach((comp) => {
+  availableCompanies.forEach((comp) => {
     const regex = new RegExp(`\\b${escapeRegExp(comp.toLowerCase())}\\b`, 'i');
     if (regex.test(clean)) {
       detected.companies?.push(comp);
@@ -183,10 +197,11 @@ export function filterProfiles(profiles: UserProfile[], filters: FilterState): U
     }
 
     // 5. Years of Experience range
-    if (profile.yearsOfExperience < filters.minExperience) {
+    const experience = numericExperience(profile.yearsOfExperience);
+    if (experience < filters.minExperience) {
       return false;
     }
-    if (filters.maxExperience < 20 && profile.yearsOfExperience > filters.maxExperience) {
+    if (filters.maxExperience < 20 && experience > filters.maxExperience) {
       return false;
     }
 
@@ -238,13 +253,13 @@ export function sortProfiles(
 
   switch (sortBy) {
     case 'experience-desc':
-      return list.sort((a, b) => b.yearsOfExperience - a.yearsOfExperience);
+      return list.sort((a, b) => numericExperience(b.yearsOfExperience) - numericExperience(a.yearsOfExperience));
     case 'experience-asc':
-      return list.sort((a, b) => a.yearsOfExperience - b.yearsOfExperience);
+      return list.sort((a, b) => numericExperience(a.yearsOfExperience) - numericExperience(b.yearsOfExperience));
     case 'recent': {
       return list.sort((a, b) => {
-        const timeA = a.dateAdded ? new Date(a.dateAdded).getTime() : 0;
-        const timeB = b.dateAdded ? new Date(b.dateAdded).getTime() : 0;
+        const timeA = validTimestamp(a.dateAdded);
+        const timeB = validTimestamp(b.dateAdded);
         return timeB - timeA;
       });
     }
@@ -253,11 +268,11 @@ export function sortProfiles(
     case 'name-desc':
       return list.sort((a, b) => b.name.localeCompare(a.name));
     case 'rate-desc':
-      return list.sort((a, b) => (b.dayRate || 0) - (a.dayRate || 0));
+      return list.sort((a, b) => (b.dayRate ?? 0) - (a.dayRate ?? 0));
     case 'rate-asc':
-      return list.sort((a, b) => (a.dayRate || 99999) - (b.dayRate || 99999));
+      return list.sort((a, b) => (a.dayRate ?? Number.MAX_SAFE_INTEGER) - (b.dayRate ?? Number.MAX_SAFE_INTEGER));
     case 'rating-desc':
-      return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      return list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     case 'relevance':
     default: {
       // The backend has already ranked structured AI matches by hard
@@ -268,7 +283,7 @@ export function sortProfiles(
         return list.sort((a, b) => (aiRank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (aiRank.get(b.id) ?? Number.MAX_SAFE_INTEGER));
       }
       if (!keyword.trim()) {
-        return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        return list.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
       }
       // Calculate relevance score
       const q = keyword.toLowerCase().trim();
@@ -283,8 +298,14 @@ export function sortProfiles(
   }
 }
 
+function validTimestamp(value?: string): number {
+  if (!value) return 0;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 function calculateRelevanceScore(profile: UserProfile, query: string, tokens: string[]): number {
-  let score = (profile.rating || 4.5) * 2;
+  let score = (profile.rating ?? 0) * 2;
   const nameL = profile.name.toLowerCase();
   const titleL = profile.title.toLowerCase();
   const bioL = profile.bio.toLowerCase();
@@ -318,9 +339,12 @@ export function generateAIOverview(
   if (profiles.length === 0) return null;
 
   const total = profiles.length;
-  const avgExp = Math.round(
-    profiles.reduce((acc, p) => acc + p.yearsOfExperience, 0) / total
-  );
+  const recordedExperience = profiles
+    .map((profile) => profile.yearsOfExperience)
+    .filter((years): years is number => years != null);
+  const avgExp = recordedExperience.length > 0
+    ? Math.round(recordedExperience.reduce((acc, years) => acc + years, 0) / recordedExperience.length)
+    : null;
   const availableCount = profiles.filter(
     (p) => p.availability === 'Available immediately' || p.availability === 'Open to offers'
   ).length;
@@ -339,31 +363,40 @@ export function generateAIOverview(
     .slice(0, 5)
     .map((e) => e[0]);
 
-  const topCompanies = Array.from(new Set(profiles.map((p) => p.company))).slice(0, 3);
+  const topCompanies = Array.from(
+    new Set(profiles.map((p) => p.company).filter((company) => company !== 'Company not recorded')),
+  ).slice(0, 3);
   const remotePercentage = Math.round(
     (profiles.filter((p) => p.remoteType === 'Remote').length / total) * 100
   );
 
   let summary = '';
   if (query.trim()) {
-    summary = `Identified ${total} verified ${
+    summary = `Identified ${total} ${
       total === 1 ? 'contractor' : 'contractors'
-    } matching "${query}". The cohort averages ${avgExp} years of offshore & survey tenure with deep domain expertise in ${sortedSkills.slice(0, 3).join(', ')}.`;
+    } matching "${query}". ${avgExp == null ? 'Audited experience was not recorded for this cohort.' : `The cohort averages ${avgExp} years of offshore & survey tenure.`} Deep domain expertise includes ${sortedSkills.slice(0, 3).join(', ')}.`;
   } else if (filters.selectedSkills.length > 0) {
-    summary = `Found ${total} offshore contractors accredited in ${filters.selectedSkills.join(', ')}. Current talent pool features verified alumni from ${topCompanies.join(', ')}.`;
+    const companySummary = topCompanies.length > 0
+      ? `Recorded company history includes ${topCompanies.join(', ')}.`
+      : 'Company history was not recorded for this cohort.';
+    summary = `Found ${total} offshore contractors matching ${filters.selectedSkills.join(', ')}. ${companySummary}`;
   } else {
-    summary = `Indexed ${total} accredited marine geophysicists, environmental MMO/PAM contractors, geotechnical consultants, and client representatives. ${availablePercentage}% are available immediately or open for mobilization.`;
+    summary = `Indexed ${total} contractors across marine geophysics, environmental MMO/PAM, geotechnical, and client-representation work. ${availablePercentage}% are available immediately or open for mobilization.`;
   }
-
-  const rates = profiles.map((p) => p.dayRate || 800).filter(Boolean);
-  const minRate = rates.length > 0 ? Math.min(...rates) : 750;
-  const maxRate = rates.length > 0 ? Math.max(...rates) : 1200;
 
   const keyInsights: string[] = [
     `${availablePercentage}% of matched contractors are available for immediate mobilization or offshore rotation.`,
     `${remotePercentage}% support hybrid onshore processing & remote QC reporting.`,
-    `Standard day rate across this cohort ranges between £${minRate} - £${maxRate} / day.`,
   ];
+
+  const rates = profiles.flatMap((profile) => (
+    profile.dayRate != null && Number.isFinite(profile.dayRate) ? [profile.dayRate] : []
+  ));
+  if (rates.length > 0) {
+    const minRate = Math.min(...rates);
+    const maxRate = Math.max(...rates);
+    keyInsights.push(`Recorded day rates across this cohort range between £${minRate} - £${maxRate} / day.`);
+  }
 
   return {
     summary,

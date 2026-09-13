@@ -1,6 +1,10 @@
 import { FC, useRef } from 'react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { UserProfile } from '../types';
+import { formatExperience } from '../utils/experience';
+import { availabilityLabel } from '../utils/profileLabels';
+import { csvDocument } from '../utils/csv';
+import { isoDateAfterDays } from '../utils/operationsHome';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   X,
@@ -62,28 +66,29 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
     if (compareProfiles.length === 0) return;
     const headers = ['Metric', ...compareProfiles.map((p) => p.name)];
     const rows = [
-      ['Title', ...compareProfiles.map((p) => `"${p.title}"`)],
-      ['Location', ...compareProfiles.map((p) => `"${p.location}"`)],
-      ['Availability', ...compareProfiles.map((p) => `"${p.availability || 'Available'}"`)],
-      ['Day Rate (GBP)', ...compareProfiles.map((p) => `£${p.dayRate || 'N/A'}`)],
-      ['Experience (Years)', ...compareProfiles.map((p) => `${p.yearsOfExperience} yrs`)],
-      ['Rating', ...compareProfiles.map((p) => `${p.rating || 4.9}/5.0`)],
-      ['Certifications', ...compareProfiles.map((p) => `"${(p.certifications || []).join(', ')}"`)],
-      ['Core Skills', ...compareProfiles.map((p) => `"${p.skills.join(', ')}"`)],
-      ['Survey Types', ...compareProfiles.map((p) => `"${(p.surveyTypes || []).join(', ')}"`)],
-      ['Past Clients', ...compareProfiles.map((p) => `"${(p.pastCompanies || []).join(', ')}"`)],
+      ['Title', ...compareProfiles.map((p) => p.title)],
+      ['Location', ...compareProfiles.map((p) => p.location)],
+      ['Availability', ...compareProfiles.map((p) => availabilityLabel(p.availability))],
+      ['Day Rate (GBP)', ...compareProfiles.map((p) => p.dayRate != null ? `£${p.dayRate}` : 'Rate on request')],
+      ['Experience (Years)', ...compareProfiles.map((p) => `${formatExperience(p.yearsOfExperience)} yrs`)],
+      ['Rating', ...compareProfiles.map((p) => p.rating != null ? `${p.rating}/5.0` : 'Not recorded')],
+      ['Certifications', ...compareProfiles.map((p) => (p.certifications || []).join(', '))],
+      ['Core Skills', ...compareProfiles.map((p) => p.skills.join(', '))],
+      ['Survey Types', ...compareProfiles.map((p) => (p.surveyTypes || []).join(', '))],
+      ['Past Clients', ...compareProfiles.map((p) => (p.pastCompanies || []).join(', '))],
       ['Email', ...compareProfiles.map((p) => p.email)],
     ];
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csvContent = csvDocument([headers, ...rows]);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Hydenlyne_Contractor_Comparison_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Hydenlyne_Contractor_Comparison_${isoDateAfterDays(0)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const handlePrint = () => {
@@ -200,7 +205,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                       <option value="" disabled>Choose specialist to compare with {compareProfiles[0]?.name.split(' ')[0]}...</option>
                       {availableToAdd.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} — {p.title.slice(0, 30)} (Day rate: £{p.dayRate || 'N/A'})
+                          {p.name} — {p.title.slice(0, 30)} (Day rate: {p.dayRate != null ? `£${p.dayRate}` : 'Rate on request'})
                         </option>
                       ))}
                     </select>
@@ -287,14 +292,14 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                       <div>
                         <span className="text-xs text-muted block font-mono">Day Rate</span>
                         <span className="font-semibold text-primary font-mono">
-                          {p.dayRate ? `£${p.dayRate}/d` : 'Negotiable'}
+                          {p.dayRate != null ? `£${p.dayRate}/d` : 'Negotiable'}
                         </span>
                       </div>
                       <div>
                         <span className="text-xs text-muted block font-mono">Status</span>
                         <span className={`inline-flex items-center gap-1 font-medium ${isAvailableNow ? 'text-positive' : 'text-secondary'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
-                          <span className="truncate">{(p.availability || 'Available').replace('Available ', '')}</span>
+                        <span className="truncate">{availabilityLabel(p.availability).replace('Available ', '')}</span>
                         </span>
                       </div>
                     </div>
@@ -331,7 +336,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                   {compareProfiles.map((p) => (
                     <div key={p.id} className="first:pl-0 pl-4 space-y-1.5">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-base font-bold text-primary font-mono">{p.yearsOfExperience}</span>
+                        <span className="text-base font-bold text-primary font-mono">{formatExperience(p.yearsOfExperience)}</span>
                         <span className="text-xs text-muted">years offshore experience</span>
                       </div>
                       <p className="text-xs text-secondary leading-relaxed line-clamp-3">{p.bio}</p>
@@ -485,7 +490,7 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
                     <option value="" disabled>Select a specialist to add...</option>
                     {availableToAdd.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.title.slice(0, 30)}... - £{p.dayRate || 800}/d)
+                        {p.name} ({p.title.slice(0, 30)}... - {p.dayRate != null ? `£${p.dayRate}/d` : 'Rate on request'})
                       </option>
                     ))}
                   </select>

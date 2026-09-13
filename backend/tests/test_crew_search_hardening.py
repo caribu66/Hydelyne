@@ -19,7 +19,11 @@ from unittest.mock import patch
 import pytest
 
 from app.models import Certification, CrewMember, WorkHistory
-from app.services.crew import CrewService
+from app.services.crew import CrewService, _contains_like
+
+
+def test_roster_query_text_is_literal_when_used_in_sql_like_patterns() -> None:
+    assert _contains_like(r"100%_ready\now") == r"%100\%\_ready\\now%"
 
 
 async def _create_test_crew_member(
@@ -27,6 +31,8 @@ async def _create_test_crew_member(
     full_name: str,
     email: str,
     nationality: str = "British",
+    country_of_residence: str | None = None,
+    languages: list[str] | None = None,
     summary: str = "Experienced offshore specialist",
     tags: list[str] | None = None,
     cert_types: list[str] | None = None,
@@ -37,6 +43,8 @@ async def _create_test_crew_member(
         full_name=full_name,
         email=email,
         nationality=nationality,
+        country_of_residence=country_of_residence,
+        languages=languages,
         professional_summary=summary,
         tags=tags or [],
         publication_status="approved",
@@ -181,8 +189,54 @@ async def test_search_matches_relational_certifications(db_session: Any) -> None
 
 
 @pytest.mark.asyncio
-async def test_search_matches_relational_work_history(db_session: Any) -> None:
-    """Querying by past role or project type matches crew members with matching history."""
+async def test_search_matches_country_of_residence_and_languages(db_session: Any) -> None:
+    """Public roster search includes searchable profile location and languages."""
+    crew = await _create_test_crew_member(
+        db_session,
+        full_name="Multilingual Survey Specialist",
+        email="multilingual@example.com",
+        country_of_residence="Norway",
+        languages=["English", "Norwegian"],
+    )
+
+    svc = CrewService()
+    with patch("app.services.crew.get_session_factory", return_value=lambda: db_session):
+        country_results = await svc.list_crew_members(search="Norway")
+        language_results = await svc.list_crew_members(search="Norwegian")
+
+    assert any(member.id == crew.id for member in country_results)
+    assert any(member.id == crew.id for member in language_results)
+
+
+@pytest.mark.asyncio
+async def test_search_ignores_rejected_certifications(db_session: Any) -> None:
+    """Declined evidence must not make a contractor match a qualification search."""
+    crew = await _create_test_crew_member(
+        db_session,
+        full_name="Declined Evidence Specialist",
+        email="declined@example.com",
+    )
+    db_session.add(
+        Certification(
+            id=str(uuid.uuid4()),
+            crew_member_id=crew.id,
+            cert_type="Rejected BOSIET",
+            status="rejected",
+            verification_status="rejected",
+        )
+    )
+    await db_session.commit()
+
+    svc = CrewService()
+    with patch("app.services.crew.get_session_factory", return_value=lambda: db_session):
+        results = await svc.list_crew_members(search="BOSIET")
+
+    assert not any(member.id == crew.id for member in results)
+
+
+@pytest.mark.asyncio
+async def test_search_does_not_match_restricted_work_history_or_email(db_session: Any) -> None:
+    """General roster search cannot use C2 fields as a discovery side channel."""
     crew = await _create_test_crew_member(
         db_session,
         full_name="Survey Veteran",
@@ -193,10 +247,10 @@ async def test_search_matches_relational_work_history(db_session: Any) -> None:
     svc = CrewService()
     with patch("app.services.crew.get_session_factory", return_value=lambda: db_session):
         res1 = await svc.list_crew_members(search="Party Chief")
-        assert any(c.id == crew.id for c in res1)
+        assert not any(c.id == crew.id for c in res1)
 
-        res2 = await svc.list_crew_members(search="Geophysicist")
-        assert any(c.id == crew.id for c in res2)
+        res2 = await svc.list_crew_members(search="veteran@example.com")
+        assert not any(c.id == crew.id for c in res2)
 
 
 @pytest.mark.asyncio

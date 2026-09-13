@@ -44,7 +44,7 @@ export const ComparisonBar: FC<ComparisonBarProps> = ({
                       {p.name.split(' ')[0]} {p.name.split(' ')[1]?.[0]}.
                     </span>
                     <span className="text-xs text-secondary font-mono block truncate max-w-[100px] sm:max-w-[120px]">
-                      {p.dayRate ? `£${p.dayRate}/d` : p.title.split(' ')[0]}
+                      {p.dayRate != null ? `£${p.dayRate}/d` : 'Rate on request'}
                     </span>
                   </div>
                   <button

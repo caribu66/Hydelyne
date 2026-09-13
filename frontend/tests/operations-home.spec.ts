@@ -87,7 +87,6 @@ const projects = [
 
 async function authenticate(page: Page, _role: 'admin' | 'staff' | 'user' = 'staff') {
   await page.addInitScript(() => {
-    localStorage.setItem('hydenlyne_token', 'test-token')
     localStorage.setItem(
       'hydenlyne_user',
       JSON.stringify({
@@ -629,6 +628,7 @@ test.describe('operations home — non-staff visibility', () => {
     await expect(page.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Crew readiness' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Active projects' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Find a vessel' })).toHaveCount(0)
     // No sensitive counts exposed — e.g., document pending count not shown
     await expect(page.getByText('Documents ready for review')).toHaveCount(0)
   })

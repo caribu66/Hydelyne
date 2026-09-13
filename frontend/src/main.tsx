@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { ApolloProvider } from '@apollo/client';
 import { MotionConfig } from 'motion/react';
 import { apolloClient } from './lib/apollo';
+import { decodeUploadTokenSegment } from './utils/uploadRoute';
 import { AuthProvider } from './hooks/useAuth';
 import './index.css';
 
@@ -18,7 +19,7 @@ const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Root container element #root not found');
 
 const uploadMatch = window.location.pathname.match(/^\/upload\/([^/]+)\/?$/);
-const uploadToken = uploadMatch?.[1] ? decodeURIComponent(uploadMatch[1]) : undefined;
+const uploadToken = uploadMatch?.[1] ? decodeUploadTokenSegment(uploadMatch[1]) : undefined;
 const root = uploadToken ? <ContractorDocumentUploadPage token={uploadToken} /> : <App />;
 
 createRoot(rootElement).render(

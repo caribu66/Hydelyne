@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lazy, Suspense, useState, useMemo, useEffect, useCallback, MouseEvent } from 'react';
-import { useMutation } from '@apollo/client';
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback, useRef, MouseEvent } from 'react';
+import { useApolloClient, useMutation } from '@apollo/client';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SortOption } from './types';
 import { FILTER_PRESETS } from './data/mockProfiles';
 import { useShortlist } from './hooks/useShortlist';
 import { useURLSync } from './hooks/useURLSync';
+import { formatExperience } from './utils/experience';
+import { availabilityLabel } from './utils/profileLabels';
 import { useSpecialistDocuments } from './hooks/useSpecialistDocuments';
 import { useCrewSummary } from './hooks/useCrewSummary';
 import { useTheme } from './hooks/useTheme';
@@ -19,12 +21,15 @@ import { useRequireAuth } from './hooks/useRequireAuth';
 import { useKeyboardNavigation } from './hooks/useKeyboardNavigation';
 import { useSearchWorkspace } from './hooks/useSearchWorkspace';
 import { useSplitPaneResize } from './hooks/useSplitPaneResize';
-import { DELETE_CREW_MEMBER } from './lib/queries';
+import { apolloResultHasErrors, buildAuthSessionKey } from './utils/sessionScope';
+import { CREW_MEMBER_DETAIL_QUERY, DELETE_CREW_MEMBER } from './lib/queries';
+import { backendCrewToProfile, BackendCrew } from './lib/mappers';
 import { CrewQueryResult } from './hooks/useCrewQuery';
 import { ModernHeroSearch } from './components/ModernHeroSearch';
 import { CrewQuerySummary } from './components/CrewQuerySummary';
 import { OperationsHome } from './components/operations/OperationsHome';
 import { isStaffOrAdmin } from './utils/operationsHome';
+import { copyTextToClipboard } from './utils/clipboard';
 import { MatchEvidence } from './components/MatchEvidence';
 import { ActiveFilterChips } from './components/ActiveFilterChips';
 import { SpecialistActionsMenu } from './components/SpecialistActionsMenu';
@@ -104,12 +109,15 @@ function queryFromCriteria(criteria: Record<string, unknown>): string {
 
 export default function App() {
   const { isDark, toggleTheme } = useTheme();
-  const { initialized: authInitialized, isAuthenticated, user, logout, refreshSession } = useAuth();
+  const { initialized: authInitialized, isAuthenticated, user, logout } = useAuth();
+  const authSessionKey = buildAuthSessionKey(user);
+  const apolloClient = useApolloClient();
   const canManageDocuments = user?.role === 'admin';
   const canRequestDocuments = user?.role === 'admin' || user?.role === 'staff';
   const canSubmitCv = user?.role === 'admin' || user?.role === 'staff';
   const [deleteCrewMember] = useMutation(DELETE_CREW_MEMBER);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const toastVersionRef = useRef(0);
 
   const [modalProfile, setModalProfile] = useState<UserProfile | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -180,7 +188,7 @@ export default function App() {
   }, [aiQueryData]);
 
   // Live backend profiles (falls back to MOCK_PROFILES only when demo mode enabled)
-  const { profiles: liveProfiles, isLive, demoActive, loading: profilesLoading, error: profilesError, refetch: refetchProfiles, loadMore: _loadMoreProfiles, hasMore: _profilesHasMore } = useCrewProfiles({ skip: !isAuthenticated })
+  const { profiles: liveProfiles, isLive, demoActive, loading: profilesLoading, error: profilesError, refetch: refetchProfiles, loadMore: loadMoreProfiles, hasMore: profilesHaveMore } = useCrewProfiles({ skip: !isAuthenticated, sessionKey: authSessionKey })
   const allProfiles = liveProfiles
 
   const requestLogin = useCallback(() => {
@@ -196,7 +204,7 @@ export default function App() {
     isBookmarked,
     clearShortlist,
     shortlistCount,
-  } = useShortlist(allProfiles)
+  } = useShortlist(allProfiles, user?.id ?? null)
 
   // Specialist Documents & Compliance Hook
   const {
@@ -204,7 +212,7 @@ export default function App() {
     removeDocument,
     reviewDocument,
     refreshDocuments,
-  } = useSpecialistDocuments();
+  } = useSpecialistDocuments(isAuthenticated, authSessionKey);
 
   // AI consultant summary, shown automatically when a profile opens
   // (see backend/docs/cv-ingestion-pipeline.md).
@@ -212,7 +220,7 @@ export default function App() {
     fetchSummary,
     getSummaryForProfile,
     isSummaryLoading,
-  } = useCrewSummary();
+  } = useCrewSummary(isAuthenticated, authSessionKey);
 
   // Search Workspace state (query, filters, results, selection)
   const {
@@ -243,10 +251,55 @@ export default function App() {
     isAuthenticated,
   });
 
-  const openIncomingDocumentContractor = useCallback((crewId: string) => {
-    setSelectedProfileId(crewId);
-    setShowSavedOnly(false);
-  }, [setSelectedProfileId, setShowSavedOnly]);
+  // Logout cleanup is delayed for the exit animation. If another account
+  // logs in during that window, the old cleanup must not touch the new
+  // account, but shared workspace state still needs a fresh boundary.
+  const lastAuthenticatedSessionKeyRef = useRef<string | null>(null);
+  const loggedOutSinceLastSessionRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id) {
+      if (lastAuthenticatedSessionKeyRef.current) loggedOutSinceLastSessionRef.current = true;
+      return;
+    }
+
+    const accountChanged =
+      lastAuthenticatedSessionKeyRef.current !== null &&
+      (lastAuthenticatedSessionKeyRef.current !== authSessionKey || loggedOutSinceLastSessionRef.current);
+    if (accountChanged) {
+      handleResetAll();
+      setSelectedProfileId(null);
+      setModalProfile(null);
+      setCopiedId(null);
+      setIsLoginOpen(false);
+      setIsShortcutsOpen(false);
+      setIsExportShortlistOpen(false);
+      setIsFilterOpen(false);
+      setCompareIds([]);
+      setIsCompareModalOpen(false);
+      setInquiryProfile(null);
+      setIsInquiryModalOpen(false);
+      setIsDocumentReviewOpen(false);
+      setPrintProfile(null);
+      setAiQueryData(null);
+      setAiQueryLoading(false);
+      setAiQueryActive(false);
+      setShowAISummary(false);
+      setIsAddCrewMemberOpen(false);
+      setIsCvReviewOpen(false);
+      setIsStaffAccessOpen(false);
+      setIsFocusMode(false);
+      window.history.replaceState(null, '', '/');
+    }
+
+    lastAuthenticatedSessionKeyRef.current = authSessionKey;
+    loggedOutSinceLastSessionRef.current = false;
+  }, [authSessionKey, handleResetAll, setSelectedProfileId, user?.id]);
+
+  const currentSessionKeyRef = useRef(authSessionKey);
+  currentSessionKeyRef.current = authSessionKey;
+  useEffect(() => {
+    currentSessionKeyRef.current = authSessionKey;
+  }, [authSessionKey]);
 
   const handleOperationsSearch = useCallback((nextQuery: string) => {
     const trimmed = nextQuery.trim()
@@ -265,8 +318,12 @@ export default function App() {
 
   const handleDocumentReviewResolved = useCallback(() => {
     setDocumentReviewVersion((currentVersion) => currentVersion + 1)
-    if (activeSelectedProfile) void refreshDocuments(activeSelectedProfile.id)
-    if (modalProfile) void refreshDocuments(modalProfile.id)
+    if (activeSelectedProfile) {
+      void refreshDocuments(activeSelectedProfile.id).catch(() => {})
+    }
+    if (modalProfile) {
+      void refreshDocuments(modalProfile.id).catch(() => {})
+    }
   }, [activeSelectedProfile, modalProfile, refreshDocuments])
 
   // Focused Workspace mode for working comfortably on a contractor
@@ -284,11 +341,33 @@ export default function App() {
   } = useSplitPaneResize();
 
   const showToast = useCallback((msg: string) => {
+    const toastVersion = ++toastVersionRef.current;
     setToastMessage(msg);
     setTimeout(() => {
-      setToastMessage((curr) => (curr === msg ? null : curr));
+      if (toastVersion === toastVersionRef.current) setToastMessage(null);
     }, 2200);
   }, []);
+
+  const openIncomingDocumentContractor = useCallback(async (crewId: string) => {
+    const requestSessionKey = authSessionKey;
+    if (!requestSessionKey) return;
+    try {
+      const result = await apolloClient.query<{ crewMember: BackendCrew | null }>({
+        query: CREW_MEMBER_DETAIL_QUERY,
+        variables: { id: crewId },
+        fetchPolicy: 'network-only',
+      });
+      if (apolloResultHasErrors(result)) throw new Error('Contractor dossier request failed');
+      if (currentSessionKeyRef.current !== requestSessionKey || !result.data.crewMember) return;
+      setModalProfile(backendCrewToProfile(result.data.crewMember));
+      setSelectedProfileId(crewId);
+      setShowSavedOnly(false);
+    } catch {
+      if (currentSessionKeyRef.current === requestSessionKey) {
+        showToast('Could not open this contractor dossier');
+      }
+    }
+  }, [apolloClient, authSessionKey, setSelectedProfileId, setShowSavedOnly, showToast]);
 
   const handleToggleTheme = useCallback(() => {
     toggleTheme();
@@ -296,23 +375,42 @@ export default function App() {
   }, [toggleTheme, isDark, showToast]);
 
   const handleDeleteCrewMember = useCallback(async (profile: UserProfile) => {
-    const { data } = await deleteCrewMember({ variables: { id: profile.id } });
+    const requestSessionKey = authSessionKey;
+    if (!requestSessionKey || currentSessionKeyRef.current !== requestSessionKey) return;
+    const result = await deleteCrewMember({ variables: { id: profile.id } });
+    if (apolloResultHasErrors(result)) throw new Error('Contractor deletion returned errors');
+    const { data } = result;
+    if (currentSessionKeyRef.current !== requestSessionKey) return;
     if (!data?.deleteCrewMember) {
       throw new Error(`${profile.name} could not be deleted`);
     }
+    let refreshFailed = false;
+    try {
+      await refetchProfiles();
+    } catch {
+      refreshFailed = true;
+    }
+    if (currentSessionKeyRef.current !== requestSessionKey) return;
     if (isBookmarked(profile.id)) rawToggleBookmark(profile.id);
     setCompareIds((ids) => ids.filter((id) => id !== profile.id));
-    setSelectedProfileId(selectedProfileId === profile.id ? null : selectedProfileId);
-    setModalProfile(null);
-    await refetchProfiles();
-    showToast(`${profile.name} was deleted`);
+    setSelectedProfileId((currentSelectedId) => (
+      currentSelectedId === profile.id ? null : currentSelectedId
+    ));
+    setModalProfile((currentProfile) => (
+      currentProfile?.id === profile.id ? null : currentProfile
+    ));
+    showToast(
+      refreshFailed
+        ? `${profile.name} was deleted — roster refresh unavailable`
+        : `${profile.name} was deleted`,
+    );
   }, [
+    authSessionKey,
     deleteCrewMember,
     isBookmarked,
     rawToggleBookmark,
     refetchProfiles,
     showToast,
-    selectedProfileId,
     setSelectedProfileId,
   ]);
 
@@ -326,13 +424,20 @@ export default function App() {
     showToast(currentlyBookmarked ? `Removed ${name} from shortlist` : `Saved ${name} to shortlist`);
   }, [requireAuth, isBookmarked, rawToggleBookmark, showToast, allProfiles]);
 
-  const handleCopyEmail = useCallback((profile: UserProfile, e?: MouseEvent) => {
+  const handleCopyEmail = useCallback(async (profile: UserProfile, e?: MouseEvent) => {
     e?.stopPropagation();
     if (!requireAuth()) return;
-    navigator.clipboard?.writeText(profile.email);
-    setCopiedId(profile.id);
-    showToast(`Copied ${profile.email}`);
-    setTimeout(() => setCopiedId(null), 1800);
+    if (await copyTextToClipboard(profile.email)) {
+      setCopiedId(profile.id);
+      showToast(`Copied ${profile.email}`);
+      setTimeout(() => {
+        setCopiedId((currentCopiedId) => (
+          currentCopiedId === profile.id ? null : currentCopiedId
+        ));
+      }, 1800);
+    } else {
+      showToast('Could not copy the email address. Please try again.');
+    }
   }, [requireAuth, showToast]);
 
   // Comparison toggle handler
@@ -367,9 +472,13 @@ export default function App() {
   // Mobilization Trigger
   const handleRequestMobilization = useCallback((profile: UserProfile) => {
     if (!requireAuth()) return;
+    if (!isStaffOrAdmin(user?.role)) {
+      showToast('Mobilization requests are available to operations staff.');
+      return;
+    }
     setInquiryProfile(profile);
     setIsInquiryModalOpen(true);
-  }, [requireAuth]);
+  }, [requireAuth, showToast, user?.role]);
 
   // Print Trigger
   const handlePrintDossier = useCallback((profile: UserProfile) => {
@@ -431,12 +540,39 @@ export default function App() {
   });
 
   const handleLogout = useCallback(async () => {
+    const exitingSessionKey = authSessionKey;
     setIsMenuOpen(false);
-    await logout();
+    // Close every authenticated overlay before authentication state changes;
+    // the public shell must not retain private dossier or administration
+    // surfaces during the logout transition.
+    setModalProfile(null);
+    setPrintProfile(null);
+    setIsShortcutsOpen(false);
+    setIsExportShortlistOpen(false);
+    setIsFilterOpen(false);
+    setIsCompareModalOpen(false);
+    setInquiryProfile(null);
+    setIsInquiryModalOpen(false);
+    setIsDocumentReviewOpen(false);
+    setIsCvReviewOpen(false);
+    setIsStaffAccessOpen(false);
+    setIsAddCrewMemberOpen(false);
+    setIsFocusMode(false);
+    let serverLogoutFailed = false;
+    try {
+      await logout();
+    } catch {
+      // Local credentials and private UI are still cleared; tell the user
+      // that server-side revocation could not be confirmed.
+      serverLogoutFailed = true;
+    }
     // Preserve the exiting workspace snapshot for the calm exit animation
     // (header/workspace fade y -6 / 0.2) before clearing filters, selection,
     // and URL state — otherwise the exiting branch would render empty.
     window.setTimeout(() => {
+      // A new login may complete during the exit animation. The old logout
+      // cleanup must never clear that account's workspace or URL state.
+      if (currentSessionKeyRef.current !== null && currentSessionKeyRef.current !== exitingSessionKey) return;
       handleResetAll();
       setViewMode('split');
       setSelectedProfileId(null);
@@ -451,19 +587,59 @@ export default function App() {
       setIsCompareModalOpen(false);
       setInquiryProfile(null);
       setIsInquiryModalOpen(false);
+      setIsDocumentReviewOpen(false);
       setPrintProfile(null);
       setAiQueryData(null);
       setAiQueryLoading(false);
       setAiQueryActive(false);
       setShowAISummary(false);
       setIsAddCrewMemberOpen(false);
+      setIsCvReviewOpen(false);
+      setIsStaffAccessOpen(false);
       setIsFocusMode(false);
       window.history.replaceState(null, '', '/');
-      showToast('Signed out — workspace cleared');
+      showToast(
+        serverLogoutFailed
+          ? 'Signed out locally — server logout could not be confirmed'
+          : 'Signed out — workspace cleared',
+      );
     }, 220);
     // Setters are stable; handleResetAll/clearShortlist/showToast capture latest closures.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logout, handleResetAll, clearShortlist, showToast]);
+  }, [authSessionKey, logout, handleResetAll, clearShortlist, showToast]);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setIsMenuOpen(false);
+      handleResetAll();
+      setViewMode('split');
+      setSelectedProfileId(null);
+      clearShortlist();
+      setModalProfile(null);
+      setCopiedId(null);
+      setIsLoginOpen(false);
+      setIsShortcutsOpen(false);
+      setIsExportShortlistOpen(false);
+      setIsFilterOpen(false);
+      setCompareIds([]);
+      setIsCompareModalOpen(false);
+      setInquiryProfile(null);
+      setIsInquiryModalOpen(false);
+      setIsDocumentReviewOpen(false);
+      setPrintProfile(null);
+      setAiQueryData(null);
+      setAiQueryLoading(false);
+      setAiQueryActive(false);
+      setShowAISummary(false);
+      setIsAddCrewMemberOpen(false);
+      setIsCvReviewOpen(false);
+      setIsStaffAccessOpen(false);
+      setIsFocusMode(false);
+      window.history.replaceState(null, '', '/');
+    };
+    window.addEventListener('hydenlyne:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('hydenlyne:session-expired', handleSessionExpired);
+  }, [clearShortlist, handleResetAll, setSelectedProfileId, setViewMode]);
 
   const shellKey = !authInitialized ? 'gate' : !isAuthenticated ? 'public' : 'workspace';
 
@@ -532,6 +708,8 @@ export default function App() {
             )}
             {isAuthenticated && canSubmitCv && (
               <IncomingDocumentAlert
+                key={authSessionKey ?? 'authenticated-session'}
+                sessionKey={authSessionKey}
                 onOpenContractor={openIncomingDocumentContractor}
                 onShowToast={showToast}
                 onReviewResolved={() => {
@@ -658,6 +836,7 @@ export default function App() {
                 }}
                 isCalmState={!isSearchActive}
                 isAuthenticated={isAuthenticated}
+                sessionKey={authSessionKey}
                 onAIResults={handleAIResults}
                 onOpenFilters={() => setIsFilterOpen(true)}
               />
@@ -672,6 +851,7 @@ export default function App() {
               transition={{ duration: 0.20, ease: [0.22, 1, 0.36, 1] }}
             >
               <OperationsHome
+                key={authSessionKey ?? 'workspace-session'}
                 fullName={user?.fullName}
                 profiles={allProfiles}
                 profilesLoading={profilesLoading}
@@ -680,6 +860,8 @@ export default function App() {
                 onOpenDocumentReview={handleOpenDocumentReview}
                 documentReviewVersion={documentReviewVersion}
                 isStaff={isStaffOrAdmin(user?.role)}
+                isAdmin={user?.role === 'admin'}
+                sessionKey={authSessionKey}
                 onShowToast={showToast}
                 searchControl={
                   <ModernHeroSearch
@@ -698,6 +880,7 @@ export default function App() {
                     }}
                     isCalmState={!isSearchActive}
                     isAuthenticated={isAuthenticated}
+                    sessionKey={authSessionKey}
                     onAIResults={handleAIResults}
                     onOpenFilters={() => setIsFilterOpen(true)}
                     variant="compact"
@@ -885,6 +1068,7 @@ export default function App() {
                           <Suspense fallback={<DossierFallback />}>
                           <SpecialistDossierPane
                             profile={activeSelectedProfile}
+                            sessionKey={authSessionKey}
                             searchQuery={committedQuery}
                             isBookmarked={activeSelectedProfile ? isBookmarked(activeSelectedProfile.id) : false}
                             onToggleBookmark={toggleBookmark}
@@ -896,12 +1080,20 @@ export default function App() {
                             documents={activeSelectedProfile ? getDocumentsForProfile(activeSelectedProfile.id) : []}
                             summary={activeSelectedProfile ? getSummaryForProfile(activeSelectedProfile.id) : undefined}
                             summaryLoading={activeSelectedProfile ? isSummaryLoading(activeSelectedProfile.id) : false}
-                            onAddDocument={() => activeSelectedProfile && void refreshDocuments(activeSelectedProfile.id)}
+                            onAddDocument={() => activeSelectedProfile
+                              ? refreshDocuments(activeSelectedProfile.id)
+                              : undefined}
                             onRemoveDocument={async (docId) => {
-                              if (activeSelectedProfile) await removeDocument(activeSelectedProfile.id, docId);
+                              if (activeSelectedProfile) {
+                                return removeDocument(activeSelectedProfile.id, docId);
+                              }
+                              return undefined;
                             }}
                             onReviewDocument={async (docId, action) => {
-                              if (activeSelectedProfile) await reviewDocument(activeSelectedProfile.id, docId, action);
+                              if (activeSelectedProfile) {
+                                return reviewDocument(activeSelectedProfile.id, docId, action);
+                              }
+                              return undefined;
                             }}
                             canManageDocuments={canManageDocuments}
                             canRequestDocuments={canRequestDocuments}
@@ -1020,7 +1212,7 @@ export default function App() {
                                         )}
                                       </div>
                                       <span className="font-mono font-bold text-xs text-primary shrink-0">
-                                        {profile.dayRate ? `£${profile.dayRate}/d` : 'Rate on req'}
+                                        {profile.dayRate != null ? `£${profile.dayRate}/d` : 'Rate on req'}
                                       </span>
                                     </div>
 
@@ -1033,12 +1225,12 @@ export default function App() {
                                     <div className="flex items-center gap-2 text-xs">
                                       <span className={`inline-flex items-center gap-1 font-medium ${isAvailableNow ? 'text-positive' : 'text-secondary'}`}>
                                         <span className={`w-1.5 h-1.5 rounded-full ${isAvailableNow ? 'bg-positive' : 'bg-surface-selected'}`} />
-                                        <span className="truncate">{(profile.availability || 'Available').replace('Available ', '')}</span>
+                                        <span className="truncate">{availabilityLabel(profile.availability).replace('Available ', '')}</span>
                                       </span>
                                       <span>·</span>
                                       <span className="text-secondary flex items-center gap-0.5 font-mono">
                                         <Star className="w-3 h-3 text-warning fill-warning" />
-                                        <span>{profile.rating || 4.9}</span>
+                                        <span>{profile.rating != null ? profile.rating : '—'}</span>
                                       </span>
                                       <span>·</span>
                                       <span className="text-secondary truncate">{profile.department}</span>
@@ -1048,7 +1240,7 @@ export default function App() {
                                     <div className="flex items-center gap-2 text-xs text-muted">
                                       <span className="truncate text-secondary">{profile.location.split(',')[0]}</span>
                                       <span>·</span>
-                                      <span className="font-mono text-secondary shrink-0">{profile.yearsOfExperience}y exp</span>
+                                      <span className="font-mono text-secondary shrink-0">{formatExperience(profile.yearsOfExperience)}{profile.yearsOfExperience == null ? '' : 'y exp'}</span>
                                       {profile.skills.length > 0 && (
                                         <>
                                           <span>·</span>
@@ -1179,6 +1371,7 @@ export default function App() {
                             <Suspense fallback={<DossierFallback />}>
                             <SpecialistDossierPane
                               profile={activeSelectedProfile}
+                              sessionKey={authSessionKey}
                               searchQuery={committedQuery}
                               isBookmarked={activeSelectedProfile ? isBookmarked(activeSelectedProfile.id) : false}
                               onToggleBookmark={toggleBookmark}
@@ -1190,18 +1383,24 @@ export default function App() {
                               documents={activeSelectedProfile ? getDocumentsForProfile(activeSelectedProfile.id) : []}
                               summary={activeSelectedProfile ? getSummaryForProfile(activeSelectedProfile.id) : undefined}
                               summaryLoading={activeSelectedProfile ? isSummaryLoading(activeSelectedProfile.id) : false}
-                              onAddDocument={() => activeSelectedProfile && void refreshDocuments(activeSelectedProfile.id)}
+                              onAddDocument={() => activeSelectedProfile
+                                ? refreshDocuments(activeSelectedProfile.id)
+                                : undefined}
                               onRemoveDocument={async (docId) => {
                                 if (activeSelectedProfile) {
                                   try {
-                                    await removeDocument(activeSelectedProfile.id, docId);
+                                    return await removeDocument(activeSelectedProfile.id, docId);
                                   } catch {
                                     showToast('Failed to remove document');
                                   }
                                 }
+                                return undefined;
                               }}
                               onReviewDocument={async (docId, action) => {
-                                if (activeSelectedProfile) await reviewDocument(activeSelectedProfile.id, docId, action);
+                                if (activeSelectedProfile) {
+                                  return reviewDocument(activeSelectedProfile.id, docId, action);
+                                }
+                                return undefined;
                               }}
                               canManageDocuments={canManageDocuments}
                               canRequestDocuments={canRequestDocuments}
@@ -1307,7 +1506,7 @@ export default function App() {
                                     <HighlightText text={profile.name} query={committedQuery} />
                                   </h3>
                                   {profile.isHighlyRecommended && (
-                                    <span title="Verified Contractor"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
+                                    <span title="Strong match"><BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" /></span>
                                   )}
                                   {isCompared && (
                                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-xs font-semibold bg-surface-raised border border-border-strong text-primary shrink-0">
@@ -1384,8 +1583,8 @@ export default function App() {
                               <HighlightText text={profile.location.split(',')[0] ?? profile.location} query={committedQuery} />
                             </span>
                             <span className="text-muted/60">•</span>
-                            <span>{profile.yearsOfExperience} yrs exp</span>
-                            {profile.dayRate && (
+                            <span>{formatExperience(profile.yearsOfExperience)} yrs exp</span>
+                            {profile.dayRate != null && (
                               <>
                                 <span className="text-muted/60">•</span>
                                 <span className="font-mono font-medium text-positive">£{profile.dayRate}/day</span>
@@ -1393,9 +1592,9 @@ export default function App() {
                             )}
                             <span className="text-muted/60">•</span>
                             <span className={isAvailableNow ? 'text-positive font-medium' : 'text-secondary'}>
-                              {profile.availability.replace('Available ', '')}
+                              {availabilityLabel(profile.availability).replace('Available ', '')}
                             </span>
-                            {profile.rating && (
+                            {profile.rating != null && (
                               <>
                                 <span className="text-muted/60">•</span>
                                 <span className="font-mono text-warning font-medium inline-flex items-center gap-0.5">
@@ -1461,7 +1660,18 @@ export default function App() {
                   </AnimatePresence>
                 </motion.div>
               )}
-            </AnimatePresence>
+              {profilesHaveMore && !aiQueryActive && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreProfiles()}
+                    className="min-h-11 rounded-lg border border-border-strong bg-surface px-4 text-xs font-semibold text-secondary transition-colors hover:bg-surface-raised hover:text-primary focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    Load more contractors
+                  </button>
+                </div>
+              )}
+              </AnimatePresence>
             ) : (
               /* Clean Animated Empty State */
               <motion.div
@@ -1489,6 +1699,15 @@ export default function App() {
                 >
                   Reset all filters
                 </button>
+                {profilesHaveMore && !aiQueryActive && (
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreProfiles()}
+                    className="min-h-11 px-3.5 py-1.5 rounded-[10px] border border-border-strong bg-surface hover:bg-surface-raised text-xs text-primary transition-colors cursor-pointer font-medium focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    Load more contractors
+                  </button>
+                )}
               </motion.div>
             )}
           </div>
@@ -1499,6 +1718,7 @@ export default function App() {
       </main>
       <DocumentReviewModal
         isOpen={isDocumentReviewOpen}
+        sessionKey={authSessionKey}
         onClose={() => setIsDocumentReviewOpen(false)}
         onOpenContractor={openIncomingDocumentContractor}
         onShowToast={showToast}
@@ -1571,6 +1791,8 @@ export default function App() {
         onClose={() => setIsInquiryModalOpen(false)}
         profile={inquiryProfile}
         onShowToast={showToast}
+        isAdmin={user?.role === 'admin'}
+        sessionKey={authSessionKey}
       />
 
       {/* Dossier Print Preview Modal */}
@@ -1586,6 +1808,7 @@ export default function App() {
         {modalProfile && (
           <ProfileDetailModal
             profile={modalProfile}
+            sessionKey={authSessionKey}
             onClose={() => setModalProfile(null)}
             isBookmarked={isBookmarked(modalProfile.id)}
             onToggleBookmark={(id) => toggleBookmark(id)}
@@ -1595,16 +1818,17 @@ export default function App() {
             onRequestMobilization={handleRequestMobilization}
             onPrintDossier={handlePrintDossier}
             documents={getDocumentsForProfile(modalProfile.id)}
-            onAddDocument={() => void refreshDocuments(modalProfile.id)}
+            onAddDocument={() => refreshDocuments(modalProfile.id)}
             onRemoveDocument={async (docId) => {
               try {
-                await removeDocument(modalProfile.id, docId);
+                return await removeDocument(modalProfile.id, docId);
               } catch {
                 showToast('Failed to remove document');
               }
+              return undefined;
             }}
             onReviewDocument={async (docId, action) => {
-              await reviewDocument(modalProfile.id, docId, action);
+              return reviewDocument(modalProfile.id, docId, action);
             }}
             canManageDocuments={canManageDocuments}
             canRequestDocuments={canRequestDocuments}
@@ -1642,29 +1866,37 @@ export default function App() {
       <AddCrewMemberModal
         isOpen={isAddCrewMemberOpen}
         isAdmin={user?.role === 'admin'}
+        sessionKey={authSessionKey}
         onClose={() => setIsAddCrewMemberOpen(false)}
         onSuccess={() => {
           showToast('Contractor added successfully');
-          refetchProfiles();
+          void refetchProfiles().catch(() => {
+            showToast('Contractor added successfully — roster refresh unavailable');
+          });
         }}
       />
       <Suspense fallback={null}>
         <CvReviewModal
           isOpen={isCvReviewOpen}
           isAdmin={user?.role === 'admin'}
+          sessionKey={authSessionKey}
           onClose={() => setIsCvReviewOpen(false)}
           onApproved={() => {
             showToast('CV approved and contractor published');
-            refetchProfiles();
+            void refetchProfiles().catch(() => {
+              showToast('CV approved — roster refresh unavailable');
+            });
           }}
         />
         <ManageStaffModal
           isOpen={isStaffAccessOpen}
+          sessionKey={authSessionKey}
           onClose={() => setIsStaffAccessOpen(false)}
         />
       </Suspense>
       <FilterModal
         isOpen={isFilterOpen}
+        profiles={allProfiles}
         onClose={() => setIsFilterOpen(false)}
         filters={filters}
         onUpdateFilters={setFilters}
@@ -1681,7 +1913,6 @@ export default function App() {
         onCancel={() => setIsLoginOpen(false)}
         onSuccess={() => {
           setIsLoginOpen(false);
-          void refreshSession();
         }}
       />
       </Suspense>

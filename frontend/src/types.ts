@@ -43,7 +43,7 @@ export interface UserProfile {
   department: string;
   location: string;
   remoteType: RemoteType;
-  yearsOfExperience: number;
+  yearsOfExperience: number | null;
   skills: string[];
   expertise?: string[];
   bio: string;
@@ -133,7 +133,7 @@ export interface AIOverviewData {
   summary: string;
   keyInsights: string[];
   topSkillsFound: string[];
-  avgExperience: number;
+  avgExperience: number | null;
   availablePercentage: number;
   highlightProfileId?: string;
 }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional
 
 from app.config import get_settings
 
@@ -19,6 +19,11 @@ CREW_MEMBERS_INDEX = "crew_members"
 DOCUMENTS_INDEX = "documents"
 APPROVED_CREW_FILTER = 'publication_status = "approved"'
 SEARCHABLE_DOCUMENTS_FILTER = 'extraction_status IN ["approved", "extracted"]'
+DOCUMENT_SEARCHABLE_ATTRIBUTES = ("file_name", "file_type", "classification")
+
+
+class SearchProviderUnavailable(RuntimeError):
+    """Raised when Meilisearch cannot serve a search request."""
 
 
 class MeilisearchClient:
@@ -37,14 +42,19 @@ class MeilisearchClient:
             self._client = meilisearch.Client(self.base_url, self.master_key)
         return self._client
 
+    def _wait_for_task(self, task_uid: int) -> bool:
+        """Confirm that an asynchronous Meilisearch write actually completed."""
+        task = self.client.wait_for_task(task_uid, timeout_in_ms=5000, interval_in_ms=50)
+        return getattr(task, "status", None) == "succeeded"
+
     async def health_check(self) -> bool:
         """Check if Meilisearch is available."""
         try:
             import httpx
 
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{self.base_url}/health")
-                return response.status_code == 200
+                async with client.stream("GET", f"{self.base_url}/health") as response:
+                    return response.status_code == 200
         except Exception:
             return False
 
@@ -64,40 +74,42 @@ class MeilisearchClient:
             # C1-only searchable attributes per ADR 0005 — email/phone and
             # passport/visa/medical/insurance derived fields must never be
             # searchable in the general index.
-            crew_index.update_searchable_attributes(
-                [
-                    "full_name",
-                    "nationality",
-                    "country_of_residence",
-                    "gender",
-                    "languages",
-                    "flying_point",
-                    "education",
-                    "tags",
-                    "training_qualifications",
-                    "geographical_experience",
-                    "systems_experience",
-                    "professional_summary",
-                ]
-            )
-            crew_index.update_filterable_attributes(
-                [
-                    "availability_status",
-                    "nationality",
-                    "country_of_residence",
-                    "gender",
-                    "languages",
-                    "tags",
-                    "publication_status",
-                ]
-            )
-            crew_index.update_sortable_attributes(
-                [
-                    "created_at",
-                    "availability_date",
-                    "full_name",
-                ]
-            )
+            crew_index_tasks = [
+                crew_index.update_searchable_attributes(
+                    [
+                        "full_name",
+                        "nationality",
+                        "country_of_residence",
+                        "gender",
+                        "languages",
+                        "flying_point",
+                        "education",
+                        "tags",
+                        "training_qualifications",
+                        "geographical_experience",
+                        "systems_experience",
+                        "professional_summary",
+                    ]
+                ),
+                crew_index.update_filterable_attributes(
+                    [
+                        "availability_status",
+                        "nationality",
+                        "country_of_residence",
+                        "gender",
+                        "languages",
+                        "tags",
+                        "publication_status",
+                    ]
+                ),
+                crew_index.update_sortable_attributes(
+                    [
+                        "created_at",
+                        "availability_date",
+                        "full_name",
+                    ]
+                ),
+            ]
 
             # Documents index — same lazy-handle reasoning as above.
             try:
@@ -106,27 +118,26 @@ class MeilisearchClient:
                 pass
 
             doc_index = self.client.index(DOCUMENTS_INDEX)
-            doc_index.update_searchable_attributes(
-                [
-                    "file_name",
-                    "classification",
-                    "extracted_data",
-                ]
-            )
-            doc_index.update_filterable_attributes(
-                [
-                    "file_type",
-                    "classification",
-                    "extraction_status",
-                    "crew_member_id",
-                ]
-            )
+            document_index_tasks = [
+                doc_index.update_searchable_attributes([*DOCUMENT_SEARCHABLE_ATTRIBUTES]),
+                doc_index.update_filterable_attributes(
+                    [
+                        "file_type",
+                        "classification",
+                        "extraction_status",
+                        "crew_member_id",
+                    ]
+                ),
+            ]
+            for task in [*crew_index_tasks, *document_index_tasks]:
+                if not self._wait_for_task(task.task_uid):
+                    raise RuntimeError("Meilisearch index configuration task did not succeed")
 
         try:
             await asyncio.to_thread(_sync_setup)
             logger.info("Meilisearch indexes configured successfully")
-        except Exception as e:
-            logger.error(f"Failed to setup Meilisearch indexes: {e}")
+        except Exception as exc:
+            logger.error("Failed to setup Meilisearch indexes (%s)", type(exc).__name__)
 
     async def index_crew_member(self, crew_member: dict[str, Any]) -> Optional[dict[str, int]]:
         """Index a crew member for search."""
@@ -135,12 +146,14 @@ class MeilisearchClient:
         def _sync() -> dict[str, int]:
             index = self.client.index(CREW_MEMBERS_INDEX)
             task = index.add_documents([crew_member])
+            if not self._wait_for_task(task.task_uid):
+                raise RuntimeError("Meilisearch crew index task did not succeed")
             return {"task_uid": task.task_uid}
 
         try:
             return await asyncio.to_thread(_sync)
-        except Exception as e:
-            logger.error(f"Failed to index crew member: {e}")
+        except Exception as exc:
+            logger.error("Failed to index crew member (%s)", type(exc).__name__)
             return None
 
     async def index_crew_members(
@@ -152,12 +165,14 @@ class MeilisearchClient:
         def _sync() -> dict[str, int]:
             index = self.client.index(CREW_MEMBERS_INDEX)
             task = index.add_documents(crew_members)
+            if not self._wait_for_task(task.task_uid):
+                raise RuntimeError("Meilisearch crew batch task did not succeed")
             return {"task_uid": task.task_uid}
 
         try:
             return await asyncio.to_thread(_sync)
-        except Exception as e:
-            logger.error(f"Failed to index crew members: {e}")
+        except Exception as exc:
+            logger.error("Failed to index crew members (%s)", type(exc).__name__)
             return None
 
     async def search_crew_members(
@@ -179,9 +194,8 @@ class MeilisearchClient:
             search_params["filter"] = (
                 f"{APPROVED_CREW_FILTER} AND {filters}" if filters else APPROVED_CREW_FILTER
             )
-            return cast(
-                dict[str, Any], index.search(query, search_params)
-            )  # meilisearch client returns dict[str, Any] shape
+            results: dict[str, Any] = index.search(query, search_params)
+            return results
 
         try:
             results = await asyncio.to_thread(_sync)
@@ -190,9 +204,9 @@ class MeilisearchClient:
                 "estimated_total_hits": results.get("estimatedTotalHits", 0),
                 "processing_time_ms": results.get("processingTimeMs", 0),
             }
-        except Exception as e:
-            logger.error(f"Failed to search crew members: {e}")
-            return {"hits": [], "estimated_total_hits": 0, "processing_time_ms": 0}
+        except Exception as exc:
+            logger.error("Failed to search crew members (%s)", type(exc).__name__)
+            raise SearchProviderUnavailable("Crew search is temporarily unavailable") from exc
 
     async def delete_crew_member(self, crew_id: str) -> bool:
         """Delete a crew member from the index."""
@@ -200,13 +214,13 @@ class MeilisearchClient:
 
         def _sync() -> bool:
             index = self.client.index(CREW_MEMBERS_INDEX)
-            index.delete_document(crew_id)
-            return True
+            task = index.delete_document(crew_id)
+            return self._wait_for_task(task.task_uid)
 
         try:
             return await asyncio.to_thread(_sync)
         except Exception as e:
-            logger.error(f"Failed to delete crew member from index: {e}")
+            logger.error("Failed to delete crew member from index: %s", type(e).__name__)
             return False
 
     async def delete_crew_members(self, crew_ids: list[str]) -> bool:
@@ -217,14 +231,53 @@ class MeilisearchClient:
 
         def _sync() -> bool:
             index = self.client.index(CREW_MEMBERS_INDEX)
-            index.delete_documents(crew_ids)
-            return True
+            task = index.delete_documents(crew_ids)
+            return self._wait_for_task(task.task_uid)
 
         try:
             return await asyncio.to_thread(_sync)
         except Exception as e:
-            logger.error(f"Failed to delete crew members from index: {e}")
+            logger.error("Failed to delete crew members from index: %s", type(e).__name__)
             return False
+
+    async def list_crew_member_ids(self, *, batch_size: int = 1000) -> Optional[list[str]]:
+        """Return all IDs currently in the crew projection.
+
+        ``None`` means the index could not be read. Callers must distinguish
+        that from an empty index so a transient Meilisearch failure cannot be
+        interpreted as proof that every indexed record is stale.
+        """
+        import asyncio
+
+        batch_size = max(1, min(batch_size, 10_000))
+
+        def _sync() -> list[str]:
+            index = self.client.index(CREW_MEMBERS_INDEX)
+            offset = 0
+            ids: list[str] = []
+            while True:
+                page = index.get_documents(
+                    {
+                        "fields": ["id"],
+                        "limit": batch_size,
+                        "offset": offset,
+                    }
+                )
+                page_ids = [
+                    str(document_id)
+                    for document in page.results
+                    if (document_id := getattr(document, "id", None)) is not None
+                ]
+                ids.extend(page_ids)
+                if not page.results or offset + len(page.results) >= page.total:
+                    return ids
+                offset += len(page.results)
+
+        try:
+            return await asyncio.to_thread(_sync)
+        except Exception as e:
+            logger.error("Failed to list crew member IDs from index: %s", type(e).__name__)
+            return None
 
     async def index_document(self, document: dict[str, Any]) -> Optional[dict[str, int]]:
         """Index a document for search."""
@@ -233,12 +286,84 @@ class MeilisearchClient:
         def _sync() -> dict[str, int]:
             index = self.client.index(DOCUMENTS_INDEX)
             task = index.add_documents([document])
+            if not self._wait_for_task(task.task_uid):
+                raise RuntimeError("Meilisearch document index task did not succeed")
             return {"task_uid": task.task_uid}
 
         try:
             return await asyncio.to_thread(_sync)
         except Exception as e:
-            logger.error(f"Failed to index document: {e}")
+            logger.error("Failed to index document: %s", type(e).__name__)
+            return None
+
+    async def delete_document(self, document_id: str) -> bool:
+        """Remove a document projection from the search index."""
+        import asyncio
+
+        def _sync() -> bool:
+            index = self.client.index(DOCUMENTS_INDEX)
+            task = index.delete_document(document_id)
+            return self._wait_for_task(task.task_uid)
+
+        try:
+            return await asyncio.to_thread(_sync)
+        except Exception as e:
+            logger.error("Failed to remove document from search index: %s", type(e).__name__)
+            return False
+
+    async def delete_documents(self, document_ids: list[str]) -> bool:
+        """Remove multiple document projections from the search index."""
+        if not document_ids:
+            return True
+        import asyncio
+
+        def _sync() -> bool:
+            index = self.client.index(DOCUMENTS_INDEX)
+            task = index.delete_documents(document_ids)
+            return self._wait_for_task(task.task_uid)
+
+        try:
+            return await asyncio.to_thread(_sync)
+        except Exception as e:
+            logger.error(
+                "Failed to remove document projections from search index: %s",
+                type(e).__name__,
+            )
+            return False
+
+    async def list_document_ids(self, *, batch_size: int = 1000) -> Optional[list[str]]:
+        """Return all IDs currently in the document projection.
+
+        ``None`` means the index could not be read. Callers must distinguish
+        that from an empty index so a transient Meilisearch failure cannot be
+        interpreted as proof that every indexed record is stale.
+        """
+        import asyncio
+
+        batch_size = max(1, min(batch_size, 10_000))
+
+        def _sync() -> list[str]:
+            index = self.client.index(DOCUMENTS_INDEX)
+            offset = 0
+            ids: list[str] = []
+            while True:
+                page = index.get_documents(
+                    {"fields": ["id"], "limit": batch_size, "offset": offset}
+                )
+                page_ids = [
+                    str(document_id)
+                    for document in page.results
+                    if (document_id := getattr(document, "id", None)) is not None
+                ]
+                ids.extend(page_ids)
+                if not page.results or offset + len(page.results) >= page.total:
+                    return ids
+                offset += len(page.results)
+
+        try:
+            return await asyncio.to_thread(_sync)
+        except Exception as e:
+            logger.error("Failed to list document IDs from search index: %s", type(e).__name__)
             return None
 
     async def search_documents(
@@ -247,8 +372,9 @@ class MeilisearchClient:
         filters: Optional[str] = None,
         limit: int = 20,
         offset: int = 0,
+        searchable_attributes: Optional[list[str]] = None,
     ) -> dict[str, Any]:
-        """Search documents."""
+        """Search documents, optionally restricting searchable attributes."""
         import asyncio
 
         def _sync() -> dict[str, Any]:
@@ -259,9 +385,10 @@ class MeilisearchClient:
             }
             if filters:
                 search_params["filter"] = filters
-            return cast(
-                dict[str, Any], index.search(query, search_params)
-            )  # meilisearch client returns dict[str, Any] shape
+            if searchable_attributes is not None:
+                search_params["attributesToSearchOn"] = searchable_attributes
+            results: dict[str, Any] = index.search(query, search_params)
+            return results
 
         try:
             results = await asyncio.to_thread(_sync)
@@ -270,9 +397,11 @@ class MeilisearchClient:
                 "estimated_total_hits": results.get("estimatedTotalHits", 0),
                 "processing_time_ms": results.get("processingTimeMs", 0),
             }
-        except Exception as e:
-            logger.error(f"Failed to search documents: {e}")
-            return {"hits": [], "estimated_total_hits": 0, "processing_time_ms": 0}
+        except Exception as exc:
+            logger.error("Failed to search documents (%s)", type(exc).__name__)
+            raise SearchProviderUnavailable(
+                "Document search is temporarily unavailable"
+            ) from exc
 
 
 meilisearch_client = MeilisearchClient()

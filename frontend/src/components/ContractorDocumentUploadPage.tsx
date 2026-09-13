@@ -18,6 +18,7 @@ import {
 import { publicDocumentRequest, uploadRequestedDocument } from '../lib/documentsApi'
 import { HydenlyneAnimatedLogo } from './HydenlyneAnimatedLogo'
 import { useTheme } from '../hooks/useTheme'
+import { formatExpiryTime } from './contractorDocumentUtils'
 
 interface ContractorDocumentUploadPageProps {
   token: string
@@ -42,40 +43,12 @@ const CATEGORIES: CategoryOption[] = [
 ]
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 // 50MB
-const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png']
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.jpg', '.jpeg', '.png']
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatExpiryTime(isoString: string): { relative: string; full: string } {
-  try {
-    const expiry = new Date(isoString)
-    const now = new Date()
-    const diffMs = expiry.getTime() - now.getTime()
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-
-    const full = expiry.toLocaleDateString(undefined, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    })
-
-    if (diffDays <= 0) {
-      return { relative: 'Expires soon', full }
-    }
-    if (diffDays === 1) {
-      return { relative: 'Expires in 1 day', full }
-    }
-    return { relative: `Valid for ${diffDays} days`, full }
-  } catch {
-    return { relative: 'Expiring bearer link', full: '14-day security window' }
-  }
 }
 
 export function ContractorDocumentUploadPage({ token }: ContractorDocumentUploadPageProps) {
@@ -91,10 +64,21 @@ export function ContractorDocumentUploadPage({ token }: ContractorDocumentUpload
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadEpochRef = useRef(0)
   const fileInputId = useId()
 
   useEffect(() => {
+    uploadEpochRef.current += 1
     let active = true
+    setState('loading')
+    setErrorMessage(null)
+    setExpiresAt(null)
+    setFile(null)
+    setFileValidationError(null)
+    setUploadedFileName(null)
+    setIsDragging(false)
+    setIdempotencyKey(crypto.randomUUID())
+    if (fileInputRef.current) fileInputRef.current.value = ''
     publicDocumentRequest(token)
       .then((data) => {
         if (active) {
@@ -120,10 +104,18 @@ export function ContractorDocumentUploadPage({ token }: ContractorDocumentUpload
       return
     }
 
+    const isDifferentFile = !file
+      || file.name !== candidate.name
+      || file.size !== candidate.size
+      || file.lastModified !== candidate.lastModified
+    if (isDifferentFile) {
+      setIdempotencyKey(crypto.randomUUID())
+    }
+
     const lowerName = candidate.name.toLowerCase()
     const hasValidExt = ALLOWED_EXTENSIONS.some((ext) => lowerName.endsWith(ext))
     if (!hasValidExt) {
-      setFileValidationError('Unsupported format. Please select a PDF, Word document (.doc, .docx), or image (.jpg, .png).')
+      setFileValidationError('Unsupported format. Please select a PDF, Word document (.docx), or image (.jpg, .png).')
       setFile(null)
       return
     }
@@ -175,14 +167,17 @@ export function ContractorDocumentUploadPage({ token }: ContractorDocumentUpload
     event.preventDefault()
     if (!file || state === 'uploading') return
 
+    const requestEpoch = uploadEpochRef.current
     setState('uploading')
     setErrorMessage(null)
 
     try {
       await uploadRequestedDocument(token, file, idempotencyKey, category)
+      if (requestEpoch !== uploadEpochRef.current) return
       setUploadedFileName(file.name)
       setState('complete')
     } catch (error) {
+      if (requestEpoch !== uploadEpochRef.current) return
       setState('ready')
       setErrorMessage(error instanceof Error ? error.message : 'Could not upload that document. Please try again.')
     }
@@ -374,7 +369,7 @@ export function ContractorDocumentUploadPage({ token }: ContractorDocumentUpload
                       ref={fileInputRef}
                       id={fileInputId}
                       type="file"
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      accept=".pdf,.docx,.jpg,.jpeg,.png"
                       onChange={onFileInputChange}
                       disabled={state === 'uploading'}
                       className="sr-only"
@@ -411,7 +406,7 @@ export function ContractorDocumentUploadPage({ token }: ContractorDocumentUpload
                           or drag and drop here
                         </p>
                         <p className="mt-1 text-xs text-muted">
-                          PDF, Word (.docx, .doc), or Image (.jpg, .png)
+                          PDF, Word (.docx), or Image (.jpg, .png)
                         </p>
 
                         <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">

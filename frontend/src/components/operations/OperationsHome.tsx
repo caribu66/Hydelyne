@@ -1,4 +1,4 @@
-import { FC, ReactNode, useEffect, useState } from 'react'
+import { FC, ReactNode, useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { useQuery } from '@apollo/client'
 import { Ship, Users } from 'lucide-react'
@@ -11,6 +11,7 @@ import { deriveCrewReadinessMetrics, formatExpiringCertSearchQuery } from '../..
 import { UserProfile } from '../../types'
 import { EXPIRING_CERTS_QUERY } from '../../lib/queries'
 import { incomingDocumentReviews } from '../../lib/documentsApi'
+import { apolloResultHasErrors } from '../../utils/sessionScope'
 
 interface OperationsHomeProps {
   fullName: string | null | undefined
@@ -21,9 +22,11 @@ interface OperationsHomeProps {
   onOpenDocumentReview: () => void
   documentReviewVersion: number
   isStaff: boolean
+  isAdmin: boolean
   searchControl: ReactNode
   children?: ReactNode
   onShowToast?: (message: string) => void
+  sessionKey?: string | null
 }
 
 export const OperationsHome: FC<OperationsHomeProps> = ({
@@ -35,21 +38,29 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
   onOpenDocumentReview,
   documentReviewVersion,
   isStaff,
+  isAdmin,
   searchControl,
   children,
   onShowToast,
+  sessionKey = null,
 }) => {
   const metrics = deriveCrewReadinessMetrics(profiles)
 
   const [searchTab, setSearchTab] = useState<'contractors' | 'vessels'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      if (params.get('tab') === 'vessels' || params.get('vessel')) {
+      if (isStaff && (params.get('tab') === 'vessels' || params.get('vessel'))) {
         return 'vessels'
       }
     }
     return 'contractors'
   })
+
+  useEffect(() => {
+    if (!isStaff && searchTab === 'vessels') {
+      setSearchTab('contractors')
+    }
+  }, [isStaff, searchTab])
 
   // Documents queue (REST)
   const [docCount, setDocCount] = useState<number | null>(null)
@@ -57,9 +68,16 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
   const [docError, setDocError] = useState<string | null>(null)
 
   useEffect(() => {
+    setDocCount(null)
+    setDocError(null)
+    setDocLoading(Boolean(isStaff && sessionKey))
     if (!isStaff) {
       setDocLoading(false)
       setDocCount(0)
+      return
+    }
+    if (!sessionKey) {
+      setDocLoading(false)
       return
     }
     let active = true
@@ -84,21 +102,74 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
     return () => {
       active = false
     }
-  }, [documentReviewVersion, isStaff])
+  }, [documentReviewVersion, isStaff, sessionKey])
 
   // Expiring certifications (GraphQL, staff only)
   const {
     data: expiringData,
     loading: expiringLoading,
     error: expiringError,
+    refetch: refetchExpiring,
   } = useQuery<{ expiringCertifications: Array<{ id: string }> }>(EXPIRING_CERTS_QUERY, {
     variables: { days: 60 },
-    fetchPolicy: 'cache-and-network',
-    skip: !isStaff,
+    // Operational results are account-scoped; do not render a cached
+    // previous-account response while the new request is in flight.
+    fetchPolicy: 'network-only',
+    skip: !isStaff || !sessionKey,
   })
 
-  const expiringCount = expiringData?.expiringCertifications?.length ?? null
-  const expiringErrorMessage = expiringError ? expiringError.message : null
+  const [expiringSessionState, setExpiringSessionState] = useState<{
+    key: string | null
+    status: 'idle' | 'loading' | 'ready' | 'error'
+  }>({ key: null, status: 'idle' })
+  const previousExpiringSessionKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const previousSessionKey = previousExpiringSessionKeyRef.current
+    previousExpiringSessionKeyRef.current = sessionKey
+    setExpiringSessionState({ key: sessionKey, status: sessionKey && isStaff ? 'loading' : 'idle' })
+    if (!isStaff || !sessionKey || previousSessionKey === null) return
+
+    let active = true
+    void refetchExpiring({ days: 60 })
+      .then((result) => {
+        if (apolloResultHasErrors(result)) throw new Error('Expiring certification refresh failed')
+        if (active) setExpiringSessionState({ key: sessionKey, status: 'ready' })
+      })
+      .catch(() => {
+        if (active) setExpiringSessionState({ key: sessionKey, status: 'error' })
+      })
+    return () => {
+      active = false
+    }
+  }, [isStaff, refetchExpiring, sessionKey])
+
+  useEffect(() => {
+    if (
+      !isStaff
+      || !sessionKey
+      || expiringSessionState.key !== sessionKey
+      || expiringSessionState.status !== 'loading'
+      || expiringLoading
+    ) return
+    setExpiringSessionState({
+      key: sessionKey,
+      status: expiringError ? 'error' : 'ready',
+    })
+  }, [expiringError, expiringLoading, expiringSessionState, isStaff, sessionKey])
+
+  const expiringSessionReady = expiringSessionState.key === sessionKey
+    && expiringSessionState.status === 'ready'
+  const expiringCount = expiringLoading || !expiringSessionReady
+    ? null
+    : expiringData?.expiringCertifications?.length ?? null
+  const expiringErrorMessage = expiringLoading || !expiringSessionReady
+    ? null
+    : expiringSessionState.status === 'error'
+      ? 'Could not load expiring certifications.'
+      : expiringError
+      ? expiringError.message
+      : null
 
   const handleOpenExpiring = () => {
     onSearch(formatExpiringCertSearchQuery())
@@ -162,6 +233,7 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
               onOpenExpiring={handleOpenExpiring}
             />
             <OperationsProjectsPanel
+              sessionKey={sessionKey}
               onSelectProject={(query) => {
                 onSearch(query)
               }}
@@ -181,7 +253,7 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
             role="tablist"
             aria-label="Operations search mode"
             onKeyDown={(e) => {
-              if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              if (isStaff && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
                 e.preventDefault()
                 setSearchTab((prev) => (prev === 'contractors' ? 'vessels' : 'contractors'))
               }
@@ -204,22 +276,24 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
               <Users className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
               <span>Find a contractor</span>
             </button>
-            <button
-              type="button"
-              role="tab"
-              id="tab-vessels"
-              aria-selected={searchTab === 'vessels'}
-              aria-controls="panel-vessels"
-              onClick={() => setSearchTab('vessels')}
-              className={`inline-flex min-h-9 items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer ${
-                searchTab === 'vessels'
-                  ? 'bg-surface text-primary shadow-xs border border-border-subtle/80'
-                  : 'text-secondary hover:text-primary hover:bg-surface-raised/60'
-              }`}
-            >
-              <Ship className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-              <span>Find a vessel</span>
-            </button>
+            {isStaff && (
+              <button
+                type="button"
+                role="tab"
+                id="tab-vessels"
+                aria-selected={searchTab === 'vessels'}
+                aria-controls="panel-vessels"
+                onClick={() => setSearchTab('vessels')}
+                className={`inline-flex min-h-9 items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus cursor-pointer ${
+                  searchTab === 'vessels'
+                    ? 'bg-surface text-primary shadow-xs border border-border-subtle/80'
+                    : 'text-secondary hover:text-primary hover:bg-surface-raised/60'
+                }`}
+              >
+                <Ship className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+                <span>Find a vessel</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs font-mono text-muted">
@@ -253,7 +327,7 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
             {searchControl}
             {children}
           </div>
-        ) : (
+        ) : isStaff ? (
           <div
             id="panel-vessels"
             role="tabpanel"
@@ -270,9 +344,13 @@ export const OperationsHome: FC<OperationsHomeProps> = ({
             <p className="mt-1 text-sm text-secondary">
               Search by vessel name, IMO, MMSI, or callsign — live AIS data via VesselAPI with active mobilization rosters.
             </p>
-            <VesselSearchPane onShowToast={onShowToast} />
+            <VesselSearchPane
+              onShowToast={onShowToast}
+              isAdmin={isAdmin}
+              sessionKey={sessionKey}
+            />
           </div>
-        )}
+        ) : null}
       </motion.section>
     </motion.div>
   )

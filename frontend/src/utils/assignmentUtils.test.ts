@@ -5,6 +5,7 @@ import {
   buildMobilizationReference,
   getRoleKeyword,
   validateAssignmentInput,
+  validateAgreedDayRate,
   evaluateCandidatePreflightCompliance,
 } from './assignmentUtils'
 
@@ -66,6 +67,10 @@ describe('calculateCampaignWindow', () => {
 
   it('throws for invalid start date', () => {
     expect(() => calculateCampaignWindow('invalid-date', 14)).toThrow('Invalid start date')
+  })
+
+  it('rejects dates that JavaScript would normalize into another calendar day', () => {
+    expect(() => calculateCampaignWindow('2026-02-31', 14)).toThrow('Invalid start date')
   })
 
   it('throws for non-positive duration', () => {
@@ -141,6 +146,23 @@ describe('validateAssignmentInput', () => {
     expect(res.error).toContain('valid start date')
   })
 
+  it('rejects invalid calendar dates and fractional durations', () => {
+    expect(
+      validateAssignmentInput({
+        roleOnBoard: 'Client Rep',
+        startDate: '2026-02-31',
+        durationDays: 14,
+      }),
+    ).toEqual({ valid: false, error: 'A valid start date is required' })
+    expect(
+      validateAssignmentInput({
+        roleOnBoard: 'Client Rep',
+        startDate: '2026-09-01',
+        durationDays: 1.5,
+      }),
+    ).toEqual({ valid: false, error: 'Duration must be at least 1 day' })
+  })
+
   it('rejects invalid duration', () => {
     const res = validateAssignmentInput({
       roleOnBoard: 'Client Rep',
@@ -149,6 +171,24 @@ describe('validateAssignmentInput', () => {
     })
     expect(res.valid).toBe(false)
     expect(res.error).toContain('Duration must be at least 1 day')
+  })
+})
+
+describe('validateAgreedDayRate', () => {
+  it('rejects a missing or below-minimum rate instead of allowing an implicit default', () => {
+    expect(validateAgreedDayRate(null)).toEqual({
+      valid: false,
+      error: 'Enter an agreed day rate of at least £100',
+    })
+    expect(validateAgreedDayRate(99)).toEqual({
+      valid: false,
+      error: 'Enter an agreed day rate of at least £100',
+    })
+  })
+
+  it('accepts a finite administrator rate at or above the minimum', () => {
+    expect(validateAgreedDayRate(100)).toEqual({ valid: true })
+    expect(validateAgreedDayRate(850)).toEqual({ valid: true })
   })
 })
 
@@ -163,6 +203,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
         {
           name: 'OPITO BOSIET with CA-EBS',
           expiryDate: '2027-05-15',
+          verificationStatus: 'verified',
         },
       ],
     })
@@ -184,6 +225,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
         {
           name: 'BOSIET',
           expiryDate: '2026-10-15',
+          verificationStatus: 'verified',
         },
       ],
     })
@@ -232,6 +274,32 @@ describe('evaluateCandidatePreflightCompliance', () => {
     expect(report.issues.some((i) => i.toLowerCase().includes('expired on'))).toBe(true)
   })
 
+  it('does not let stale profile medical expiry override a verified certificate', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      medicalExpiry: '2030-01-01',
+      campaignStartDate: '2026-11-01',
+      campaignEndDate: '2026-11-28',
+      certifications: [
+        {
+          name: 'OGUK Medical',
+          expiryDate: '2026-10-15',
+          status: 'expired',
+          verificationStatus: 'verified',
+        },
+        {
+          name: 'OPITO BOSIET',
+          expiryDate: '2027-10-15',
+          status: 'valid',
+          verificationStatus: 'verified',
+        },
+      ],
+    })
+
+    expect(report.status).toBe('critical')
+    expect(report.issues.some((issue) => issue.includes('expired on 2026-10-15'))).toBe(true)
+  })
+
   it('flags warning when survival certification is missing', () => {
     const report = evaluateCandidatePreflightCompliance({
       availabilityStatus: 'available',
@@ -255,10 +323,12 @@ describe('evaluateCandidatePreflightCompliance', () => {
         {
           name: 'OPITO BOSIET with CA-EBS',
           expiryDate: '2027-05-15',
+          verificationStatus: 'verified',
         },
         {
           name: 'OGUK Medical',
           expiryDate: '2027-11-01',
+          verificationStatus: 'verified',
         },
       ],
     })
@@ -277,7 +347,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignStartDate: '2026-10-01',
       campaignEndDate: '2026-10-28',
       certifications: [
-        { name: 'OPITO BOSIET with CA-EBS', expiryDate: '2027-05-15' },
+        { name: 'OPITO BOSIET with CA-EBS', expiryDate: '2027-05-15', verificationStatus: 'verified' },
       ],
     })
 
@@ -296,7 +366,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignStartDate: '2026-10-01',
       campaignEndDate: '2026-10-28',
       certifications: [
-        { name: 'OPITO BOSIET with CA-EBS', expiryDate: '2027-05-15' },
+        { name: 'OPITO BOSIET with CA-EBS', expiryDate: '2027-05-15', verificationStatus: 'verified' },
       ],
     })
 
@@ -312,7 +382,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignStartDate: '2026-10-01',
       campaignEndDate: '2026-10-28',
       certifications: [
-        { name: 'OPITO BOSIET', expiryDate: '2027-05-15' },
+        { name: 'OPITO BOSIET', expiryDate: '2027-05-15', verificationStatus: 'verified' },
       ],
     })
 
@@ -330,7 +400,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignStartDate: '2026-10-01',
       campaignEndDate: '2026-10-28',
       certifications: [
-        { name: 'OPITO BOSIET', expiryDate: '2027-05-15' },
+        { name: 'OPITO BOSIET', expiryDate: '2027-05-15', verificationStatus: 'verified' },
       ],
     })
 
@@ -346,8 +416,8 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignStartDate: '2026-10-01',
       campaignEndDate: '2026-10-28',
       certifications: [
-        { name: 'OPITO BOSIET', expiryDate: '2027-05-15' },
-        { name: 'OEUK Offshore Medical', expiryDate: '2027-11-30' }, // renewed cert
+        { name: 'OPITO BOSIET', expiryDate: '2027-05-15', verificationStatus: 'verified' },
+        { name: 'OEUK Offshore Medical', expiryDate: '2027-11-30', verificationStatus: 'verified' }, // renewed cert
       ],
     })
 
@@ -376,6 +446,41 @@ describe('evaluateCandidatePreflightCompliance', () => {
     expect(report.issues.some((i) => i.includes('expiry not recorded'))).toBe(true)
   })
 
+  it('does not trust stale profile medical expiry when verified medical cert has no expiry', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      medicalExpiry: '2030-01-01',
+      campaignStartDate: '2026-10-01',
+      campaignEndDate: '2026-10-28',
+      certifications: [
+        { name: 'OGUK Medical', status: 'valid', verificationStatus: 'verified', expiryDate: null },
+        { name: 'OPITO BOSIET', status: 'valid', verificationStatus: 'verified', expiryDate: '2027-10-15' },
+      ],
+    })
+
+    expect(report.status).toBe('warning')
+    const medCheck = report.checks.find((c) => c.item === 'Offshore Medical')
+    expect(medCheck?.status).toBe('warn')
+    expect(report.issues.some((i) => i.includes('expiry not recorded'))).toBe(true)
+  })
+
+  it('does not treat a valid but unverified certificate as deployment evidence', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      medicalExpiry: null,
+      campaignStartDate: '2026-10-01',
+      campaignEndDate: '2026-10-28',
+      certifications: [
+        { name: 'OGUK Medical', status: 'valid', verificationStatus: 'unverified', expiryDate: '2027-10-15' },
+        { name: 'OPITO BOSIET', status: 'valid', verificationStatus: 'unverified', expiryDate: '2027-10-15' },
+      ],
+    })
+
+    expect(report.status).toBe('warning')
+    expect(report.checks.find((c) => c.item === 'Offshore Medical')?.status).toBe('warn')
+    expect(report.checks.find((c) => c.item === 'Survival / BOSIET')?.status).toBe('warn')
+  })
+
   it('resolves the valid renewed survival cert when older cert is expired', () => {
     const report = evaluateCandidatePreflightCompliance({
       availabilityStatus: 'available',
@@ -384,7 +489,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignEndDate: '2026-10-28',
       certifications: [
         { name: 'OPITO BOSIET', expiryDate: '2023-01-15' }, // expired
-        { name: 'OPITO FOET with CA-EBS', expiryDate: '2027-09-20' }, // valid refresher
+        { name: 'OPITO FOET with CA-EBS', expiryDate: '2027-09-20', verificationStatus: 'verified' }, // valid refresher
       ],
     })
 
@@ -392,6 +497,62 @@ describe('evaluateCandidatePreflightCompliance', () => {
     const survCheck = report.checks.find((c) => c.item === 'Survival / BOSIET')
     expect(survCheck?.status).toBe('pass')
     expect(survCheck?.detail).toContain('valid through 2027-09-20')
+  })
+
+  it('does not treat rejected or pending certificates as valid evidence', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      campaignStartDate: '2026-10-01',
+      campaignEndDate: '2026-10-28',
+      certifications: [
+        {
+          name: 'OGUK Medical',
+          expiryDate: '2028-01-01',
+          status: 'rejected',
+          verificationStatus: 'rejected',
+        },
+        {
+          name: 'OPITO BOSIET',
+          expiryDate: '2028-01-01',
+          status: 'pending_verification',
+          verificationStatus: 'unverified',
+        },
+      ],
+    })
+
+    expect(report.status).toBe('warning')
+    expect(report.checks.find((check) => check.item === 'Offshore Medical')?.status).toBe('warn')
+    expect(report.checks.find((check) => check.item === 'Survival / BOSIET')?.status).toBe('warn')
+  })
+
+  it('does not treat malformed medical expiry as deployment evidence', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      campaignStartDate: '2026-10-01',
+      campaignEndDate: '2026-10-28',
+      certifications: [
+        { name: 'OGUK Medical', status: 'valid', verificationStatus: 'verified', expiryDate: 'not-a-date' },
+        { name: 'OPITO BOSIET', expiryDate: '2027-10-15' },
+      ],
+    })
+
+    expect(report.status).toBe('warning')
+    expect(report.checks.find((check) => check.item === 'Offshore Medical')?.status).toBe('warn')
+  })
+
+  it('does not treat a certificate without verification evidence as compliant', () => {
+    const report = evaluateCandidatePreflightCompliance({
+      availabilityStatus: 'available',
+      medicalExpiry: '2027-01-01',
+      campaignStartDate: '2026-10-01',
+      campaignEndDate: '2026-10-28',
+      certifications: [
+        { name: 'OPITO BOSIET', status: 'valid', expiryDate: '2027-05-15' },
+      ],
+    })
+
+    expect(report.status).toBe('warning')
+    expect(report.checks.find((check) => check.item === 'Survival / BOSIET')?.status).toBe('warn')
   })
 
   it('handles leap day transitions accurately in calculateCampaignWindow', () => {
@@ -444,7 +605,7 @@ describe('evaluateCandidatePreflightCompliance', () => {
       campaignStartDate: '2026-10-01',
       campaignEndDate: '2026-10-01',
       certifications: [
-        { name: 'OPITO BOSIET', expiryDate: '2027-05-15' },
+        { name: 'OPITO BOSIET', expiryDate: '2027-05-15', verificationStatus: 'verified' },
       ],
     })
 
@@ -460,5 +621,3 @@ describe('evaluateCandidatePreflightCompliance', () => {
     expect(getRoleKeyword('   ')).toBe('')
   })
 })
-
-

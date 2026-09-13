@@ -36,6 +36,13 @@ DOCUMENT_CLASSIFICATIONS: tuple[str, ...] = (
     "other",
 )
 
+# These upload origins are not allowed to publish a CV through the general
+# document workflow. CVs from them must be rejected and handled only through
+# the staff-upload administrator review flow.
+CV_UPLOADERS_REQUIRING_REJECTION: frozenset[str] = frozenset(
+    {"agent", "contractor-upload-link"}
+)
+
 CLASSIFICATION_ALIASES: dict[str, str] = {
     "cert": "certificate",
     "certification": "certificate",
@@ -49,6 +56,10 @@ CLASSIFICATION_ALIASES: dict[str, str] = {
 
 def normalize_classification(value: str | None) -> str:
     """Normalize user/client classification strings to canonical values."""
+    if value is None:
+        return "other"
+    if not isinstance(value, str):
+        return "other"
     if not value:
         return "other"
     cleaned = value.strip().lower()

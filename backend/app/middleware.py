@@ -13,6 +13,14 @@ from app.services.cache import cache_service
 logger = logging.getLogger(__name__)
 
 
+def _safe_request_path(path: str) -> str:
+    """Redact bearer tokens embedded in public upload-link paths."""
+    parts = path.split("/")
+    if len(parts) >= 5 and parts[1:4] == ["api", "documents", "request"]:
+        parts[4] = "[redacted-token]"
+    return "/".join(parts)
+
+
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware for logging request details and timing (structured)."""
 
@@ -32,7 +40,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 extra={
                     "request_id": request_id,
                     "method": request.method,
-                    "path": request.url.path,
+                    "path": _safe_request_path(request.url.path),
                     "status": response.status_code,
                     "duration_ms": round(duration * 1000, 2),
                     "client": client_ip,
@@ -43,15 +51,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response.headers["X-Process-Time"] = f"{duration:.3f}"
             return response
 
-        except Exception as e:
+        except Exception as exc:
             duration = time.time() - start_time
             logger.error(
                 "request_error",
                 extra={
                     "request_id": request_id,
                     "method": request.method,
-                    "path": request.url.path,
-                    "error": str(e),
+                    "path": _safe_request_path(request.url.path),
+                    "error_type": type(exc).__name__,
                     "duration_ms": round(duration * 1000, 2),
                     "client": client_ip,
                 },
@@ -79,6 +87,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "connect-src 'self' https://api.gemini.google.com; "
             "frame-ancestors 'self';",
         )
+        # GraphQL and REST surfaces can contain authenticated roster, dossier,
+        # search, and document metadata. Do not let browsers or intermediary
+        # caches retain those responses after the session changes.
+        if request.url.path == "/graphql" or request.url.path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         if request.url.scheme == "https":
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
@@ -115,6 +128,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # Fail-open with security degradation signal: blocking traffic
             # because Redis is down would be a worse availability event than
             # letting requests through unmetered. See ADR-0002.
-            logger.warning("security_degradation: rate limit lookup failed, failing open: %s", e)
+            logger.warning(
+                "security_degradation: rate limit lookup failed, failing open: %s",
+                type(e).__name__,
+            )
 
         return await call_next(request)

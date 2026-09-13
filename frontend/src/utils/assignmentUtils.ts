@@ -1,5 +1,38 @@
 import { CampaignAssignmentStatus } from '../types'
 
+function parseIsoCalendarDate(value: string, field: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  const yearText = match?.[1]
+  const monthText = match?.[2]
+  const dayText = match?.[3]
+  if (!yearText || !monthText || !dayText) {
+    throw new Error(`Invalid ${field}: ${value}`)
+  }
+
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw new Error(`Invalid ${field}: ${value}`)
+  }
+  return parsed
+}
+
+function normalizeOptionalCalendarDate(value: string | null | undefined): string | null {
+  if (!value) return null
+  const datePart = value.slice(0, 10)
+  try {
+    return parseIsoCalendarDate(datePart, 'date').toISOString().slice(0, 10)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Computes ISO date window given a start date and duration in days.
  */
@@ -7,11 +40,8 @@ export function calculateCampaignWindow(
   startDate: string,
   durationDays: number,
 ): { startDate: string; endDate: string } {
-  const start = new Date(startDate)
-  if (Number.isNaN(start.getTime())) {
-    throw new Error(`Invalid start date: ${startDate}`)
-  }
-  if (durationDays < 1) {
+  const start = parseIsoCalendarDate(startDate, 'start date')
+  if (!Number.isFinite(durationDays) || !Number.isInteger(durationDays) || durationDays < 1) {
     throw new Error('Duration days must be at least 1')
   }
 
@@ -86,12 +116,30 @@ export function validateAssignmentInput(params: {
   if (!params.roleOnBoard || !params.roleOnBoard.trim()) {
     return { valid: false, error: 'Role on board is required' }
   }
-  const start = new Date(params.startDate)
-  if (Number.isNaN(start.getTime())) {
+  try {
+    parseIsoCalendarDate(params.startDate, 'start date')
+  } catch {
     return { valid: false, error: 'A valid start date is required' }
   }
-  if (!params.durationDays || params.durationDays < 1) {
+  if (
+    !Number.isFinite(params.durationDays) ||
+    !Number.isInteger(params.durationDays) ||
+    params.durationDays < 1
+  ) {
     return { valid: false, error: 'Duration must be at least 1 day' }
+  }
+  return { valid: true }
+}
+
+/**
+ * Validates the administrator-supplied commercial rate before assignment.
+ * A missing rate must remain missing rather than becoming an invented default.
+ */
+export function validateAgreedDayRate(
+  value: number | null | undefined,
+): { valid: boolean; error?: string } {
+  if (value == null || !Number.isFinite(value) || value < 100) {
+    return { valid: false, error: 'Enter an agreed day rate of at least £100' }
   }
   return { valid: true }
 }
@@ -111,7 +159,13 @@ export interface PreflightComplianceReport {
 }
 
 export interface CandidatePreflightInput {
-  certifications?: Array<{ certType?: string; name?: string; expiryDate?: string | null }>
+  certifications?: Array<{
+    certType?: string
+    name?: string
+    expiryDate?: string | null
+    status?: string | null
+    verificationStatus?: string | null
+  }>
   medicalExpiry?: string | null
   campaignStartDate: string
   campaignEndDate: string
@@ -146,18 +200,19 @@ export function evaluateCandidatePreflightCompliance(
       detail: 'Specialist is marked unavailable',
     })
   } else if (isOnAssignment) {
-    if (input.availabilityDate && input.availabilityDate < input.campaignStartDate) {
+    const availabilityDate = normalizeOptionalCalendarDate(input.availabilityDate)
+    if (availabilityDate && availabilityDate < input.campaignStartDate) {
       checks.push({
         item: 'Schedule Availability',
         status: 'pass',
-        detail: `Current assignment ends ${input.availabilityDate.slice(0, 10)} prior to campaign`,
+        detail: `Current assignment ends ${availabilityDate} prior to campaign`,
       })
-    } else if (input.availabilityDate) {
-      issues.push(`Specialist is on assignment through ${input.availabilityDate.slice(0, 10)}`)
+    } else if (availabilityDate) {
+      issues.push(`Specialist is on assignment through ${availabilityDate}`)
       checks.push({
         item: 'Schedule Availability',
         status: 'fail',
-        detail: `Active tour ends ${input.availabilityDate.slice(0, 10)} during or after campaign start`,
+        detail: `Active tour ends ${availabilityDate} during or after campaign start`,
       })
     } else {
       issues.push('Candidate is currently marked as on assignment or unavailable')
@@ -177,26 +232,51 @@ export function evaluateCandidatePreflightCompliance(
 
   // 2. Offshore Medical
   const certs = input.certifications || []
-  let effectiveMedExp = input.medicalExpiry ? input.medicalExpiry.slice(0, 10) : null
+  let effectiveMedExp = normalizeOptionalCalendarDate(input.medicalExpiry)
   let medCertName = 'Offshore Medical'
+
+  const isRejected = (cert: (typeof certs)[number]) =>
+    cert.status?.toLowerCase() === 'rejected' || cert.verificationStatus?.toLowerCase() === 'rejected'
+  const isUsable = (cert: (typeof certs)[number]) => {
+    const status = cert.status?.toLowerCase()
+    const verificationStatus = cert.verificationStatus?.toLowerCase()
+    return (
+      !isRejected(cert) &&
+      (!status || ['valid', 'expiring_soon', 'expired'].includes(status)) &&
+      verificationStatus === 'verified'
+    )
+  }
 
   const medCerts = certs.filter((c) => {
     const title = (c.certType || c.name || '').toLowerCase()
-    return /medical|oguk|oeuk|eng1/.test(title)
+    return /medical|oguk|oeuk|eng1/.test(title) && !isRejected(c)
   })
 
   if (medCerts.length > 0) {
-    const withExpiry = medCerts.filter((c) => c.expiryDate)
+    const withExpiry = medCerts.filter((c) => normalizeOptionalCalendarDate(c.expiryDate) && isUsable(c))
+    const verifiedMedical = medCerts.find(
+      (cert) => cert.verificationStatus?.toLowerCase() === 'verified',
+    )
     if (withExpiry.length > 0) {
-      withExpiry.sort((a, b) => (b.expiryDate || '').localeCompare(a.expiryDate || ''))
+      withExpiry.sort(
+        (a, b) =>
+          (normalizeOptionalCalendarDate(b.expiryDate) || '').localeCompare(
+            normalizeOptionalCalendarDate(a.expiryDate) || '',
+          ),
+      )
       const latestMed = withExpiry[0]
-      if (latestMed?.expiryDate) {
-        const certExp = latestMed.expiryDate.slice(0, 10)
-        if (!effectiveMedExp || certExp > effectiveMedExp) {
-          effectiveMedExp = certExp
-          medCertName = latestMed.certType || latestMed.name || 'OGUK Medical'
-        }
+      const certExp = normalizeOptionalCalendarDate(latestMed?.expiryDate)
+      if (latestMed && certExp) {
+        // Verified certificate evidence is authoritative. A stale root
+        // medicalExpiry must not extend a mobilization beyond the certificate.
+        effectiveMedExp = certExp
+        medCertName = latestMed.certType || latestMed.name || 'OGUK Medical'
       }
+    } else if (verifiedMedical) {
+      // Verified certificate evidence is authoritative, including when its
+      // expiry is missing; do not fall back to stale profile medicalExpiry.
+      effectiveMedExp = null
+      medCertName = verifiedMedical.certType || verifiedMedical.name || 'OGUK Medical'
     } else if (!effectiveMedExp) {
       const firstMed = medCerts[0]
       medCertName = firstMed?.certType || firstMed?.name || 'OGUK Medical'
@@ -246,7 +326,7 @@ export function evaluateCandidatePreflightCompliance(
   // 3. Survival / BOSIET / FOET
   const survivalCerts = certs.filter((c) => {
     const title = (c.certType || c.name || '').toLowerCase()
-    return /bosiet|foet|survival|opito|ca-ebs/.test(title)
+    return /bosiet|foet|survival|opito|ca-ebs/.test(title) && !isRejected(c)
   })
 
   if (survivalCerts.length === 0) {
@@ -257,23 +337,42 @@ export function evaluateCandidatePreflightCompliance(
       detail: 'No offshore survival certificate recorded',
     })
   } else {
-    const validSurvivals = survivalCerts.filter(
-      (c) => c.expiryDate && c.expiryDate.slice(0, 10) >= input.campaignEndDate
+    const validSurvivals = survivalCerts.filter((c) => {
+      const expiry = normalizeOptionalCalendarDate(c.expiryDate)
+      return Boolean(expiry && isUsable(c) && expiry >= input.campaignEndDate)
+    })
+    validSurvivals.sort(
+      (a, b) =>
+        (normalizeOptionalCalendarDate(b.expiryDate) || '').localeCompare(
+          normalizeOptionalCalendarDate(a.expiryDate) || '',
+        ),
     )
-    validSurvivals.sort((a, b) => (b.expiryDate || '').localeCompare(a.expiryDate || ''))
 
-    const expiringSurvivals = survivalCerts.filter(
-      (c) =>
-        c.expiryDate &&
-        c.expiryDate.slice(0, 10) >= input.campaignStartDate &&
-        c.expiryDate.slice(0, 10) < input.campaignEndDate
+    const expiringSurvivals = survivalCerts.filter((c) => {
+      const expiry = normalizeOptionalCalendarDate(c.expiryDate)
+      return Boolean(
+        expiry && isUsable(c) && expiry >= input.campaignStartDate && expiry < input.campaignEndDate,
+      )
+    })
+    expiringSurvivals.sort(
+      (a, b) =>
+        (normalizeOptionalCalendarDate(a.expiryDate) || '').localeCompare(
+          normalizeOptionalCalendarDate(b.expiryDate) || '',
+        ),
     )
-    expiringSurvivals.sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))
 
     const expiredSurvivals = survivalCerts.filter(
-      (c) => c.expiryDate && c.expiryDate.slice(0, 10) < input.campaignStartDate
+      (c) => {
+        const expiry = normalizeOptionalCalendarDate(c.expiryDate)
+        return Boolean(expiry && isUsable(c) && expiry < input.campaignStartDate)
+      },
     )
-    expiredSurvivals.sort((a, b) => (b.expiryDate || '').localeCompare(a.expiryDate || ''))
+    expiredSurvivals.sort(
+      (a, b) =>
+        (normalizeOptionalCalendarDate(b.expiryDate) || '').localeCompare(
+          normalizeOptionalCalendarDate(a.expiryDate) || '',
+        ),
+    )
 
     const [best] = validSurvivals
     const [expiring] = expiringSurvivals
@@ -288,7 +387,7 @@ export function evaluateCandidatePreflightCompliance(
       })
     } else if (expiring) {
       const name = expiring.certType || expiring.name || 'BOSIET'
-      const expStr = expiring.expiryDate?.slice(0, 10)
+      const expStr = normalizeOptionalCalendarDate(expiring.expiryDate)
       issues.push(`${name} expires during campaign on ${expStr}`)
       checks.push({
         item: 'Survival / BOSIET',
@@ -297,7 +396,7 @@ export function evaluateCandidatePreflightCompliance(
       })
     } else if (expired) {
       const name = expired.certType || expired.name || 'BOSIET'
-      const expStr = expired.expiryDate?.slice(0, 10)
+      const expStr = normalizeOptionalCalendarDate(expired.expiryDate)
       issues.push(`${name} expired on ${expStr}`)
       checks.push({
         item: 'Survival / BOSIET',
@@ -350,4 +449,3 @@ export function evaluateCandidatePreflightCompliance(
     checks,
   }
 }
-

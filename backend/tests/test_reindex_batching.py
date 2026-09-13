@@ -35,9 +35,14 @@ async def test_reindex_all_crew_keyset_batching():
             "app.services.consultant_knowledge.meilisearch_client.delete_crew_members",
             new_callable=AsyncMock,
         ) as mock_delete_batch,
+        patch(
+            "app.services.consultant_knowledge.meilisearch_client.list_crew_member_ids",
+            new_callable=AsyncMock,
+        ) as mock_list_ids,
     ):
         mock_index_batch.return_value = {"task_uid": 123}
         mock_delete_batch.return_value = True
+        mock_list_ids.return_value = ["reindex-test-999"]
 
         # Run with batch_size=2 to force multi-chunk keyset pagination
         (
@@ -48,7 +53,8 @@ async def test_reindex_all_crew_keyset_batching():
 
         assert total_approved >= 3
         assert total_indexed >= 3
-        assert total_removed >= 2
+        assert total_removed >= 3
+        assert any("reindex-test-999" in call.args[0] for call in mock_delete_batch.call_args_list)
 
         # Verify bulk methods were invoked rather than single-item methods
         assert mock_index_batch.called

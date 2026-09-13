@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLazyQuery } from '@apollo/client';
 import { QUERY_CREW } from '../lib/queries';
+import { isSessionScopeCurrent } from '../utils/sessionScope';
 
 export interface CrewQueryResult {
   intent: string;
@@ -13,6 +14,17 @@ export interface CrewQueryResult {
     availability?: string;
     certifications?: string[];
     experience_months?: number;
+    experience_years?: number;
+    nationality?: string;
+    country_of_residence?: string;
+    languages?: string[];
+    flying_point?: string;
+    education?: string;
+    professional_summary?: string;
+    tags?: string[];
+    training_qualifications?: string[];
+    geographical_experience?: string[];
+    systems_experience?: string[];
   }>;
   criteria: Record<string, unknown>;
   totalIssues?: number;
@@ -38,10 +50,55 @@ export function parseCrewResults(value: string | null | undefined): CrewQueryRes
   try {
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is CrewQueryResult['results'][number] => {
-      if (!item || typeof item !== 'object') return false;
+    return parsed.flatMap((item): CrewQueryResult['results'] => {
+      if (!item || typeof item !== 'object') return [];
       const candidate = item as Record<string, unknown>;
-      return typeof candidate.id === 'string' && typeof candidate.name === 'string';
+      if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') return [];
+
+      const result: CrewQueryResult['results'][number] = {
+        id: candidate.id,
+        name: candidate.name,
+      };
+      if (typeof candidate.email === 'string') result.email = candidate.email;
+      if (typeof candidate.availability === 'string') result.availability = candidate.availability;
+      if (Array.isArray(candidate.certifications)) {
+        const certifications = candidate.certifications.filter(
+          (cert): cert is string => typeof cert === 'string',
+        );
+        result.certifications = certifications;
+      }
+      if (typeof candidate.experience_months === 'number' && Number.isFinite(candidate.experience_months)) {
+        result.experience_months = candidate.experience_months;
+      }
+      if (typeof candidate.experience_years === 'number' && Number.isFinite(candidate.experience_years)) {
+        result.experience_years = candidate.experience_years;
+      }
+      for (const field of [
+        'nationality',
+        'country_of_residence',
+        'flying_point',
+        'education',
+        'professional_summary',
+      ] as const) {
+        if (typeof candidate[field] === 'string' && candidate[field].trim()) {
+          result[field] = candidate[field].trim();
+        }
+      }
+      for (const field of [
+        'languages',
+        'tags',
+        'training_qualifications',
+        'geographical_experience',
+        'systems_experience',
+      ] as const) {
+        if (Array.isArray(candidate[field])) {
+          const values = candidate[field].filter(
+            (value): value is string => typeof value === 'string' && value.trim().length > 0,
+          );
+          if (values.length > 0) result[field] = values;
+        }
+      }
+      return [result];
     });
   } catch {
     return [];
@@ -66,6 +123,31 @@ export interface UseCrewQueryReturn {
   error: string | null;
   isAIQuery: boolean;
   showSummary: boolean;
+}
+
+export function isCrewQueryResultCurrent(
+  enabled: boolean,
+  sessionReady: boolean,
+  resultSessionKey: string | null,
+  sessionKey: string | null,
+  resultQuery: string | null,
+  currentQuery: string,
+  completedQuery?: string | null,
+  hasError = false,
+): boolean {
+  return Boolean(
+    !hasError &&
+      enabled &&
+      sessionReady &&
+      sessionKey !== null &&
+      resultSessionKey === sessionKey &&
+      resultQuery !== null &&
+      resultQuery === currentQuery.trim().toLowerCase() &&
+      (completedQuery === undefined || (
+        completedQuery !== null &&
+        completedQuery.trim().toLowerCase() === currentQuery.trim().toLowerCase()
+      )),
+  );
 }
 
 const QUESTION_WORDS = ['who', 'what', 'where', 'when', 'why', 'how', 'find', 'show', 'list', 'get', 'available', 'with', 'having'];
@@ -112,9 +194,16 @@ export function shouldShowSummary(query: string): boolean {
   return words.length >= 4;
 }
 
-export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryReturn {
+export function useCrewQuery(
+  rawQuery: string,
+  enabled: boolean,
+  sessionKey: string | null = null,
+): UseCrewQueryReturn {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isAIQuery, setIsAIQuery] = useState(false);
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(sessionKey);
+  const resultSessionKeyRef = useRef<string | null>(null);
+  const resultQueryRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -124,7 +213,18 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
     fetchPolicy: 'network-only',
   });
 
-  const shouldUseAI = enabled && debouncedQuery.trim().length >= 3 && isNaturalLanguage(debouncedQuery);
+  useEffect(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setDebouncedQuery('');
+    setIsAIQuery(false);
+    setLoadedSessionKey(sessionKey);
+    resultSessionKeyRef.current = null;
+    resultQueryRef.current = null;
+  }, [enabled, sessionKey]);
+
+  const sessionReady = isSessionScopeCurrent(enabled, loadedSessionKey, sessionKey);
+  const shouldUseAI = sessionReady && debouncedQuery.trim().length >= 3 && isNaturalLanguage(debouncedQuery);
   const showSummary = shouldShowSummary(debouncedQuery) && shouldUseAI;
 
   useEffect(() => {
@@ -132,7 +232,7 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
       clearTimeout(debounceTimerRef.current);
     }
 
-    if (!enabled || rawQuery.trim().length < 3) {
+    if (!sessionReady || !enabled || rawQuery.trim().length < 3) {
       setDebouncedQuery('');
       setIsAIQuery(false);
       return;
@@ -147,7 +247,7 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [rawQuery, enabled]);
+  }, [rawQuery, enabled, sessionKey, sessionReady]);
 
   useEffect(() => {
     if (abortControllerRef.current) {
@@ -161,6 +261,8 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
     }
 
     setIsAIQuery(true);
+    resultSessionKeyRef.current = sessionKey;
+    resultQueryRef.current = debouncedQuery.trim().toLowerCase();
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -178,7 +280,7 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
     return () => {
       controller.abort();
     };
-  }, [debouncedQuery, shouldUseAI, executeQuery]);
+  }, [debouncedQuery, executeQuery, sessionKey, shouldUseAI]);
 
   // Memoized so this stays referentially stable across renders when the
   // underlying Apollo data hasn't changed. Without this, a fresh object
@@ -188,7 +290,16 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
   // forever ("Maximum update depth exceeded" in production).
   const result: CrewQueryResult | null = useMemo(
     () =>
-      data?.queryCrew
+      isCrewQueryResultCurrent(
+        enabled,
+        sessionReady,
+        resultSessionKeyRef.current,
+        sessionKey,
+        resultQueryRef.current,
+        debouncedQuery,
+        data?.queryCrew?.query,
+        Boolean(error),
+      ) && data?.queryCrew
         ? {
             intent: data.queryCrew.intent,
             query: data.queryCrew.query,
@@ -200,7 +311,7 @@ export function useCrewQuery(rawQuery: string, enabled: boolean): UseCrewQueryRe
             crewName: data.queryCrew.crewName ?? undefined,
           }
         : null,
-    [data],
+    [data, debouncedQuery, enabled, error, sessionKey, sessionReady],
   );
 
   return {

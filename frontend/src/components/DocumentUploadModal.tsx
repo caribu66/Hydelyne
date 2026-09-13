@@ -1,4 +1,4 @@
-import { FC, useState, useRef, FormEvent, DragEvent } from 'react';
+import { FC, useState, useRef, useEffect, FormEvent, DragEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, DocumentCategory } from '../types';
@@ -16,8 +16,9 @@ interface DocumentUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: UserProfile;
-  onAddDocument: () => void;
+  onAddDocument: () => void | Promise<void>;
   onShowToast: (msg: string) => void;
+  sessionKey?: string | null;
 }
 
 export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
@@ -26,26 +27,60 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
   profile,
   onAddDocument,
   onShowToast,
+  sessionKey = null,
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<DocumentCategory>('certificate');
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
+  // Dates are evidence supplied by the document, not upload-time defaults.
+  const [issueDate, setIssueDate] = useState('');
   const [hasExpiry, setHasExpiry] = useState(true);
-  const [expiryDate, setExpiryDate] = useState(
-    new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 2).toISOString().split('T')[0]
-  );
+  const [expiryDate, setExpiryDate] = useState('');
   const [notes, setNotes] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadIdempotencyKey, setUploadIdempotencyKey] = useState(() => crypto.randomUUID());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const operationVersionRef = useRef(0);
+  const statusTimerRef = useRef<number | null>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  const currentProfileIdRef = useRef(profile.id);
+  currentSessionKeyRef.current = sessionKey;
+  currentProfileIdRef.current = profile.id;
   useAccessibleDialog(isOpen, dialogRef, onClose);
+
+  useEffect(() => {
+    operationVersionRef.current += 1;
+    setFile(null);
+    setTitle('');
+    setCategory('certificate');
+    setIssueDate('');
+    setHasExpiry(true);
+    setExpiryDate('');
+    setNotes('');
+    setIsDragging(false);
+    setIsUploading(false);
+    setUploadError(null);
+    setUploadIdempotencyKey(crypto.randomUUID());
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (statusTimerRef.current !== null) {
+      window.clearTimeout(statusTimerRef.current);
+      statusTimerRef.current = null;
+    }
+    return () => {
+      if (statusTimerRef.current !== null) {
+        window.clearTimeout(statusTimerRef.current);
+        statusTimerRef.current = null;
+      }
+    };
+  }, [isOpen, profile.id, sessionKey]);
 
   if (!isOpen) return null;
 
   const handleFileSelection = (selectedFile: File) => {
+    setUploadIdempotencyKey(crypto.randomUUID());
     setFile(selectedFile);
     if (!title) {
       const cleanName = selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
@@ -98,6 +133,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     if (!title.trim()) {
       setUploadError('Enter a document title before saving.');
       return;
@@ -111,17 +147,65 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
     }
 
     {
+      const operationVersion = ++operationVersionRef.current;
+      const profileId = profile.id;
       setIsUploading(true);
       setUploadError(null);
       try {
         const beClassification = feCategoryToBE(category);
-        const res = await uploadDocument(profile.id, file, beClassification);
-        onAddDocument();
-        onShowToast(`Uploaded to server (ID ${res.id.slice(0, 8)}…) — processing ${res.status}`);
+        const res = await uploadDocument(
+          profile.id,
+          file,
+          beClassification,
+          uploadIdempotencyKey,
+          issueDate,
+          hasExpiry ? expiryDate : undefined,
+          notes.trim() || undefined,
+          title.trim() || undefined,
+        );
+        if (
+          operationVersion !== operationVersionRef.current
+          || currentSessionKeyRef.current !== sessionKey
+          || currentProfileIdRef.current !== profileId
+        ) return;
+        let refreshFailed = false;
+        try {
+          await onAddDocument();
+        } catch {
+          refreshFailed = true;
+        }
+        if (
+          operationVersion !== operationVersionRef.current
+          || currentSessionKeyRef.current !== sessionKey
+          || currentProfileIdRef.current !== profileId
+        ) return;
+        onShowToast(
+          refreshFailed
+            ? `Uploaded to server (ID ${res.id.slice(0, 8)}…) — refresh unavailable`
+            : `Uploaded to server (ID ${res.id.slice(0, 8)}…) — processing ${res.status}`,
+        );
         // Refresh status after a short delay to reflect extraction result
-        setTimeout(async () => {
+        statusTimerRef.current = window.setTimeout(async () => {
+          statusTimerRef.current = null;
+          if (
+            operationVersion !== operationVersionRef.current
+            || !isOpen
+            || currentSessionKeyRef.current !== sessionKey
+            || currentProfileIdRef.current !== profileId
+          ) return;
           try {
             const status = await getDocumentStatus(res.id);
+            if (
+              operationVersion !== operationVersionRef.current
+              || !isOpen
+              || currentSessionKeyRef.current !== sessionKey
+              || currentProfileIdRef.current !== profileId
+            ) return;
+            await onAddDocument();
+            if (
+              currentSessionKeyRef.current !== sessionKey
+              || currentProfileIdRef.current !== profileId
+            ) return;
             if (status.extraction_status === 'failed') {
               onShowToast('Server extraction failed — review required');
             } else if (status.extraction_status === 'needs_review') {
@@ -132,16 +216,28 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
           }
         }, 4000);
       } catch (err) {
+        if (
+          operationVersion !== operationVersionRef.current
+          || currentSessionKeyRef.current !== sessionKey
+          || currentProfileIdRef.current !== profileId
+        ) return;
         const msg = err instanceof Error ? err.message : 'Upload to server failed';
         setUploadError(msg);
         onShowToast(msg);
         return;
       } finally {
-        setIsUploading(false);
+        if (
+          operationVersion === operationVersionRef.current
+          && currentSessionKeyRef.current === sessionKey
+          && currentProfileIdRef.current === profileId
+        ) setIsUploading(false);
       }
+      if (
+        operationVersion === operationVersionRef.current
+        && currentSessionKeyRef.current === sessionKey
+        && currentProfileIdRef.current === profileId
+      ) onClose();
     }
-
-    onClose();
   };
 
   return createPortal(
@@ -212,7 +308,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
               ref={fileInputRef}
               id="document-file-input"
               type="file"
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip"
+              accept=".pdf,.docx,.png,.jpg,.jpeg"
               className="hidden"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -283,7 +379,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
           {/* Issue Date & Expiry Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-xs font-semibold text-secondary mb-1">Issue Date</label>
+              <label className="block text-xs font-semibold text-secondary mb-1">Issue Date (if recorded)</label>
               <input
                 type="date"
                 value={issueDate}
@@ -294,7 +390,7 @@ export const DocumentUploadModal: FC<DocumentUploadModalProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-secondary">Expiry Date</label>
+                <label className="text-xs font-semibold text-secondary">Expiry Date (if recorded)</label>
                 <button
                   type="button"
                   onClick={() => setHasExpiry(!hasExpiry)}

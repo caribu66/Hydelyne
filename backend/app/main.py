@@ -12,7 +12,7 @@ from app.api.documents import router as documents_router
 from app.api.dropbox import router as dropbox_router
 from app.api.health import router as health_router
 from app.api.search import router as search_router
-from app.config import get_settings
+from app.config import get_settings, validate_prod_secrets
 from app.graphql.schema import Mutation, Query
 from app.graphql.validation import DepthValidationExtension, DisableIntrospection
 from app.middleware import (
@@ -45,7 +45,16 @@ def configure_logging() -> None:
                 "logger": record.name,
                 "message": record.getMessage(),
             }
-            for key in ("request_id", "method", "path", "status", "duration_ms", "client", "error"):
+            for key in (
+                "request_id",
+                "method",
+                "path",
+                "status",
+                "duration_ms",
+                "client",
+                "error",
+                "error_type",
+            ):
                 val = getattr(record, key, None)
                 if val is not None:
                     base[key] = val
@@ -74,37 +83,6 @@ async def get_graphql_context(request: Request, response: Response) -> dict:
     return {"request": request, "response": response}
 
 
-def validate_prod_secrets() -> None:
-    """Fail fast in production when default secrets are still in use."""
-    if settings.APP_ENV != "production":
-        return
-    insecure_defaults = {
-        "SESSION_SECRET_KEY": "dev_secret_key_change_in_production",  # nosec B105
-        "MEILI_MASTER_KEY": "meili_master_key_change_in_production",  # nosec B105
-        "REDIS_PASSWORD": "",  # nosec B105
-        "FLOWER_PASSWORD": "flower_pass",  # nosec B105
-        "ADMIN_PASSWORD": "",  # nosec B105
-    }
-    # Compose dev defaults that the ""-only check would otherwise miss.
-    known_dev_values = {"dev_redis_pass", "hydenlyne_pass", "flower_pass"}
-    for key, bad_default in insecure_defaults.items():
-        val = getattr(settings, key, "")
-        if not val or val == bad_default or val in known_dev_values:
-            raise RuntimeError(
-                f"Refusing to start in production: {key} is unset or still default. "
-                "Set a strong random value via env/secret manager."
-            )
-    if "hydenlyne_pass" in settings.DATABASE_URL:
-        raise RuntimeError(
-            "Refusing to start in production: DATABASE_URL still uses the "
-            "compose dev password. Set POSTGRES_PASSWORD explicitly."
-        )
-    if settings.SESSION_SECRET_KEY and len(settings.SESSION_SECRET_KEY) < 32:
-        raise RuntimeError("SESSION_SECRET_KEY must be >=32 chars in production")
-    if "sqlite" in settings.DATABASE_URL:
-        raise RuntimeError("DATABASE_URL must be PostgreSQL in production, not sqlite")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
@@ -119,15 +97,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from app.services.crew import bootstrap_admin
 
         await bootstrap_admin()
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"Admin bootstrap skipped: {e}")
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Admin bootstrap skipped (%s)", type(exc).__name__
+        )
     # Setup Meilisearch indexes if available (non-blocking)
     try:
         from app.services.meilisearch import meilisearch_client
 
         await meilisearch_client.setup_indexes()
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"Meilisearch index setup skipped: {e}")
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Meilisearch index setup skipped (%s)", type(exc).__name__
+        )
     yield
 
 
@@ -136,6 +118,9 @@ def create_app() -> FastAPI:
         title="Hydenlyne Crew DMS",
         version="1.0.0",
         lifespan=lifespan,
+        docs_url="/docs" if settings.APP_ENV != "production" else None,
+        redoc_url="/redoc" if settings.APP_ENV != "production" else None,
+        openapi_url="/openapi.json" if settings.APP_ENV != "production" else None,
     )
 
     # CORS: localhost origins are safe for dev; in production only explicitly
@@ -208,12 +193,14 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def root() -> dict[str, str]:
-        return {
+        response = {
             "name": "Hydenlyne Crew DMS",
             "version": "1.0.0",
-            "docs": "/docs",
             "graphql": "/graphql",
         }
+        if settings.APP_ENV != "production":
+            response["docs"] = "/docs"
+        return response
 
     return app
 

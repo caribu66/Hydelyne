@@ -4,6 +4,7 @@ import { Loader2, ShieldCheck, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { SET_STAFF_ROLE, STAFF_USERS_QUERY } from '../lib/queries';
+import { apolloResultHasErrors, isSessionDataReady, isSessionQueryEnabled, isSessionRequestCurrent } from '../utils/sessionScope';
 
 interface Account {
   id: string;
@@ -14,17 +15,26 @@ interface Account {
 
 interface ManageStaffModalProps {
   isOpen: boolean;
+  sessionKey?: string | null;
   onClose: () => void;
 }
 
-export const ManageStaffModal: FC<ManageStaffModalProps> = ({ isOpen, onClose }) => {
+export const ManageStaffModal: FC<ManageStaffModalProps> = ({ isOpen, sessionKey = null, onClose }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const previousSessionKeyRef = useRef<string | null>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  currentSessionKeyRef.current = sessionKey;
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(null);
   const [changingId, setChangingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const { data, loading, error, refetch, fetchMore } = useQuery<{ crewMembers: Account[] }>(STAFF_USERS_QUERY, {
-    skip: !isOpen,
+  const [visibleAccounts, setVisibleAccounts] = useState<Account[]>([]);
+  const requestVersionRef = useRef(0);
+  const refreshPendingSessionKeyRef = useRef<string | null>(null);
+  const hasCommittedAccountsRef = useRef(false);
+  const { data, loading, error, refetch, fetchMore } = useQuery<{ staffAccounts: Account[] }>(STAFF_USERS_QUERY, {
+    skip: !isSessionQueryEnabled(isOpen, sessionKey),
     fetchPolicy: 'network-only',
     variables: { limit: 100, offset: 0 },
   });
@@ -32,40 +42,142 @@ export const ManageStaffModal: FC<ManageStaffModalProps> = ({ isOpen, onClose })
   useAccessibleDialog(isOpen, dialogRef, onClose);
 
   useEffect(() => {
+    requestVersionRef.current += 1;
+    hasCommittedAccountsRef.current = false;
+    setVisibleAccounts([]);
+    setLoadedSessionKey(null);
+    setHasMore(true);
+    setLoadingMore(false);
+    setChangingId(null);
+    setActionError(null);
+    refreshPendingSessionKeyRef.current = null;
+    if (!isOpen || !sessionKey) {
+      previousSessionKeyRef.current = null;
+      return;
+    }
+
+    const sessionChanged =
+      previousSessionKeyRef.current !== null && previousSessionKeyRef.current !== sessionKey;
+    previousSessionKeyRef.current = sessionKey;
+    const requestVersion = requestVersionRef.current;
+    let active = true;
+    if (sessionChanged) {
+      refreshPendingSessionKeyRef.current = sessionKey;
+      void refetch()
+        .then((result) => {
+          if (apolloResultHasErrors(result)) throw new Error('Staff account refresh failed')
+          if (
+            !active
+            || !isSessionRequestCurrent(
+              requestVersion,
+              requestVersionRef.current,
+              currentSessionKeyRef.current,
+              sessionKey,
+            )
+            || refreshPendingSessionKeyRef.current !== sessionKey
+          ) return;
+          hasCommittedAccountsRef.current = true;
+          setVisibleAccounts(result.data?.staffAccounts ?? []);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active && refreshPendingSessionKeyRef.current === sessionKey) {
+            refreshPendingSessionKeyRef.current = null;
+          }
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [isOpen, refetch, sessionKey]);
+
+  useEffect(() => {
+    if (
+      isOpen
+      && sessionKey
+      && loadedSessionKey === sessionKey
+      && !hasCommittedAccountsRef.current
+    ) {
+      hasCommittedAccountsRef.current = true;
+      setVisibleAccounts(data?.staffAccounts ?? []);
+    }
+  }, [data, isOpen, loadedSessionKey, sessionKey]);
+
+  useEffect(() => {
+    if (
+      isOpen
+      && sessionKey
+      && !loading
+      && !error
+      && refreshPendingSessionKeyRef.current !== sessionKey
+    ) setLoadedSessionKey(sessionKey);
+  }, [error, isOpen, loading, sessionKey]);
+
+  const sessionReady = isSessionDataReady(isOpen, loadedSessionKey, sessionKey, loading, error);
+
+  useEffect(() => {
     if (isOpen) setHasMore(true);
   }, [isOpen]);
 
-  const accounts = (data?.crewMembers ?? []).filter((account) => account.role !== 'admin');
+  const accounts = (sessionReady ? visibleAccounts : []).filter((account) => account.role !== 'admin');
 
   const loadMore = async () => {
+    if (!sessionReady || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    const requestVersion = requestVersionRef.current;
     setLoadingMore(true);
     setActionError(null);
     try {
-      const loadedCount = data?.crewMembers.length ?? 0;
+      const loadedCount = visibleAccounts.length;
       const next = await fetchMore({
         variables: { limit: 100, offset: loadedCount },
         updateQuery: (previous, { fetchMoreResult }) => ({
-          crewMembers: [...previous.crewMembers, ...fetchMoreResult.crewMembers],
+          staffAccounts: [...previous.staffAccounts, ...fetchMoreResult.staffAccounts],
         }),
       });
-      setHasMore(next.data.crewMembers.length === 100);
+      if (apolloResultHasErrors(next)) throw new Error('Staff account page request failed');
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
+      setVisibleAccounts(next.data.staffAccounts);
+      setHasMore(next.data.staffAccounts.length === 100);
     } catch (failure) {
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
       setActionError(failure instanceof Error ? failure.message : 'Could not load more accounts');
     } finally {
-      setLoadingMore(false);
+      if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+        setLoadingMore(false);
+      }
     }
   };
 
   const updateRole = async (account: Account) => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
+    const requestVersion = requestVersionRef.current;
     setChangingId(account.id);
     setActionError(null);
     try {
-      await setStaffRole({ variables: { userId: account.id, enabled: account.role !== 'staff' } });
-      await refetch();
+      const result = await setStaffRole({
+        variables: { userId: account.id, enabled: account.role !== 'staff' },
+      });
+      if (apolloResultHasErrors(result)) throw new Error('Staff role update returned errors');
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
+      try {
+        const refreshed = await refetch();
+        if (apolloResultHasErrors(refreshed)) throw new Error('Staff account refresh failed');
+        hasCommittedAccountsRef.current = true;
+        setVisibleAccounts(refreshed.data?.staffAccounts ?? []);
+      } catch {
+        if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+          setActionError('Staff access was updated, but the account list could not be refreshed.');
+        }
+        return;
+      }
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
     } catch (failure) {
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
       setActionError(failure instanceof Error ? failure.message : 'Could not update this account');
     } finally {
-      setChangingId(null);
+      if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
+        setChangingId(null);
+      }
     }
   };
 
@@ -90,7 +202,7 @@ export const ManageStaffModal: FC<ManageStaffModalProps> = ({ isOpen, onClose })
             const isChanging = changingId === account.id;
             return <div key={account.id} className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-canvas/40 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-primary">{account.fullName}</p><p className="truncate text-xs text-secondary">{account.email || 'No email recorded'}</p></div><button type="button" onClick={() => void updateRole(account)} disabled={isChanging} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-focus ${isStaff ? 'border border-border-strong bg-surface text-secondary hover:bg-surface-raised' : 'bg-action text-on-action hover:bg-action-hover'}`}>{isChanging ? <Loader2 className="h-4 w-4 animate-spin" /> : isStaff ? 'Remove staff access' : 'Make staff'}</button></div>;
           })}
-          {hasMore && (data?.crewMembers.length ?? 0) === 100 && <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="min-h-11 w-full rounded-lg border border-border-strong bg-surface px-4 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more accounts'}</button>}
+          {hasMore && visibleAccounts.length === 100 && <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="min-h-11 w-full rounded-lg border border-border-strong bg-surface px-4 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">{loadingMore ? 'Loading…' : 'Load more accounts'}</button>}
         </div>
       </motion.div>
     </div>}

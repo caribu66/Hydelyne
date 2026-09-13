@@ -20,6 +20,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
+from app.domain.input_limits import validate_pdf_page_count
+
 logger = logging.getLogger(__name__)
 
 
@@ -199,8 +201,10 @@ def extract_cv_tables(pdf_path: str) -> CVTableExtraction:
     pending_project: ProjectRecord | None = None
 
     with pdfplumber.open(pdf_path) as pdf:
-        page_tables = [(page, page.extract_tables() or []) for page in pdf.pages]
-        page_texts = [page.extract_text() or "" for page in pdf.pages]
+        pages = pdf.pages
+        validate_pdf_page_count(len(pages))
+        page_tables = [(page, page.extract_tables() or []) for page in pages]
+        page_texts = [page.extract_text() or "" for page in pages]
 
     if page_texts:
         extraction.full_name = _extract_full_name(page_texts[0])
@@ -242,10 +246,10 @@ def extract_cv_tables(pdf_path: str) -> CVTableExtraction:
                     extraction.projects.extend(finalised)
             except Exception as exc:
                 logger.warning(
-                    "Failed to parse %s table on page %s: %s",
+                    "Failed to parse %s table on page %s (%s)",
                     classified,
                     getattr(page, "page_number", "?"),
-                    exc,
+                    type(exc).__name__,
                 )
             last_section = classified
             last_column_shape = shape

@@ -113,6 +113,18 @@ async def test_upload_exe_rejected_by_extension(client):
 
 
 @pytest.mark.asyncio
+async def test_upload_msg_rejected_until_a_real_msg_parser_is_available(client):
+    """Do not accept Outlook compound files as UTF-8 email text."""
+    response = await client.post(
+        "/api/documents/upload",
+        data={"crew_id": "test-crew-id"},
+        files={"file": ("message.msg", io.BytesIO(b"\xd0\xcf\x11\xe0"), "application/vnd.ms-outlook")},
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_upload_eml_with_rfc5322_headers_accepted(client):
     """Standard RFC 5322 .eml files starting with From: or Date: must be accepted."""
     eml_content = (

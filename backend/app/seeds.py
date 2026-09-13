@@ -257,16 +257,15 @@ async def main() -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     except Exception as e:  # pragma: no cover
-        logger.warning("Table init skipped: %s", e)
+        logger.warning("Table init skipped: %s", type(e).__name__)
 
     n = await seed_all()
     logger.info("Seeded %d crew members (idempotent).", n)
 
     admin = await bootstrap_admin()
     ops = await seed_user("ops@hydenlyne.com", "OpsPass_123!x", "Ops User", "user")
-    logger.info("Admin bootstrapped: %s", admin.email if admin else "(none configured)")
-    logger.info("Ops user ready: %s (role=%s)", ops.email, ops.role)
-    logger.info("Login accounts: admin (ADMIN_EMAIL) / ops@hydenlyne.com / OpsPass_123!x")
+    logger.info("Admin bootstrap complete: %s", "configured" if admin else "not configured")
+    logger.info("Ops user ready (role=%s)", ops.role)
 
 
 if __name__ == "__main__":

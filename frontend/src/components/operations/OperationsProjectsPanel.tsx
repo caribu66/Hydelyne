@@ -1,8 +1,9 @@
-import { FC } from 'react'
+import { FC, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import { MapPin, Calendar, Building2, ChevronRight, Loader2 } from 'lucide-react'
 import { PROJECTS_QUERY } from '../../lib/queries'
-import { formatProjectSearchQuery } from '../../utils/operationsHome'
+import { formatCalendarDate, formatProjectSearchQuery } from '../../utils/operationsHome'
+import { apolloResultHasErrors, isSessionDataReady } from '../../utils/sessionScope'
 
 interface ProjectDTO {
   id: string
@@ -18,22 +19,66 @@ interface ProjectDTO {
 
 interface OperationsProjectsPanelProps {
   onSelectProject: (query: string) => void
+  sessionKey?: string | null
 }
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatCalendarDate(value)
 }
 
-export const OperationsProjectsPanel: FC<OperationsProjectsPanelProps> = ({ onSelectProject }) => {
-  const { data, loading, error } = useQuery<{ projects: ProjectDTO[] }>(PROJECTS_QUERY, {
+export const OperationsProjectsPanel: FC<OperationsProjectsPanelProps> = ({ onSelectProject, sessionKey = null }) => {
+  const { data, loading, error, refetch } = useQuery<{ projects: ProjectDTO[] }>(PROJECTS_QUERY, {
     variables: { status: 'ACTIVE' },
-    fetchPolicy: 'cache-and-network',
+    fetchPolicy: 'network-only',
+    skip: !sessionKey,
   })
 
-  const projects = data?.projects ?? []
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(null)
+  const previousSessionKeyRef = useRef<string | null>(null)
+  const refreshPendingSessionKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const previousSessionKey = previousSessionKeyRef.current
+    previousSessionKeyRef.current = sessionKey
+    setLoadedSessionKey(null)
+    refreshPendingSessionKeyRef.current = null
+    if (!sessionKey || previousSessionKey === null) return
+
+    refreshPendingSessionKeyRef.current = sessionKey
+    let active = true
+    void refetch({ status: 'ACTIVE' })
+      .then((result) => {
+        if (apolloResultHasErrors(result)) throw new Error('Project refresh failed')
+        if (active && refreshPendingSessionKeyRef.current === sessionKey) {
+          setLoadedSessionKey(sessionKey)
+        }
+      })
+      .catch(() => {
+        // Keep the panel empty after a failed account-scoped refresh.
+      })
+      .finally(() => {
+        if (refreshPendingSessionKeyRef.current === sessionKey) {
+          refreshPendingSessionKeyRef.current = null
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [refetch, sessionKey])
+
+  useEffect(() => {
+    if (
+      sessionKey
+      && !loading
+      && !error
+      && refreshPendingSessionKeyRef.current !== sessionKey
+    ) {
+      setLoadedSessionKey(sessionKey)
+    }
+  }, [error, loading, sessionKey])
+
+  const sessionReady = isSessionDataReady(Boolean(sessionKey), loadedSessionKey, sessionKey, loading, error)
+  const projects = sessionReady ? data?.projects ?? [] : []
 
   return (
     <section aria-labelledby="projects-heading" className="rounded-[14px] border border-border-subtle bg-surface p-4 sm:p-5">

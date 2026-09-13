@@ -60,7 +60,7 @@ def crew_member_to_dto(model: CrewMemberModel) -> CrewMemberDTO:
         )
         if model.insurance_provider or model.insurance_expiry
         else None,
-        availability_status=model.availability_status or "available",
+        availability_status=model.availability_status or "unavailable",
         availability_date=model.availability_date,
         profile_completeness_score=model.profile_completeness_score,
         internal_notes=model.internal_notes,

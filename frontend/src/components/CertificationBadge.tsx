@@ -3,6 +3,7 @@ import { ShieldCheck, Info } from 'lucide-react';
 
 interface CertificationBadgeProps {
   certification: string;
+  verified?: boolean;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -67,6 +68,7 @@ const CERT_INFO_MAP: Record<string, { label: string; org: string; description: s
 
 export const CertificationBadge: FC<CertificationBadgeProps> = ({
   certification,
+  verified = false,
   className = '',
   size = 'md',
 }) => {
@@ -75,7 +77,16 @@ export const CertificationBadge: FC<CertificationBadgeProps> = ({
   const matchKey = Object.keys(CERT_INFO_MAP).find((key) =>
     certification.toUpperCase().includes(key)
   );
-  const info = matchKey ? CERT_INFO_MAP[matchKey] : null;
+  const mappedInfo = matchKey ? CERT_INFO_MAP[matchKey] : null;
+  const info = mappedInfo && verified
+    ? mappedInfo
+    : mappedInfo
+      ? {
+          label: `Recorded: ${certification}`,
+          org: 'Verification pending',
+          description: 'This credential is recorded on the profile; verification evidence is not confirmed.',
+        }
+      : null;
   const tooltipId = `cert-tooltip-${certification.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
 
   return (

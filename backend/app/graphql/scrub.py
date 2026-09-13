@@ -51,7 +51,7 @@ def scrub_work_history_list(items: list[WorkHistory], tier: Tier) -> list[WorkHi
     return []
 
 
-def scrub_crew_member(member: CrewMember, tier: Tier) -> CrewMember:
+def scrub_crew_member(member: CrewMember, tier: Tier, *, include_role: bool = False) -> CrewMember:
     """Return a tier-scoped copy of a CrewMember GraphQL object."""
     # Always scrub work history and certifications per-tier first
     work_history = scrub_work_history_list(member.work_history, tier)
@@ -69,7 +69,7 @@ def scrub_crew_member(member: CrewMember, tier: Tier) -> CrewMember:
             flying_point=member.flying_point,
             email=member.email,
             phone=member.phone,
-            role=member.role,
+            role=member.role if include_role else None,
             publication_status=member.publication_status,
             passport=member.passport,
             visa=member.visa,
@@ -104,7 +104,7 @@ def scrub_crew_member(member: CrewMember, tier: Tier) -> CrewMember:
             flying_point=member.flying_point,
             email=member.email,
             phone=member.phone,
-            role=member.role,
+            role=member.role if include_role else None,
             publication_status=member.publication_status,
             passport=None,
             visa=None,
@@ -138,7 +138,7 @@ def scrub_crew_member(member: CrewMember, tier: Tier) -> CrewMember:
         flying_point=member.flying_point,
         email=None,
         phone=None,
-        role=member.role,
+        role=member.role if include_role else None,
         publication_status=member.publication_status,
         passport=None,
         visa=None,
@@ -176,10 +176,14 @@ def scrub_document(doc: DocumentType, tier: Tier) -> DocumentType:
     return DocumentType(
         id=doc.id,
         file_name=doc.file_name,
+        title=doc.title,
         file_type=doc.file_type,
         file_size=doc.file_size,
         storage_type=doc.storage_type,
         classification=doc.classification,
+        issue_date=doc.issue_date,
+        expiry_date=doc.expiry_date,
+        notes=doc.notes,
         extraction_status=doc.extraction_status,
         extracted_text=None,
         extracted_data=None,
@@ -201,8 +205,11 @@ def scrub_project(project: Project, tier: Tier) -> Project:
         project_type=project.project_type,
         location=project.location,
         country=project.country,
+        water_depth=None,
         start_date=project.start_date,
         end_date=project.end_date,
         status=project.status,
+        crew_assigned=None,
         requirements=None,
+        document_ref=None,
     )

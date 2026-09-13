@@ -1,7 +1,10 @@
 import { FC, useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useMutation } from '@apollo/client';
 import { UserProfile, SpecialistDocument } from '../types';
+import type { DocumentMutationResult } from '../hooks/useSpecialistDocuments';
 import { CREW_MEMBERS_QUERY, VERIFY_CERTIFICATION } from '../lib/queries';
+import { apolloResultHasErrors } from '../utils/sessionScope';
+import { resolveSelectedDocument } from './documentVaultUtils';
 import { DocumentVault } from './DocumentVault';
 import { ConfirmDialog } from './ConfirmDialog';
 import {
@@ -26,6 +29,7 @@ const DossierRadarModal = lazy(() =>
 
 interface SpecialistDossierPaneProps {
   profile: UserProfile | null;
+  sessionKey?: string | null;
   searchQuery?: string;
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
@@ -38,8 +42,8 @@ interface SpecialistDossierPaneProps {
   summary?: string;
   summaryLoading?: boolean;
   onAddDocument?: () => void;
-  onRemoveDocument?: (docId: string) => void | Promise<void>;
-  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void>;
+  onRemoveDocument?: (docId: string) => void | Promise<void | DocumentMutationResult>;
+  onReviewDocument?: (docId: string, action: 'approve' | 'reject') => void | Promise<void | DocumentMutationResult>;
   canManageDocuments?: boolean;
   canRequestDocuments?: boolean;
   canDeleteCrew?: boolean;
@@ -54,6 +58,7 @@ interface SpecialistDossierPaneProps {
 
 export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   profile,
+  sessionKey = null,
   searchQuery = '',
   isBookmarked,
   onToggleBookmark,
@@ -85,12 +90,19 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [skillsQuery, setSkillsQuery] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
+  const currentSessionKeyRef = useRef(sessionKey);
+  currentSessionKeyRef.current = sessionKey;
 
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0, behavior: 'auto' });
   }, [profile?.id, activeTab, isFocusMode]);
 
   const [previewDoc, setPreviewDoc] = useState<SpecialistDocument | null>(null);
+
+  useEffect(() => {
+    setPreviewDoc((selected) => resolveSelectedDocument(selected, documents ?? []));
+  }, [documents]);
+
   const [actionCertId, setActionCertId] = useState<string | null>(null);
   const [localVerificationOverrides, setLocalVerificationOverrides] = useState<
     Record<string, { verificationStatus: string; status?: string }>
@@ -101,6 +113,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
   });
 
   const handleVerify = async (certId: string, status: 'VERIFIED' | 'REJECTED') => {
+    if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return;
     setActionCertId(certId);
     const newVerificationStatus = status === 'VERIFIED' ? 'verified' : 'rejected';
     const newLifecycleStatus = status === 'VERIFIED' ? 'valid' : 'pending_verification';
@@ -114,10 +127,13 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
       const res = await verifyMutation({
         variables: { id: certId, status },
       });
-      if (res.errors && res.errors.length > 0) {
-        const firstError = res.errors[0];
-        throw new Error(firstError?.message ?? 'Verification mutation returned errors');
-      }
+      if (currentSessionKeyRef.current !== sessionKey) return;
+      if (apolloResultHasErrors(res)) throw new Error('Verification mutation returned errors');
+      setLocalVerificationOverrides((prev) => {
+        const next = { ...prev };
+        delete next[certId];
+        return next;
+      });
       onShowToast(status === 'VERIFIED' ? 'Certification verified' : 'Certification rejected');
     } catch (err: unknown) {
       setLocalVerificationOverrides((prev) => {
@@ -136,7 +152,10 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
     setSkillsQuery('');
     setLocalVerificationOverrides({});
     setPreviewDoc(null);
-  }, [profile?.id]);
+    setActionCertId(null);
+    setIsDeleting(false);
+    setIsDeleteConfirmOpen(false);
+  }, [profile?.id, sessionKey]);
 
   if (!profile) {
     return (
@@ -225,6 +244,7 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
               onReviewDocument={onReviewDocument}
               canManageDocuments={canManageDocuments}
               canRequestDocuments={canRequestDocuments}
+              sessionKey={sessionKey}
               onShowToast={onShowToast}
             />
           ) : activeTab === 'radar' ? (
@@ -298,6 +318,8 @@ export const SpecialistDossierPane: FC<SpecialistDossierPaneProps> = ({
           onDelete={canManageDocuments ? onRemoveDocument : undefined}
           onReviewAction={canManageDocuments ? onReviewDocument : undefined}
           canReview={canManageDocuments}
+          canDownloadOriginal={canManageDocuments}
+          sessionKey={sessionKey}
         />
       </Suspense>
     </>

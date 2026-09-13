@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -9,6 +10,21 @@ from app.models import Document as DocumentModel
 from app.models import ProfileAccessEvent
 
 logger = logging.getLogger(__name__)
+
+MAX_DOCUMENT_AUDIT_ENTRIES = 500
+
+
+def append_document_audit_entry(
+    access_log: object, entry: Mapping[str, object]
+) -> list[dict[str, object]]:
+    """Append one audit event while bounding the JSON history column."""
+    existing = (
+        [item for item in access_log if isinstance(item, dict)]
+        if isinstance(access_log, list)
+        else []
+    )
+    existing.append(dict(entry))
+    return existing[-MAX_DOCUMENT_AUDIT_ENTRIES:]
 
 
 class AuditService:
@@ -34,7 +50,11 @@ class AuditService:
         async with get_session_factory()() as session:
             from sqlalchemy import select
 
-            stmt = select(DocumentModel).where(DocumentModel.id == document_id)
+            # access_log is a JSON array, so concurrent read-modify-write
+            # operations can otherwise lose entries. Serialize appenders at
+            # the document row, preserving the audit trail under concurrent
+            # downloads, reviews, and worker transitions.
+            stmt = select(DocumentModel).where(DocumentModel.id == document_id).with_for_update()
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()
 
@@ -51,9 +71,7 @@ class AuditService:
                 "details": merged_details,
             }
 
-            access_log = doc.access_log or []
-            access_log.append(access_entry)
-            doc.access_log = access_log
+            doc.access_log = append_document_audit_entry(doc.access_log, access_entry)
             from sqlalchemy.orm.attributes import flag_modified
 
             flag_modified(doc, "access_log")
@@ -70,17 +88,23 @@ class AuditService:
         result_count: int | None = None,
     ) -> None:
         """Record a profile read without storing query text or profile data."""
-        async with get_session_factory()() as session:
-            details = {"result_count": result_count} if result_count is not None else None
-            session.add(
-                ProfileAccessEvent(
-                    actor_id=actor_id,
-                    crew_member_id=crew_member_id,
-                    action=action,
-                    details=details,
+        try:
+            async with get_session_factory()() as session:
+                details = {"result_count": result_count} if result_count is not None else None
+                session.add(
+                    ProfileAccessEvent(
+                        actor_id=actor_id,
+                        crew_member_id=crew_member_id,
+                        action=action,
+                        details=details,
+                    )
                 )
-            )
-            await session.commit()
+                await session.commit()
+        except Exception as exc:
+            # Access telemetry must not turn an authorized profile read into
+            # an outage. The audit failure remains observable without
+            # exposing database/provider details to the caller.
+            logger.warning("Could not record profile access audit (%s)", type(exc).__name__)
 
     async def log_extraction(
         self,
@@ -100,7 +124,7 @@ class AuditService:
         async with get_session_factory()() as session:
             from sqlalchemy import select
 
-            stmt = select(DocumentModel).where(DocumentModel.id == document_id)
+            stmt = select(DocumentModel).where(DocumentModel.id == document_id).with_for_update()
             result = await session.execute(stmt)
             doc = result.scalar_one_or_none()
 
@@ -115,9 +139,7 @@ class AuditService:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-            access_log = doc.access_log or []
-            access_log.append(extraction_entry)
-            doc.access_log = access_log
+            doc.access_log = append_document_audit_entry(doc.access_log, extraction_entry)
             from sqlalchemy.orm.attributes import flag_modified
 
             flag_modified(doc, "access_log")

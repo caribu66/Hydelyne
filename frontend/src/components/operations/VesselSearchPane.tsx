@@ -1,10 +1,12 @@
-import { FC, FormEvent, useMemo, useState } from 'react'
+import { FC, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import { ChevronDown, ChevronUp, Filter, Loader2, Search, Ship, UserPlus, Users, X } from 'lucide-react'
 import { SEARCH_VESSELS_QUERY, VESSEL_ROSTER_QUERY } from '../../lib/queries'
 import { CampaignAssignment } from '../../types'
 import { formatAssignmentStatus } from '../../utils/assignmentUtils'
+import { apolloResultHasErrors, isSessionDataReady, isSessionQueryEnabled } from '../../utils/sessionScope'
 import { VesselForMobilization, VesselMobilizationModal } from './VesselMobilizationModal'
+import { isVesselSearchSessionReady } from './vesselSearchUtils'
 
 export type VesselIdType = 'imo' | 'mmsi' | 'eni'
 
@@ -32,19 +34,87 @@ export interface VesselSearchResponse {
 interface VesselRosterSectionProps {
   imo: string
   id: string
+  isAdmin: boolean
+  sessionKey: string | null | undefined
   onMobilize?: () => void
 }
 
-export const VesselRosterSection: FC<VesselRosterSectionProps> = ({ imo, id, onMobilize }) => {
-  const { data, loading, error } = useQuery<{ vesselRoster: CampaignAssignment[] }>(
+export const VesselRosterSection: FC<VesselRosterSectionProps> = ({
+  imo,
+  id,
+  isAdmin,
+  sessionKey,
+  onMobilize,
+}) => {
+  const { data, loading, error, refetch } = useQuery<{ vesselRoster: CampaignAssignment[] }>(
     VESSEL_ROSTER_QUERY,
     {
       variables: { imo },
-      fetchPolicy: 'cache-and-network',
+      fetchPolicy: 'network-only',
+      skip: !sessionKey,
     }
   )
 
-  const roster = data?.vesselRoster ?? []
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(null)
+  const scopeKey = sessionKey ? `${sessionKey}:${imo}` : null
+  const previousScopeKeyRef = useRef<string | null>(null)
+  const refreshPendingScopeKeyRef = useRef<string | null>(null)
+  const hasCommittedRosterRef = useRef(false)
+  const [visibleRoster, setVisibleRoster] = useState<CampaignAssignment[] | undefined>(undefined)
+
+  useEffect(() => {
+    const previousScopeKey = previousScopeKeyRef.current
+    previousScopeKeyRef.current = scopeKey
+    hasCommittedRosterRef.current = false
+    setVisibleRoster(undefined)
+    setLoadedSessionKey(null)
+    refreshPendingScopeKeyRef.current = null
+    if (!scopeKey || previousScopeKey === null) return
+
+    refreshPendingScopeKeyRef.current = scopeKey
+    let active = true
+    void refetch({ imo })
+      .then((result) => {
+        if (apolloResultHasErrors(result)) throw new Error('Vessel roster refresh failed')
+        if (active && refreshPendingScopeKeyRef.current === scopeKey) {
+          hasCommittedRosterRef.current = true
+          setVisibleRoster(result.data?.vesselRoster ?? [])
+          setLoadedSessionKey(scopeKey)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (refreshPendingScopeKeyRef.current === scopeKey) {
+          refreshPendingScopeKeyRef.current = null
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [imo, refetch, scopeKey])
+
+  useEffect(() => {
+    if (
+      scopeKey
+      && loadedSessionKey === scopeKey
+      && !hasCommittedRosterRef.current
+    ) {
+      hasCommittedRosterRef.current = true
+      setVisibleRoster(data?.vesselRoster ?? [])
+    }
+  }, [data, loadedSessionKey, scopeKey])
+
+  useEffect(() => {
+    if (
+      scopeKey
+      && !loading
+      && !error
+      && refreshPendingScopeKeyRef.current !== scopeKey
+    ) setLoadedSessionKey(scopeKey)
+  }, [error, loading, scopeKey])
+
+  const rosterReady = isSessionDataReady(Boolean(scopeKey), loadedSessionKey, scopeKey, loading, error)
+  const roster = rosterReady ? visibleRoster ?? [] : []
 
   return (
     <div
@@ -119,7 +189,7 @@ export const VesselRosterSection: FC<VesselRosterSectionProps> = ({ imo, id, onM
                   {assignment.projectName && (
                     <span>Project: {assignment.projectName}</span>
                   )}
-                  {assignment.agreedDayRate && (
+                  {isAdmin && assignment.agreedDayRate != null && (
                     <span>£{assignment.agreedDayRate}/d</span>
                   )}
                 </div>
@@ -134,13 +204,27 @@ export const VesselRosterSection: FC<VesselRosterSectionProps> = ({ imo, id, onM
 
 export interface VesselSearchPaneProps {
   onShowToast?: (message: string) => void
+  isAdmin: boolean
+  sessionKey?: string | null
 }
 
-export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => {
+export const VesselSearchPane: FC<VesselSearchPaneProps> = ({
+  onShowToast,
+  isAdmin,
+  sessionKey = null,
+}) => {
   const [query, setQuery] = useState('')
   const [searchedQuery, setSearchedQuery] = useState('')
   const [expandedImo, setExpandedImo] = useState<string | null>(null)
   const [mobilizingVessel, setMobilizingVessel] = useState<VesselForMobilization | null>(null)
+  const previousSessionKeyRef = useRef<string | null>(null)
+  const currentSessionKeyRef = useRef(sessionKey)
+  const requestVersionRef = useRef(0)
+  const refreshPendingSessionKeyRef = useRef<string | null>(null)
+  const hasIssuedSearchRef = useRef(false)
+  const [loadedSessionKey, setLoadedSessionKey] = useState<string | null>(null)
+  const [visibleSearchResult, setVisibleSearchResult] = useState<VesselSearchResponse | undefined>(undefined)
+  currentSessionKeyRef.current = sessionKey
 
   const handleOpenMobilization = (v: VesselSummary) => {
     if (!v.imo) return
@@ -158,13 +242,64 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
     SEARCH_VESSELS_QUERY,
     {
       variables: { name: '', limit: 20 },
-      fetchPolicy: 'cache-and-network',
+      fetchPolicy: 'network-only',
+      skip: !isSessionQueryEnabled(true, sessionKey),
     }
   )
 
-  const isConfigured = data?.vesselSearch?.configured !== false
-  const vessels = useMemo(() => data?.vesselSearch?.vessels ?? [], [data?.vesselSearch?.vessels])
-  const isCached = data?.vesselSearch?.cached ?? false
+  useEffect(() => {
+    requestVersionRef.current += 1
+    hasIssuedSearchRef.current = false
+    setVisibleSearchResult(undefined)
+    setLoadedSessionKey(null)
+    setSearchedQuery('')
+    setExpandedImo(null)
+    setMobilizingVessel(null)
+    refreshPendingSessionKeyRef.current = null
+    if (!sessionKey) {
+      previousSessionKeyRef.current = null
+      return
+    }
+    const sessionChanged =
+      previousSessionKeyRef.current !== null && previousSessionKeyRef.current !== sessionKey
+    previousSessionKeyRef.current = sessionKey
+    if (sessionChanged) {
+      refreshPendingSessionKeyRef.current = sessionKey
+      void refetch({ name: '', limit: 20 })
+        .then((result) => {
+          if (apolloResultHasErrors(result)) throw new Error('Vessel search refresh failed')
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (refreshPendingSessionKeyRef.current === sessionKey) {
+            refreshPendingSessionKeyRef.current = null
+          }
+        })
+    }
+  }, [refetch, sessionKey])
+
+  useEffect(() => {
+    if (sessionKey && loadedSessionKey === sessionKey && !hasIssuedSearchRef.current) {
+      setVisibleSearchResult(data?.vesselSearch)
+    }
+  }, [data, loadedSessionKey, sessionKey])
+
+  useEffect(() => {
+    if (
+      sessionKey
+      && !loading
+      && !error
+      && refreshPendingSessionKeyRef.current !== sessionKey
+    ) setLoadedSessionKey(sessionKey)
+  }, [error, loading, sessionKey])
+
+  // Apollo can retain the previous successful result after a later search
+  // fails. Do not expose that result while the current request is errored.
+  const sessionReady = isVesselSearchSessionReady(loadedSessionKey, sessionKey, loading, error)
+  const searchResult = sessionReady ? visibleSearchResult : undefined
+  const isConfigured = searchResult?.configured !== false
+  const vessels = useMemo(() => searchResult?.vessels ?? [], [searchResult?.vessels])
+  const isCached = searchResult?.cached ?? false
 
   const [typeFilter, setTypeFilter] = useState<'all' | 'survey' | 'offshore' | 'support'>('all')
 
@@ -181,10 +316,15 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
 
   const handleSearch = async (term: string) => {
     const trimmed = term.trim()
-    if (!trimmed) return
-    setSearchedQuery(trimmed)
+    if (!trimmed || !sessionKey || currentSessionKeyRef.current !== sessionKey) return
+    const requestVersion = ++requestVersionRef.current
+    hasIssuedSearchRef.current = true
     try {
-      await refetch({ name: trimmed, limit: 20 })
+      const result = await refetch({ name: trimmed, limit: 20 })
+      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return
+      if (apolloResultHasErrors(result)) throw new Error('Vessel search failed')
+      setVisibleSearchResult(result.data?.vesselSearch)
+      setSearchedQuery(trimmed)
     } catch {
       // Handled via Apollo error state
     }
@@ -244,9 +384,18 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
             <button
               type="button"
               onClick={() => {
+                if (!sessionKey || currentSessionKeyRef.current !== sessionKey) return
+                const requestVersion = ++requestVersionRef.current
+                hasIssuedSearchRef.current = true
                 setQuery('')
-                setSearchedQuery('')
                 void refetch({ name: '', limit: 20 })
+                  .then((result) => {
+                    if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return
+                    if (apolloResultHasErrors(result)) throw new Error('Vessel search failed')
+                    setVisibleSearchResult(result.data?.vesselSearch)
+                    setSearchedQuery('')
+                  })
+                  .catch(() => {})
               }}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-primary transition-colors cursor-pointer rounded-full"
               aria-label="Clear vessel search"
@@ -407,6 +556,8 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
                   <VesselRosterSection
                     imo={vessel.imo}
                     id={`vessel-roster-${vessel.imo}`}
+                    isAdmin={isAdmin}
+                    sessionKey={sessionKey}
                     onMobilize={() => handleOpenMobilization(vessel)}
                   />
                 )}
@@ -417,9 +568,12 @@ export const VesselSearchPane: FC<VesselSearchPaneProps> = ({ onShowToast }) => 
       )}
 
       <VesselMobilizationModal
+        key={sessionKey ?? 'no-session'}
         isOpen={mobilizingVessel !== null}
         onClose={() => setMobilizingVessel(null)}
         vessel={mobilizingVessel}
+        isAdmin={isAdmin}
+        sessionKey={sessionKey}
         onShowToast={onShowToast || (() => {})}
       />
     </div>

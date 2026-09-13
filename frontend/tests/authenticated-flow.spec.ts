@@ -21,7 +21,6 @@ const crewMember = {
 
 async function authenticate(page: Page, theme: 'dark' | 'light' = 'dark') {
   await page.addInitScript((selectedTheme) => {
-    localStorage.setItem('hydenlyne_token', 'test-token');
     localStorage.setItem('hydenlyne_user', JSON.stringify({
       id: 'user-1',
       fullName: 'Test Recruiter',
@@ -97,7 +96,7 @@ async function mockCrewApi(page: Page, options: { crewError?: boolean; member?: 
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ data: { crewMembers: [{ id: 'user-2', fullName: 'Jamie Cole', email: 'jamie@example.com', role: 'user' }] } }),
+        body: JSON.stringify({ data: { staffAccounts: [{ id: 'user-2', fullName: 'Jamie Cole', email: 'jamie@example.com', role: 'user' }] } }),
       });
       return;
     }
@@ -423,10 +422,39 @@ test.describe('authenticated specialist workspace', () => {
     expect(await page.evaluate(() => localStorage.getItem('hydenlyne_token'))).toBeNull();
   });
 
+  test('closes the document review surface when the session expires', async ({ page }) => {
+    await authenticate(page);
+    await mockCrewApi(page);
+    await page.route('**/api/documents/review-queue', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          id: 'review-1',
+          status: 'unread',
+          document_id: 'document-1',
+          file_name: 'certificate.pdf',
+          extraction_status: 'needs_review',
+          crew_member_id: 'crew-1',
+          contractor_name: 'Alex Morgan',
+          created_at: '2026-09-12T10:00:00Z',
+        }]),
+      });
+    });
+    await page.goto('/');
+
+    await page.getByRole('button', { name: 'Review documents' }).click();
+    await expect(page.getByRole('dialog', { name: 'Documents pending review' })).toBeVisible();
+
+    await page.evaluate(() => window.dispatchEvent(new Event('hydenlyne:session-expired')));
+    await expect(page.getByRole('dialog', { name: 'Documents pending review' })).toBeHidden();
+  });
+
   test('signs out to a clean, unfiltered main page without private workspace state', async ({ page }) => {
     await authenticate(page);
     await page.addInitScript(() => {
       localStorage.setItem('hydenlyne_bookmarked_ids', JSON.stringify(['crew-1']));
+      localStorage.setItem('hydenlyne_bookmarked_ids:user-1', JSON.stringify(['crew-1']));
     });
     await mockCrewApi(page);
     await page.goto('/?q=hydrography&view=cards');
@@ -446,6 +474,7 @@ test.describe('authenticated specialist workspace', () => {
     await expect(page.getByRole('button', { name: /Open Alex Morgan dossier/ })).toHaveCount(0);
     await expect(page.getByLabel('Active contractor filters')).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => localStorage.getItem('hydenlyne_bookmarked_ids'))).toBe('[]');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hydenlyne_bookmarked_ids:user-1'))).toBeNull();
     await expect.poll(() => page.evaluate(() => localStorage.getItem('hydenlyne_token'))).toBeNull();
   });
 });

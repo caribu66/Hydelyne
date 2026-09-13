@@ -54,4 +54,15 @@ test.describe('unauthenticated deep links never reveal gated search UI', () => {
     await page.getByRole('textbox', { name: 'Sign in to search contractors' }).click();
     await expect(page.getByRole('dialog', { name: 'Sign in' })).toBeVisible();
   });
+
+  test('public shell clears private recent search history after logout', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('hydenlyne_recent_searches', JSON.stringify(['private contractor query']));
+    });
+
+    await page.goto('/');
+
+    await expect(page.getByText(/Recent Searches/i)).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('hydenlyne_recent_searches'))).toBeNull();
+  });
 });

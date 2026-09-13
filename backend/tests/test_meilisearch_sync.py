@@ -5,6 +5,7 @@ Meilisearch index (only `deleteCrewMember` did), so the index silently went
 stale after every crew edit. See backend/docs/consultant-knowledge-core.md.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -102,3 +103,64 @@ async def test_keyword_search_always_filters_to_approved_contractors():
     assert search_params["filter"] == (
         'publication_status = "approved" AND availability_status = "available"'
     )
+
+
+@pytest.mark.asyncio
+async def test_document_index_waits_for_meilisearch_task_completion():
+    fake_index = MagicMock()
+    fake_index.add_documents.return_value = SimpleNamespace(task_uid=41)
+    fake_client = MagicMock()
+    fake_client.index.return_value = fake_index
+    fake_client.wait_for_task.return_value = SimpleNamespace(status="succeeded")
+
+    with patch.object(meilisearch_client, "_client", fake_client):
+        result = await meilisearch_client.index_document({"id": "document-1"})
+
+    assert result == {"task_uid": 41}
+    fake_client.wait_for_task.assert_called_once_with(41, timeout_in_ms=5000, interval_in_ms=50)
+
+
+@pytest.mark.asyncio
+async def test_document_delete_reports_failed_meilisearch_task():
+    fake_index = MagicMock()
+    fake_index.delete_document.return_value = SimpleNamespace(task_uid=42)
+    fake_client = MagicMock()
+    fake_client.index.return_value = fake_index
+    fake_client.wait_for_task.return_value = SimpleNamespace(status="failed")
+
+    with patch.object(meilisearch_client, "_client", fake_client):
+        result = await meilisearch_client.delete_document("document-1")
+
+    assert result is False
+    fake_client.wait_for_task.assert_called_once_with(42, timeout_in_ms=5000, interval_in_ms=50)
+
+
+@pytest.mark.asyncio
+async def test_crew_batch_delete_waits_for_meilisearch_task_completion():
+    fake_index = MagicMock()
+    fake_index.delete_documents.return_value = SimpleNamespace(task_uid=43)
+    fake_client = MagicMock()
+    fake_client.index.return_value = fake_index
+    fake_client.wait_for_task.return_value = SimpleNamespace(status="succeeded")
+
+    with patch.object(meilisearch_client, "_client", fake_client):
+        result = await meilisearch_client.delete_crew_members(["crew-1", "crew-2"])
+
+    assert result is True
+    fake_client.wait_for_task.assert_called_once_with(43, timeout_in_ms=5000, interval_in_ms=50)
+
+
+@pytest.mark.asyncio
+async def test_index_setup_waits_for_configuration_tasks():
+    fake_index = MagicMock()
+    fake_index.update_searchable_attributes.return_value = SimpleNamespace(task_uid=51)
+    fake_index.update_filterable_attributes.return_value = SimpleNamespace(task_uid=52)
+    fake_index.update_sortable_attributes.return_value = SimpleNamespace(task_uid=53)
+    fake_client = MagicMock()
+    fake_client.index.return_value = fake_index
+    fake_client.wait_for_task.return_value = SimpleNamespace(status="succeeded")
+
+    with patch.object(meilisearch_client, "_client", fake_client):
+        await meilisearch_client.setup_indexes()
+
+    assert fake_client.wait_for_task.call_count == 5

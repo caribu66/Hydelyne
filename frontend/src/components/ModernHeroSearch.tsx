@@ -12,6 +12,7 @@ interface ModernHeroSearchProps {
   onClear: () => void;
   isCalmState: boolean;
   isAuthenticated?: boolean;
+  sessionKey?: string | null;
   onOpenFilters?: () => void;
   onAIResults?: (data: CrewQueryResult | null, loading: boolean, isActive: boolean, showSummary: boolean) => void;
   variant?: 'hero' | 'compact';
@@ -31,7 +32,8 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
   onSearch,
   onClear,
   isCalmState,
-  isAuthenticated = true,
+  isAuthenticated = false,
+  sessionKey = null,
   onOpenFilters,
   onAIResults,
   variant = 'hero',
@@ -40,26 +42,49 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [loadedRecentSearchesKey, setLoadedRecentSearchesKey] = useState<string | null>(null);
+  const recentSearchesKey = sessionKey ? `${RECENT_SEARCHES_KEY}:${sessionKey}` : null;
 
-  // Load recent searches from localStorage
+  // Search history is private workspace state. Do not load or retain it in
+  // the public shell after logout, even if the component remains mounted for
+  // the transition back to the landing page.
   useEffect(() => {
+    setLoadedRecentSearchesKey(null);
+    setRecentSearches([]);
+    if (!isAuthenticated || !recentSearchesKey) {
+      if (!isAuthenticated) try {
+        localStorage.removeItem(RECENT_SEARCHES_KEY);
+      } catch {
+        // ignore storage errors
+      }
+      return;
+    }
     try {
-      const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
+      const saved = localStorage.getItem(recentSearchesKey);
       if (saved) {
-        setRecentSearches(JSON.parse(saved).slice(0, 5));
+        const parsed: unknown = JSON.parse(saved);
+        setRecentSearches(
+          Array.isArray(parsed) && parsed.every((item): item is string => typeof item === 'string')
+            ? parsed.slice(0, 5)
+            : [],
+        );
       }
     } catch {
-      // ignore storage errors
+      // Treat unreadable storage as empty private state.
+      setRecentSearches([]);
+    } finally {
+      setLoadedRecentSearchesKey(recentSearchesKey);
     }
-  }, []);
+  }, [isAuthenticated, recentSearchesKey]);
 
   const saveRecentSearch = (term: string) => {
+    if (!isAuthenticated || !recentSearchesKey) return;
     const trimmed = term.trim();
     if (!trimmed || trimmed.length < 2) return;
     try {
       const updated = [trimmed, ...recentSearches.filter((s) => s.toLowerCase() !== trimmed.toLowerCase())].slice(0, 5);
       setRecentSearches(updated);
-      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+      localStorage.setItem(recentSearchesKey, JSON.stringify(updated));
     } catch {
       // ignore storage errors
     }
@@ -68,13 +93,21 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
   const clearRecentSearches = () => {
     setRecentSearches([]);
     try {
-      localStorage.removeItem(RECENT_SEARCHES_KEY);
+      if (recentSearchesKey) localStorage.removeItem(recentSearchesKey);
+      if (!isAuthenticated) localStorage.removeItem(RECENT_SEARCHES_KEY);
     } catch {
       // ignore
     }
   };
 
-  const { data: aiData, loading: aiLoading, isAIQuery, showSummary } = useCrewQuery(query, isAuthenticated);
+  const visibleRecentSearches =
+    loadedRecentSearchesKey === recentSearchesKey ? recentSearches : [];
+
+  const { data: aiData, loading: aiLoading, isAIQuery, showSummary } = useCrewQuery(
+    query,
+    isAuthenticated,
+    sessionKey,
+  );
 
   useEffect(() => {
     if (onAIResults) {
@@ -225,7 +258,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
           </div>
 
           {/* Interactive Recent Searches Dropdown Menu */}
-          {isFocused && recentSearches.length > 0 && (
+          {isAuthenticated && isFocused && visibleRecentSearches.length > 0 && (
             <div
               onMouseDown={(e) => e.preventDefault()}
               className="absolute left-0 right-0 top-full mt-2 z-50 rounded-[14px] border border-border-strong/80 bg-surface/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
@@ -244,7 +277,7 @@ export const ModernHeroSearch: FC<ModernHeroSearchProps> = ({
                 </button>
               </div>
               <div className="space-y-0.5">
-                {recentSearches.map((term) => (
+                {visibleRecentSearches.map((term) => (
                   <button
                     key={term}
                     type="button"

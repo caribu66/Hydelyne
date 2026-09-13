@@ -7,7 +7,10 @@ from app.services import dropbox_auth
 from app.services.dropbox_auth import (
     DropboxAuthError,
     DropboxTokenProvider,
+    download_dropbox_content,
     dropbox_request,
+    dropbox_request_json,
+    dropbox_request_status,
 )
 
 
@@ -102,6 +105,42 @@ async def test_refresh_token_exchanged_and_cached(creds, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_malformed_expiry_uses_safe_default(creds, monkeypatch):
+    """A malformed provider expiry must not crash token refresh or create an
+    immediately-expired cache entry."""
+    calls = []
+    transport = _token_transport(calls, expires_in="not-a-number")
+    _patch_refresh_transport(monkeypatch, transport)
+
+    provider = DropboxTokenProvider()
+    assert await provider.get_token() == "access-1"
+    assert provider._expires_at > 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [[], "not-json-object"])
+async def test_malformed_token_payload_raises_dropbox_auth_error(creds, monkeypatch, payload):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    _patch_refresh_transport(monkeypatch, httpx.MockTransport(handler))
+
+    with pytest.raises(DropboxAuthError, match="invalid payload"):
+        await DropboxTokenProvider().get_token()
+
+
+@pytest.mark.asyncio
+async def test_oversized_token_response_raises_dropbox_auth_error(creds, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"{" + b"x" * (64 * 1024 + 1) + b"}")
+
+    _patch_refresh_transport(monkeypatch, httpx.MockTransport(handler))
+
+    with pytest.raises(DropboxAuthError, match="invalid payload"):
+        await DropboxTokenProvider().get_token()
+
+
+@pytest.mark.asyncio
 async def test_expired_cache_triggers_refresh(creds, monkeypatch):
     """A token past its skew-adjusted expiry is replaced, not reused."""
     calls = []
@@ -182,3 +221,69 @@ async def test_dropbox_request_no_retry_without_refresh(monkeypatch):
 
     assert response.status_code == 401
     assert seen == ["Bearer sl.expired"]
+
+
+@pytest.mark.asyncio
+async def test_bounded_dropbox_download_rejects_oversized_body(monkeypatch):
+    settings = dropbox_auth.settings
+    monkeypatch.setattr(settings, "DROPBOX_REFRESH_TOKEN", "", raising=False)
+    monkeypatch.setattr(settings, "DROPBOX_ACCESS_TOKEN", "sl.static", raising=False)
+    provider = DropboxTokenProvider()
+    monkeypatch.setattr(dropbox_auth, "token_provider", provider)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"12345")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        status_code, content = await download_dropbox_content(
+            client,
+            "POST",
+            "https://content.dropboxapi.com/2/files/download",
+            max_bytes=4,
+        )
+
+    assert status_code == 200
+    assert content is None
+
+
+@pytest.mark.asyncio
+async def test_bounded_dropbox_json_request_rejects_oversized_body(monkeypatch):
+    settings = dropbox_auth.settings
+    monkeypatch.setattr(settings, "DROPBOX_REFRESH_TOKEN", "", raising=False)
+    monkeypatch.setattr(settings, "DROPBOX_ACCESS_TOKEN", "sl.static", raising=False)
+    provider = DropboxTokenProvider()
+    monkeypatch.setattr(dropbox_auth, "token_provider", provider)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"{" + b"x" * (512 * 1024 + 1) + b"}")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        status_code, payload = await dropbox_request_json(
+            client,
+            "POST",
+            "https://api.dropboxapi.com/2/files/list_folder",
+        )
+
+    assert status_code == 200
+    assert payload is None
+
+
+@pytest.mark.asyncio
+async def test_dropbox_status_request_does_not_parse_response_body(monkeypatch):
+    settings = dropbox_auth.settings
+    monkeypatch.setattr(settings, "DROPBOX_REFRESH_TOKEN", "", raising=False)
+    monkeypatch.setattr(settings, "DROPBOX_ACCESS_TOKEN", "sl.static", raising=False)
+    provider = DropboxTokenProvider()
+    monkeypatch.setattr(dropbox_auth, "token_provider", provider)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"not-json" * (1024 * 1024))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        status_code = await dropbox_request_status(
+            client,
+            "POST",
+            "https://api.dropboxapi.com/2/files/delete_v2",
+        )
+
+    assert status_code == 200
