@@ -201,8 +201,7 @@ class ProjectService:
                 )
                 crew_by_id = {crew.id: crew for crew in existing_crew}
                 if any(
-                    crew_id not in crew_by_id
-                    or not is_contractor_profile(crew_by_id[crew_id])
+                    crew_id not in crew_by_id or not is_contractor_profile(crew_by_id[crew_id])
                     for crew_id in unique_crew_ids
                 ):
                     raise ValueError("One or more crew members were not found")

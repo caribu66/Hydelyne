@@ -116,9 +116,7 @@ async def test_direct_cv_processing_locks_and_rejects_login_account(monkeypatch)
     )
 
     with pytest.raises(ValueError, match="Crew member not found"):
-        await cv_processing_service.process_cv_extraction(
-            "staff-1", {"full_name": "Account"}
-        )
+        await cv_processing_service.process_cv_extraction("staff-1", {"full_name": "Account"})
 
     assert "FOR UPDATE" in str(session.execute.await_args.args[0])
 

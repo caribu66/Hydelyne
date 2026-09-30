@@ -113,8 +113,7 @@ def _critical_credential_issue(
 
     def is_usable_verified(certification: Certification) -> bool:
         return (
-            certification.verification_status == "verified"
-            and certification.status != "rejected"
+            certification.verification_status == "verified" and certification.status != "rejected"
         )
 
     verified_medical_expiries = [
@@ -130,8 +129,7 @@ def _critical_credential_issue(
         return f"Verified medical certification expired on {expiry.isoformat()}"
 
     has_verified_medical = any(
-        is_usable_verified(cert) and is_medical_cert_type(cert.cert_type)
-        for cert in certifications
+        is_usable_verified(cert) and is_medical_cert_type(cert.cert_type) for cert in certifications
     )
     if (
         crew.medical_expiry is not None
@@ -634,11 +632,7 @@ class AssignmentService:
             # Check 2: Offshore Medical Expiry
             med_expiry = crew.medical_expiry
             med_name = "Offshore Medical"
-            med_certs = [
-                c
-                for c in certs
-                if is_medical_cert_type(c.cert_type)
-            ]
+            med_certs = [c for c in certs if is_medical_cert_type(c.cert_type)]
             if med_certs:
                 dated_meds = [
                     c

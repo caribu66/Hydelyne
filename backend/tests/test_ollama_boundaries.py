@@ -36,7 +36,7 @@ class _AsyncResponse:
         return None
 
     async def aiter_bytes(self):
-        yield b"{" + b'\"response\":\"' + (b"x" * 1_000_001) + b"\"}"
+        yield b"{" + b'"response":"' + (b"x" * 1_000_001) + b'"}'
 
     async def aclose(self):
         return None

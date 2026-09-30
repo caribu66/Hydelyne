@@ -163,9 +163,7 @@ async def process_dropbox_account(account_id: str) -> None:
     except DropboxCursorUnavailable:
         logger.warning("Could not read Dropbox cursor; deferring account sync")
     except Exception as exc:
-        logger.error(
-            "Failed to process Dropbox account %s (%s)", account_id, type(exc).__name__
-        )
+        logger.error("Failed to process Dropbox account %s (%s)", account_id, type(exc).__name__)
 
 
 async def get_dropbox_cursor(account_id: str) -> Optional[str]:
@@ -684,9 +682,7 @@ async def download_dropbox_file(
                     headers={"Dropbox-API-Arg": json.dumps({"path": doc.dropbox_path})},
                 )
             except DropboxAuthError as exc:
-                logger.error(
-                    "Dropbox auth unavailable for download (%s)", type(exc).__name__
-                )
+                logger.error("Dropbox auth unavailable for download (%s)", type(exc).__name__)
                 raise HTTPException(status_code=503, detail="Dropbox storage is unavailable")
             if status_code == 200 and content is not None:
                 valid, validation_error = document_upload_service.validate_file_content(
@@ -697,9 +693,7 @@ async def download_dropbox_file(
                         "Refusing Dropbox download after content validation failure (%s)",
                         validation_error,
                     )
-                    raise HTTPException(
-                        status_code=422, detail="Stored document failed validation"
-                    )
+                    raise HTTPException(status_code=422, detail="Stored document failed validation")
                 from app.api.documents import _content_disposition
 
                 return StreamingResponse(

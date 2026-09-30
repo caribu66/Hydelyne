@@ -42,8 +42,7 @@ async def test_dropbox_challenge_is_bounded(client):
     from app.api.dropbox import MAX_DROPBOX_WEBHOOK_CHALLENGE_LENGTH
 
     response = await client.get(
-        "/api/dropbox/webhook?challenge="
-        + "x" * (MAX_DROPBOX_WEBHOOK_CHALLENGE_LENGTH + 1)
+        "/api/dropbox/webhook?challenge=" + "x" * (MAX_DROPBOX_WEBHOOK_CHALLENGE_LENGTH + 1)
     )
 
     assert response.status_code == 400

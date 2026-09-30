@@ -43,15 +43,17 @@ def _validate_document_metadata(
         raise ValueError("file_type must not be empty")
     if len(file_type) > 50:
         raise ValueError("file_type must be 50 characters or fewer")
-    if not isinstance(file_size, int) or isinstance(file_size, bool) or not 0 < file_size <= MAX_FILE_SIZE:
+    if (
+        not isinstance(file_size, int)
+        or isinstance(file_size, bool)
+        or not 0 < file_size <= MAX_FILE_SIZE
+    ):
         raise ValueError(f"file_size must be between 1 and {MAX_FILE_SIZE} bytes")
     if not isinstance(storage_path, str) or not storage_path or len(storage_path) > 500:
         raise ValueError("storage_path must be between 1 and 500 characters")
     if storage_path.startswith("/hydenlyne/") and not is_managed_dropbox_path(storage_path):
         raise ValueError("storage_path is not a managed Dropbox path")
-    if uploaded_by is not None and (
-        not isinstance(uploaded_by, str) or len(uploaded_by) > 255
-    ):
+    if uploaded_by is not None and (not isinstance(uploaded_by, str) or len(uploaded_by) > 255):
         raise ValueError("uploaded_by must be 255 characters or fewer")
 
 

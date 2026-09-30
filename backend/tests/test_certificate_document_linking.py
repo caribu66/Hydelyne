@@ -90,9 +90,7 @@ async def test_async_extraction_rejects_auto_classified_contractor_cv(db_session
     crew_id = str(uuid.uuid4())
     document_id = str(uuid.uuid4())
     request_id = str(uuid.uuid4())
-    db_session.add(
-        CrewMember(id=crew_id, full_name="Contractor CV", publication_status="approved")
-    )
+    db_session.add(CrewMember(id=crew_id, full_name="Contractor CV", publication_status="approved"))
     db_session.add(
         DocumentRequest(
             id=request_id,
@@ -152,9 +150,7 @@ async def test_async_extraction_rejects_auto_classified_contractor_cv(db_session
     assert document.extraction_status == "rejected"
     incoming_review = (
         await db_session.execute(
-            select(IncomingDocumentReview).where(
-                IncomingDocumentReview.document_id == document_id
-            )
+            select(IncomingDocumentReview).where(IncomingDocumentReview.document_id == document_id)
         )
     ).scalar_one()
     assert incoming_review.status == "rejected"

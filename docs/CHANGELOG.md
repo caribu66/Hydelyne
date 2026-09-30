@@ -1,5 +1,12 @@
 # Changelog
 
+## Backend formatting cleanup (2026-10-01)
+
+- Applied the repository's configured Ruff formatter to the remaining backend
+  application and test files. This is a mechanical layout-only cleanup; no
+  runtime behavior or contracts changed.
+- Tool: Codex. Backend format, lint, type, test, and diff checks pass.
+
 ## Repository hygiene pass (2026-10-01)
 
 - Added a narrow ignore rule for Claude Code worktrees so local checkout

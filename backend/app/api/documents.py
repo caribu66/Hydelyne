@@ -93,9 +93,7 @@ def _content_disposition(filename: str | None) -> str:
     return f"attachment; filename=\"{safe}\"; filename*=UTF-8''{quote(original, safe='')}"
 
 
-async def _retry_failed_idempotent_document(
-    session: AsyncSession, document: DocumentModel
-) -> str:
+async def _retry_failed_idempotent_document(session: AsyncSession, document: DocumentModel) -> str:
     """Requeue a document whose prior broker dispatch failed."""
     if document.extraction_status != "failed":
         return document.extraction_status
@@ -107,9 +105,7 @@ async def _retry_failed_idempotent_document(
     except Exception as exc:
         current = (
             await session.execute(
-                select(DocumentModel)
-                .where(DocumentModel.id == document.id)
-                .with_for_update()
+                select(DocumentModel).where(DocumentModel.id == document.id).with_for_update()
             )
         ).scalar_one_or_none()
         if current is not None and current.extraction_status == "pending":
@@ -119,9 +115,7 @@ async def _retry_failed_idempotent_document(
         return "failed"
 
 
-async def _lock_active_document_request(
-    session: AsyncSession, request_id: str
-) -> DocumentRequest:
+async def _lock_active_document_request(session: AsyncSession, request_id: str) -> DocumentRequest:
     """Recheck a bearer upload request immediately before reusing its record."""
     from sqlalchemy import select
 
@@ -148,11 +142,7 @@ async def _lock_active_document_request(
             .with_for_update()
         )
     ).scalar_one_or_none()
-    if (
-        crew is None
-        or not is_contractor_profile(crew)
-        or crew.publication_status == "rejected"
-    ):
+    if crew is None or not is_contractor_profile(crew) or crew.publication_status == "rejected":
         raise HTTPException(status_code=404, detail="This upload link is invalid or has expired")
     return current_request
 
@@ -241,7 +231,9 @@ async def upload_requested_document(
                 or not is_contractor_profile(current_crew)
                 or current_crew.publication_status == "rejected"
             ):
-                raise HTTPException(status_code=404, detail="This upload link is invalid or has expired")
+                raise HTTPException(
+                    status_code=404, detail="This upload link is invalid or has expired"
+                )
             doc = DocumentModel(
                 id=document_id,
                 crew_member_id=request.crew_member_id,
@@ -386,7 +378,9 @@ async def list_incoming_document_reviews(
         rows = await session.execute(
             query.order_by(
                 IncomingDocumentReview.created_at.desc(), IncomingDocumentReview.id.desc()
-            ).limit(100).with_for_update()
+            )
+            .limit(100)
+            .with_for_update()
         )
         return [
             {
@@ -820,10 +814,7 @@ async def download_document(
             ).scalar_one_or_none()
             if (
                 crew
-                and (
-                    not is_contractor_profile(crew)
-                    or crew.publication_status != "approved"
-                )
+                and (not is_contractor_profile(crew) or crew.publication_status != "approved")
                 and crew.submitted_by != current_user.id
                 and current_user.role != "admin"
             ):
@@ -883,9 +874,7 @@ async def get_document_status(
         if doc.crew_member_id and current_user.role != "admin":
             crew = (
                 await session.execute(
-                    select(CrewMember)
-                    .where(CrewMember.id == doc.crew_member_id)
-                    .with_for_update()
+                    select(CrewMember).where(CrewMember.id == doc.crew_member_id).with_for_update()
                 )
             ).scalar_one_or_none()
             if crew is None or (
@@ -893,8 +882,7 @@ async def get_document_status(
                 or (
                     crew.publication_status != "approved"
                     and not (
-                        crew.publication_status == "draft"
-                        and crew.submitted_by == current_user.id
+                        crew.publication_status == "draft" and crew.submitted_by == current_user.id
                     )
                 )
             ):
@@ -1064,7 +1052,11 @@ async def agent_upload_document(
                 select(CrewMember).where(CrewMember.id == crew_id).with_for_update()
             )
         ).scalar_one_or_none()
-        if crew_exists is None or not is_contractor_profile(crew_exists) or crew_exists.publication_status == "rejected":
+        if (
+            crew_exists is None
+            or not is_contractor_profile(crew_exists)
+            or crew_exists.publication_status == "rejected"
+        ):
             raise HTTPException(status_code=404, detail="Crew member not found")
         if idempotency_key:
             existing = (

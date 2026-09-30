@@ -158,9 +158,7 @@ class SyncDocumentProcessor:
                 from app.models import CrewMember
 
                 crew = session.execute(
-                    select(CrewMember)
-                    .where(CrewMember.id == doc.crew_member_id)
-                    .with_for_update()
+                    select(CrewMember).where(CrewMember.id == doc.crew_member_id).with_for_update()
                 ).scalar_one_or_none()
                 if crew is None or not is_contractor_profile(crew):
                     doc.extraction_status = "rejected"
@@ -518,7 +516,9 @@ class SyncDocumentProcessor:
                     from app.models import CVReview
 
                     review = session.execute(
-                        select(CVReview).where(CVReview.document_id == document_id).with_for_update()
+                        select(CVReview)
+                        .where(CVReview.document_id == document_id)
+                        .with_for_update()
                     ).scalar_one_or_none()
                     if review is not None and review.status == "processing":
                         review.status = "failed"

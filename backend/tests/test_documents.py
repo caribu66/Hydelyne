@@ -109,7 +109,9 @@ async def test_async_document_worker_rejects_login_account_document(monkeypatch)
         lambda: lambda: _DocumentSessionContext(session),
     )
     cleanup = AsyncMock()
-    monkeypatch.setattr("app.services.document_service._cleanup_failed_document_projections", cleanup)
+    monkeypatch.setattr(
+        "app.services.document_service._cleanup_failed_document_projections", cleanup
+    )
 
     result = await document_service.process_document("document-1")
 
@@ -130,9 +132,7 @@ async def test_create_document_rejects_login_account_target(monkeypatch):
 
     session = SimpleNamespace(
         execute=AsyncMock(
-            return_value=_DocumentResult(
-                SimpleNamespace(password_hash="hashed", role="staff")
-            )
+            return_value=_DocumentResult(SimpleNamespace(password_hash="hashed", role="staff"))
         ),
         add=MagicMock(),
     )
@@ -162,18 +162,14 @@ async def test_document_status_locks_owner_before_returning_metadata(monkeypatch
     )
     owner = SimpleNamespace(password_hash=None, role=None, publication_status="approved")
     session = SimpleNamespace(
-        execute=AsyncMock(
-            side_effect=[_DocumentResult(document), _DocumentResult(owner)]
-        )
+        execute=AsyncMock(side_effect=[_DocumentResult(document), _DocumentResult(owner)])
     )
     monkeypatch.setattr(
         "app.api.documents.get_session_factory",
         lambda: lambda: _DocumentSessionContext(session),
     )
 
-    result = await get_document_status(
-        "document-1", Request(scope={"type": "http"}), owner
-    )
+    result = await get_document_status("document-1", Request(scope={"type": "http"}), owner)
 
     assert result["id"] == "document-1"
     assert "FOR UPDATE" in str(session.execute.await_args_list[0].args[0])
@@ -291,9 +287,7 @@ async def test_manual_confirmation_rejects_login_account_document(monkeypatch):
     )
     account = SimpleNamespace(password_hash="hashed", role="staff")
     session = SimpleNamespace(
-        execute=AsyncMock(
-            side_effect=[_DocumentResult(document), _DocumentResult(account)]
-        ),
+        execute=AsyncMock(side_effect=[_DocumentResult(document), _DocumentResult(account)]),
     )
     monkeypatch.setattr(
         "app.services.document_service.get_session_factory",
@@ -313,9 +307,7 @@ async def test_manual_matching_locks_target_before_account_check(monkeypatch):
     document = SimpleNamespace(id="document-1", crew_member_id=None)
     account = SimpleNamespace(password_hash="hashed", role="staff")
     session = SimpleNamespace(
-        execute=AsyncMock(
-            side_effect=[_DocumentResult(document), _DocumentResult(account)]
-        )
+        execute=AsyncMock(side_effect=[_DocumentResult(document), _DocumentResult(account)])
     )
     monkeypatch.setattr(
         "app.services.document_service.get_session_factory",
@@ -413,9 +405,7 @@ async def test_idempotent_failed_upload_retry_reports_broker_failure():
 async def test_idempotent_upload_rechecks_revoked_request_before_retry():
     request = SimpleNamespace(status="revoked", expires_at=datetime.now())
     session = SimpleNamespace(
-        execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: request)
-        ),
+        execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: request)),
         commit=AsyncMock(),
     )
 
@@ -843,9 +833,7 @@ async def test_contractor_upload_link_creates_a_review_queue_item(client, db_ses
 
 
 @pytest.mark.asyncio
-async def test_contractor_upload_dispatch_failure_fails_the_review_queue_item(
-    client, db_session
-):
+async def test_contractor_upload_dispatch_failure_fails_the_review_queue_item(client, db_session):
     """If the broker is down, the committed review row must not linger as
     `unread` in the staff queue for a document marked `failed`."""
     crew_id = str(uuid.uuid4())
@@ -1377,9 +1365,7 @@ async def test_staff_can_upload_cv_to_own_draft(client, db_session, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_staff_cv_upload_rechecks_draft_after_file_storage(
-    client, db_session, monkeypatch
-):
+async def test_staff_cv_upload_rechecks_draft_after_file_storage(client, db_session, monkeypatch):
     """A draft changed during slow storage must not accept the CV metadata."""
     from app.database import get_session_factory
 
@@ -1653,7 +1639,9 @@ async def test_repeated_approval_queues_certificate_projection_repair(client, db
 
     crew_id = str(uuid.uuid4())
     doc_id = str(uuid.uuid4())
-    crew = CrewMember(id=crew_id, full_name="Resolved Repair Specialist", publication_status="approved")
+    crew = CrewMember(
+        id=crew_id, full_name="Resolved Repair Specialist", publication_status="approved"
+    )
     doc = Document(
         id=doc_id,
         crew_member_id=crew_id,
@@ -1687,7 +1675,9 @@ async def test_repeated_approval_queues_certificate_projection_repair(client, db
             new=AsyncMock(return_value=True),
         ),
         patch("app.tasks.document_tasks.queue_certificate_projection_reconcile") as queue_repair,
-        patch("app.services.document_requests.cache_service.delete", new=AsyncMock()) as delete_cache,
+        patch(
+            "app.services.document_requests.cache_service.delete", new=AsyncMock()
+        ) as delete_cache,
     ):
         await document_request_service.resolve_review(
             review_id=review.id,
@@ -2336,6 +2326,8 @@ async def test_agent_upload_rejects_rejected_crew(client, db_session, monkeypatc
     )
 
     assert response.status_code == 404
-    assert not (
-        await db_session.execute(select(Document).where(Document.crew_member_id == crew_id))
-    ).scalars().all()
+    assert (
+        not (await db_session.execute(select(Document).where(Document.crew_member_id == crew_id)))
+        .scalars()
+        .all()
+    )

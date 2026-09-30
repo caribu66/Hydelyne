@@ -227,9 +227,7 @@ class DocumentRequestService:
         if note is not None and not isinstance(note, str):
             raise ValueError("Review note must be a string")
         if note is not None and len(note) > MAX_REVIEW_NOTE_LENGTH:
-            raise ValueError(
-                f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)"
-            )
+            raise ValueError(f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)")
         if not review_id and not document_id:
             raise ValueError("Either review_id or document_id must be provided.")
 
@@ -274,9 +272,7 @@ class DocumentRequestService:
                 raise ValueError("Contractor not found")
             crew = (
                 await session.execute(
-                    select(CrewMember)
-                    .where(CrewMember.id == doc.crew_member_id)
-                    .with_for_update()
+                    select(CrewMember).where(CrewMember.id == doc.crew_member_id).with_for_update()
                 )
             ).scalar_one_or_none()
             if crew is None:
@@ -359,9 +355,8 @@ class DocumentRequestService:
                         from app.tasks.document_tasks import queue_document_search_reconcile
 
                         queue_document_search_reconcile(doc.id)
-                    if (
-                        normalize_classification(doc.classification) == "certificate"
-                        and isinstance(doc.extracted_data, dict)
+                    if normalize_classification(doc.classification) == "certificate" and isinstance(
+                        doc.extracted_data, dict
                     ):
                         # A previous approval may have committed before its
                         # certificate projection succeeded. Keep repeated
@@ -486,15 +481,16 @@ class DocumentRequestService:
                                 select(Document)
                                 .where(Document.id == approved_certificate_document_id)
                                 .with_for_update()
-                        )
+                            )
                         ).scalar_one_or_none()
-                        if recovery_doc is not None and recovery_doc.extraction_status == "approved":
+                        if (
+                            recovery_doc is not None
+                            and recovery_doc.extraction_status == "approved"
+                        ):
                             recovery_review = (
                                 await recovery_session.execute(
                                     select(IncomingDocumentReview)
-                                    .where(
-                                        IncomingDocumentReview.document_id == recovery_doc.id
-                                    )
+                                    .where(IncomingDocumentReview.document_id == recovery_doc.id)
                                     .with_for_update()
                                 )
                             ).scalar_one_or_none()
@@ -503,13 +499,9 @@ class DocumentRequestService:
                                 or approved_review_resolved_at is None
                                 or recovery_review.resolved_at != approved_review_resolved_at
                             ):
-                                raise RuntimeError(
-                                    "Skipping stale certificate projection recovery"
-                                )
+                                raise RuntimeError("Skipping stale certificate projection recovery")
                             if recovery_review is None and approved_review_resolved_at is not None:
-                                raise RuntimeError(
-                                    "Skipping stale certificate projection recovery"
-                                )
+                                raise RuntimeError("Skipping stale certificate projection recovery")
                             linked_certifications = await recovery_session.execute(
                                 select(Certification).where(
                                     Certification.document_ref == recovery_doc.id

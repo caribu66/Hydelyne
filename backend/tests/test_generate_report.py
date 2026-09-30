@@ -78,16 +78,15 @@ def test_report_filter_rejects_empty_certification_status_list():
 def test_report_certification_status_uses_verified_expiry_evidence():
     reference_date = date(2026, 9, 13)
 
-    assert _derived_certification_status(
-        date(2027, 1, 1), "verified", reference_date
-    ) == "valid"
-    assert _derived_certification_status(
-        date(2026, 9, 20), "verified", reference_date
-    ) == "expiring_soon"
-    assert _derived_certification_status(
-        date(2026, 9, 12), "verified", reference_date
-    ) == "expired"
-    assert _derived_certification_status(None, "unverified", reference_date) == "pending_verification"
+    assert _derived_certification_status(date(2027, 1, 1), "verified", reference_date) == "valid"
+    assert (
+        _derived_certification_status(date(2026, 9, 20), "verified", reference_date)
+        == "expiring_soon"
+    )
+    assert _derived_certification_status(date(2026, 9, 12), "verified", reference_date) == "expired"
+    assert (
+        _derived_certification_status(None, "unverified", reference_date) == "pending_verification"
+    )
 
 
 _GENERATE_REPORT_QUERY = """

@@ -138,7 +138,5 @@ async def revoke_session_token(token: str) -> bool:
         # Expire the blocklist entry at the token's natural expiry
         return await cache_service.set(key, "revoked", ttl=timedelta(seconds=MAX_SESSION_AGE))
     except Exception as e:
-        logger.warning(
-            "security_degradation: revoke_session_token failed: %s", type(e).__name__
-        )
+        logger.warning("security_degradation: revoke_session_token failed: %s", type(e).__name__)
         return False

@@ -201,8 +201,7 @@ def apply_deterministic_query_rules(query: str, classified: dict[str, Any]) -> d
     elif "north sea" in lower_query and not entities.get("location"):
         entities["location"] = "North Sea"
     if not entities.get("availability") and (
-        "unavailable" in lower_query
-        or re.search(r"\b(?:not|no longer)\s+available\b", lower_query)
+        "unavailable" in lower_query or re.search(r"\b(?:not|no longer)\s+available\b", lower_query)
     ):
         entities["availability"] = "unavailable"
     elif "available" in lower_query and not entities.get("availability"):

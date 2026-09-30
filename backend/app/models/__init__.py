@@ -103,9 +103,7 @@ class Certification(Base):
     )
     document_ref: Mapped[Optional[str]] = mapped_column(String(255))
     extracted_confidence: Mapped[Optional[float]] = mapped_column(Float)
-    verification_status: Mapped[Optional[str]] = mapped_column(
-        String(20), default="unverified"
-    )
+    verification_status: Mapped[Optional[str]] = mapped_column(String(20), default="unverified")
     created_at: Mapped[datetime] = mapped_column(server_default=sa.func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=sa.func.now(), onupdate=sa.func.now()

@@ -312,9 +312,7 @@ def test_certification_creation_rejects_reversed_dates_before_database_access():
     from app.services.crew import certification_service
 
     with pytest.raises(ValueError, match="issue_date must be on or before expiry_date"):
-        certification_service._validate_certification_dates(
-            date(2026, 9, 12), date(2026, 9, 11)
-        )
+        certification_service._validate_certification_dates(date(2026, 9, 12), date(2026, 9, 11))
     with pytest.raises(ValueError, match="expiry_date must be a date"):
         certification_service._validate_certification_dates(date.today(), "2026-09-12")
     with pytest.raises(ValueError, match="expiry_date must be a date"):
@@ -442,9 +440,7 @@ async def test_assignment_graphql_maps_vessel_validation_to_bad_user_input(
         "list_assignments",
         AsyncMock(side_effect=ValueError("vessel_imo is invalid")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="staff-1", role="staff")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="staff-1", role="staff")})
     resolver = getattr(Query, resolver_name).__wrapped__
 
     with pytest.raises(GraphQLError) as error:
@@ -461,14 +457,10 @@ async def test_compliance_status_graphql_maps_missing_profile_to_not_found(monke
     from app.services.crew import crew_service
 
     monkeypatch.setattr(crew_service, "can_access_profile", AsyncMock(return_value=False))
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
-        await Query.compliance_status.__wrapped__(
-            Query(), info, crew_id="missing-crew"
-        )
+        await Query.compliance_status.__wrapped__(Query(), info, crew_id="missing-crew")
 
     assert error.value.extensions["code"] == "NOT_FOUND"
 
@@ -485,9 +477,7 @@ async def test_document_graphql_maps_missing_document_to_not_found(monkeypatch, 
         "confirm_extraction" if resolver_name == "confirm_extraction" else "link_to_crew_member"
     )
     monkeypatch.setattr(document_service, method_name, AsyncMock(return_value=None))
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
     resolver = getattr(Mutation, resolver_name).__wrapped__
     kwargs = (
         {"document_id": "missing-document", "data": "{}"}
@@ -510,16 +500,16 @@ async def test_certification_graphql_maps_missing_id_to_not_found(monkeypatch, r
     from app.services.crew import certification_service
 
     method_name = (
-        "update_certification" if resolver_name == "update_certification" else "verify_certification"
+        "update_certification"
+        if resolver_name == "update_certification"
+        else "verify_certification"
     )
     monkeypatch.setattr(
         certification_service,
         method_name,
         AsyncMock(side_effect=ValueError("Certification missing-id not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
     resolver = getattr(Mutation, resolver_name).__wrapped__
     kwargs = (
         {"id": "missing-cert"}
@@ -548,9 +538,7 @@ async def test_project_graphql_maps_missing_resource_to_not_found(monkeypatch, r
         method_name,
         AsyncMock(side_effect=ValueError("Project missing-id not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
     resolver = getattr(Mutation, resolver_name).__wrapped__
     kwargs = (
         {"id": "missing-project"}
@@ -571,9 +559,7 @@ async def test_create_project_graphql_maps_dto_validation_to_bad_user_input():
 
     from app.graphql.schema import Mutation
 
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
         await Mutation.create_project.__wrapped__(
@@ -599,14 +585,10 @@ async def test_reprocess_document_graphql_maps_missing_document_to_not_found(mon
         "reprocess_document",
         AsyncMock(side_effect=ValueError("Document secret-id not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
-        await Mutation.reprocess_document.__wrapped__(
-            Mutation(), info, document_id="secret-id"
-        )
+        await Mutation.reprocess_document.__wrapped__(Mutation(), info, document_id="secret-id")
 
     assert error.value.extensions["code"] == "NOT_FOUND"
     assert "secret-id" not in str(error.value)
@@ -624,9 +606,7 @@ async def test_add_certification_graphql_maps_missing_crew_to_not_found(monkeypa
         "add_certification",
         AsyncMock(side_effect=ValueError("Crew member not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
         await Mutation.add_certification.__wrapped__(
@@ -645,9 +625,7 @@ async def test_create_crew_graphql_maps_dto_validation_to_bad_user_input():
 
     from app.graphql.schema import Mutation
 
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
         await Mutation.create_crew_member.__wrapped__(
@@ -669,14 +647,10 @@ async def test_update_crew_graphql_maps_missing_id_to_not_found(monkeypatch):
         "update_crew_member",
         AsyncMock(side_effect=ValueError("Crew member secret-id not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
-        await Mutation.update_crew_member.__wrapped__(
-            Mutation(), info, id="secret-id"
-        )
+        await Mutation.update_crew_member.__wrapped__(Mutation(), info, id="secret-id")
 
     assert error.value.extensions["code"] == "NOT_FOUND"
     assert "secret-id" not in str(error.value)
@@ -694,14 +668,10 @@ async def test_delete_crew_graphql_maps_self_delete_to_forbidden(monkeypatch):
         "delete_crew_member",
         AsyncMock(side_effect=ValueError("You cannot delete your own administrator account")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
-        await Mutation.delete_crew_member.__wrapped__(
-            Mutation(), info, id="admin-1"
-        )
+        await Mutation.delete_crew_member.__wrapped__(Mutation(), info, id="admin-1")
 
     assert error.value.extensions["code"] == "FORBIDDEN"
 
@@ -725,9 +695,7 @@ async def test_set_staff_role_graphql_maps_service_errors(monkeypatch, message, 
         "set_staff_role",
         AsyncMock(side_effect=ValueError(message)),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
         await Mutation.set_staff_role.__wrapped__(
@@ -751,9 +719,7 @@ async def test_cv_review_graphql_maps_missing_review_to_not_found(monkeypatch, r
         method_name,
         AsyncMock(side_effect=ValueError("CV review secret-id not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
     resolver = getattr(Mutation, resolver_name).__wrapped__
     kwargs = (
         {"review_id": "secret-id", "approved_data": "{}", "note": None}
@@ -793,9 +759,7 @@ async def test_document_graphql_maps_service_conflicts_and_missing_links(
         method_name,
         AsyncMock(side_effect=ValueError(message)),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
     resolver = getattr(Mutation, resolver_name).__wrapped__
     kwargs = (
         {"document_id": "document-1", "data": "{}"}
@@ -822,14 +786,10 @@ async def test_vessel_record_graphql_maps_invalid_imo_to_bad_user_input(monkeypa
         "get_vessel",
         AsyncMock(side_effect=ValueError("vessel_imo contains invalid characters")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="staff-1", role="staff")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="staff-1", role="staff")})
 
     with pytest.raises(GraphQLError) as error:
-        await Query.vessel_record.__wrapped__(
-            Query(), info, imo="9683934/secret"
-        )
+        await Query.vessel_record.__wrapped__(Query(), info, imo="9683934/secret")
 
     assert error.value.extensions["code"] == "BAD_USER_INPUT"
 
@@ -846,9 +806,7 @@ async def test_evaluate_compliance_graphql_maps_missing_crew_to_not_found(monkey
         "evaluate_compliance",
         AsyncMock(side_effect=ValueError("Crew member secret-id not found")),
     )
-    info = SimpleNamespace(
-        context={"current_user": SimpleNamespace(id="admin-1", role="admin")}
-    )
+    info = SimpleNamespace(context={"current_user": SimpleNamespace(id="admin-1", role="admin")})
 
     with pytest.raises(GraphQLError) as error:
         await Query.evaluate_assignment_compliance.__wrapped__(
@@ -891,9 +849,7 @@ def test_document_service_metadata_rejects_unmanaged_dropbox_path():
     from app.services.document_service import _validate_document_metadata
 
     with pytest.raises(ValueError, match="managed Dropbox path"):
-        _validate_document_metadata(
-            "document.pdf", "pdf", 10, "/hydenlyne/../outside.pdf", None
-        )
+        _validate_document_metadata("document.pdf", "pdf", 10, "/hydenlyne/../outside.pdf", None)
 
 
 def test_document_audit_history_keeps_only_recent_entries():

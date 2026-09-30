@@ -183,9 +183,7 @@ async def test_staff_project_assignment_hides_unpublished_crew(client, db_sessio
     """Staff C2 project data must follow the profile publication boundary."""
     actor_id = str(uuid.uuid4())
     actor = CrewMember(id=actor_id, full_name="Staff User", role="staff")
-    approved = CrewMember(
-        id=str(uuid.uuid4()), full_name="Approved", publication_status="approved"
-    )
+    approved = CrewMember(id=str(uuid.uuid4()), full_name="Approved", publication_status="approved")
     own_draft = CrewMember(
         id=str(uuid.uuid4()),
         full_name="Own Draft",
@@ -198,9 +196,7 @@ async def test_staff_project_assignment_hides_unpublished_crew(client, db_sessio
         publication_status="draft",
         submitted_by=str(uuid.uuid4()),
     )
-    rejected = CrewMember(
-        id=str(uuid.uuid4()), full_name="Rejected", publication_status="rejected"
-    )
+    rejected = CrewMember(id=str(uuid.uuid4()), full_name="Rejected", publication_status="rejected")
     project = Project(
         id=str(uuid.uuid4()),
         client_name="Acme Subsea",

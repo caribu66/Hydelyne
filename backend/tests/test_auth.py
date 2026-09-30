@@ -61,9 +61,7 @@ async def test_unknown_login_email_still_verifies_dummy_password(monkeypatch):
                 scalars=lambda: SimpleNamespace(all=lambda: []),
             )
 
-    monkeypatch.setattr(
-        "app.services.crew.get_session_factory", lambda: lambda: SessionContext()
-    )
+    monkeypatch.setattr("app.services.crew.get_session_factory", lambda: lambda: SessionContext())
     password_check = MagicMock(return_value=True)
     monkeypatch.setattr("app.services.crew.verify_password", password_check)
 

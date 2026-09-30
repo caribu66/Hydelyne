@@ -73,9 +73,7 @@ async def test_expiration_updater_query_excludes_login_account_rows():
             return EmptyResult()
 
     fake_session = FakeSession()
-    with patch(
-        "app.services.crew.get_session_factory", return_value=lambda: fake_session
-    ):
+    with patch("app.services.crew.get_session_factory", return_value=lambda: fake_session):
         assert await certification_service.check_and_update_expiration_status() == 0
 
     sql = str(fake_session.statements[0].compile(compile_kwargs={"literal_binds": True}))

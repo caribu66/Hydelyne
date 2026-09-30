@@ -188,7 +188,9 @@ def test_unavailable_next_month_does_not_get_available_date_constraint():
     assert "availability_by" not in result["entities"]
 
 
-@pytest.mark.parametrize("query", ["Show contractors not available", "Find no longer available crew"])
+@pytest.mark.parametrize(
+    "query", ["Show contractors not available", "Find no longer available crew"]
+)
 def test_negative_available_language_maps_to_unavailable(query):
     result = apply_deterministic_query_rules(query, {"intent": "search", "entities": {}})
 
@@ -278,7 +280,9 @@ async def test_certificate_search_keeps_legacy_null_lifecycle_values(db_session)
 async def test_valid_search_excludes_certificates_awaiting_verification(db_session):
     pending = CrewMember(full_name="Pending Medical Evidence", publication_status="approved")
     valid = CrewMember(full_name="Verified Medical Evidence", publication_status="approved")
-    expiring = CrewMember(full_name="Expiring Verified Medical Evidence", publication_status="approved")
+    expiring = CrewMember(
+        full_name="Expiring Verified Medical Evidence", publication_status="approved"
+    )
     missing_expiry = CrewMember(
         full_name="Verified Medical Without Expiry", publication_status="approved"
     )
@@ -538,12 +542,8 @@ async def test_compliance_search_excludes_rejected_and_non_issue_certificates(db
 def test_compliance_status_uses_expiry_date_over_stale_persisted_status():
     reference_date = date(2026, 9, 13)
 
-    assert _derived_compliance_status(
-        date(2027, 9, 13), "expiring_soon", reference_date
-    ) is None
-    assert _derived_compliance_status(
-        date(2026, 9, 12), "valid", reference_date
-    ) == "expired"
+    assert _derived_compliance_status(date(2027, 9, 13), "expiring_soon", reference_date) is None
+    assert _derived_compliance_status(date(2026, 9, 12), "valid", reference_date) == "expired"
 
 
 @pytest.mark.asyncio

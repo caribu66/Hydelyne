@@ -360,8 +360,7 @@ class CrewService:
         unexpected_fields = set(updates) - CREW_MUTABLE_FIELDS
         if unexpected_fields:
             raise ValueError(
-                "Unsupported crew member update fields: "
-                + ", ".join(sorted(unexpected_fields))
+                "Unsupported crew member update fields: " + ", ".join(sorted(unexpected_fields))
             )
         _validate_crew_update_values(updates)
         if "availability_status" in updates:
@@ -487,9 +486,7 @@ class CrewService:
             # the same locks in that order here to avoid a delete/revision
             # deadlock.
             documents_result = await session.execute(
-                select(Document)
-                .where(Document.crew_member_id == crew_id)
-                .with_for_update()
+                select(Document).where(Document.crew_member_id == crew_id).with_for_update()
             )
             documents = list(documents_result.scalars().all())
             document_cleanup = [
@@ -507,9 +504,7 @@ class CrewService:
             # deleted contractor from both sources in the same transaction so
             # project readiness cannot retain an orphaned ID.
             projects_result = await session.execute(
-                select(Project)
-                .where(Project.crew_assigned.is_not(None))
-                .with_for_update()
+                select(Project).where(Project.crew_assigned.is_not(None)).with_for_update()
             )
             for project in projects_result.scalars():
                 assigned_ids = project.crew_assigned
@@ -534,8 +529,7 @@ class CrewService:
         for _, storage_path, storage_type, dropbox_path in document_cleanup:
             if storage_type == "dropbox":
                 remote_deleted = bool(
-                    dropbox_path
-                    and await document_upload_service.delete_from_dropbox(dropbox_path)
+                    dropbox_path and await document_upload_service.delete_from_dropbox(dropbox_path)
                 )
                 if not remote_deleted:
                     cleanup_required = True
@@ -706,9 +700,7 @@ class CrewService:
                         cast(CrewMember.geographical_experience, String).ilike(
                             search_term, escape="\\"
                         ),
-                        cast(CrewMember.systems_experience, String).ilike(
-                            search_term, escape="\\"
-                        ),
+                        cast(CrewMember.systems_experience, String).ilike(search_term, escape="\\"),
                         cast(CrewMember.training_qualifications, String).ilike(
                             search_term, escape="\\"
                         ),
@@ -892,9 +884,7 @@ class CrewService:
                         and c.expiry_date < today
                     ),
                     "pending_verification": sum(
-                        1
-                        for c in certs
-                        if c.verification_status in {None, "unverified"}
+                        1 for c in certs if c.verification_status in {None, "unverified"}
                     ),
                 }
 
@@ -910,9 +900,7 @@ class CertificationService:
     """Service for certification operations."""
 
     @staticmethod
-    async def _lock_certification_and_owner(
-        session: AsyncSession, cert_id: str
-    ) -> Certification:
+    async def _lock_certification_and_owner(session: AsyncSession, cert_id: str) -> Certification:
         """Lock the owner before the evidence row to match ingestion lock order."""
         owner_result = await session.execute(
             select(Certification.crew_member_id).where(Certification.id == cert_id)
@@ -1028,9 +1016,7 @@ class CertificationService:
         self, cert_id: str, status: Optional[str] = None
     ) -> Certification:
         """Update a certification's status."""
-        if status is not None and (
-            not isinstance(status, str) or status not in CERT_STATUS_VALUES
-        ):
+        if status is not None and (not isinstance(status, str) or status not in CERT_STATUS_VALUES):
             raise ValueError(f"Invalid certification status: {status}")
         factory = get_session_factory()
         async with factory() as session:
@@ -1359,9 +1345,7 @@ class CertificationService:
                 expected_extracted_data is not None
                 and document.extracted_data != expected_extracted_data
             ):
-                logger.info(
-                    "Skipping stale certificate projection for document %s", document_id
-                )
+                logger.info("Skipping stale certificate projection for document %s", document_id)
                 return None
             result = await session.execute(stmt)
             crew_member = result.scalar_one_or_none()
@@ -1429,7 +1413,10 @@ class CertificationService:
                     target_cert.expiry_date,
                     target_cert.renewal_date,
                 )
-                if current_values != previous_values or target_cert.verification_status == "rejected":
+                if (
+                    current_values != previous_values
+                    or target_cert.verification_status == "rejected"
+                ):
                     target_cert.verification_status = "unverified"
                 target_cert.status = (
                     _extracted_certification_status(

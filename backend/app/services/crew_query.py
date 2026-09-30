@@ -322,9 +322,7 @@ class CrewQueryService:
         if not normalized_query:
             raise ValueError("Search query must not be blank")
         if len(normalized_query) > MAX_SEARCH_QUERY_LENGTH:
-            raise ValueError(
-                f"Search query must be {MAX_SEARCH_QUERY_LENGTH} characters or fewer"
-            )
+            raise ValueError(f"Search query must be {MAX_SEARCH_QUERY_LENGTH} characters or fewer")
         query = normalized_query
         intent_result = await self._classify_intent(query)
         intent = intent_result.get("intent", "general")
@@ -362,7 +360,10 @@ class CrewQueryService:
         try:
             result = await ollama_client.extract(prompt)
             response_text = result.get("response", "")
-            if not isinstance(response_text, str) or len(response_text) > MAX_INTENT_RESPONSE_LENGTH:
+            if (
+                not isinstance(response_text, str)
+                or len(response_text) > MAX_INTENT_RESPONSE_LENGTH
+            ):
                 raise ValueError("Intent classifier response is invalid or too large")
             classified = json.loads(response_text)
             validated = _validate_llm_response(classified)
@@ -452,9 +453,7 @@ class CrewQueryService:
         # that family: IMCA Survey QC, IMCA Geotech, IMCA Client Rep, etc.
         for keyword in entities.get("certification_keywords") or []:
             family_conditions: list[ColumnElement[bool]] = [
-                CertificationModel.cert_type.ilike(
-                    _contains_like(str(keyword)), escape="\\"
-                ),
+                CertificationModel.cert_type.ilike(_contains_like(str(keyword)), escape="\\"),
                 _not_explicitly_rejected(CertificationModel.status),
                 _not_explicitly_rejected(CertificationModel.verification_status),
             ]
@@ -547,9 +546,7 @@ class CrewQueryService:
             for term in search_terms:
                 term_filters: list[ColumnElement[bool]] = []
                 like_pattern = _contains_like(str(term))
-                term_filters.append(
-                    CrewMemberModel.full_name.ilike(like_pattern, escape="\\")
-                )
+                term_filters.append(CrewMemberModel.full_name.ilike(like_pattern, escape="\\"))
                 term_filters.append(
                     sa.cast(CrewMemberModel.tags, sa.String).ilike(like_pattern, escape="\\")
                 )
@@ -559,16 +556,12 @@ class CrewQueryService:
                 term_filters.extend(
                     [
                         CrewMemberModel.nationality.ilike(like_pattern, escape="\\"),
-                        CrewMemberModel.country_of_residence.ilike(
-                            like_pattern, escape="\\"
-                        ),
+                        CrewMemberModel.country_of_residence.ilike(like_pattern, escape="\\"),
                         sa.cast(CrewMemberModel.languages, sa.String).ilike(
                             like_pattern, escape="\\"
                         ),
                         CrewMemberModel.flying_point.ilike(like_pattern, escape="\\"),
-                        CrewMemberModel.professional_summary.ilike(
-                            like_pattern, escape="\\"
-                        ),
+                        CrewMemberModel.professional_summary.ilike(like_pattern, escape="\\"),
                         CrewMemberModel.education.ilike(like_pattern, escape="\\"),
                         sa.cast(CrewMemberModel.geographical_experience, sa.String).ilike(
                             like_pattern, escape="\\"
@@ -585,11 +578,9 @@ class CrewQueryService:
                 term_filters.append(
                     CrewMemberModel.certifications.any(
                         and_(
-                                        CertificationModel.cert_type.ilike(
-                                            like_pattern, escape="\\"
-                                        ),
-                                        _not_explicitly_rejected(CertificationModel.status),
-                                        _not_explicitly_rejected(CertificationModel.verification_status),
+                            CertificationModel.cert_type.ilike(like_pattern, escape="\\"),
+                            _not_explicitly_rejected(CertificationModel.status),
+                            _not_explicitly_rejected(CertificationModel.verification_status),
                         )
                     )
                 )
@@ -605,7 +596,9 @@ class CrewQueryService:
                                             _contains_like(str(word)), escape="\\"
                                         ),
                                         _not_explicitly_rejected(CertificationModel.status),
-                                        _not_explicitly_rejected(CertificationModel.verification_status),
+                                        _not_explicitly_rejected(
+                                            CertificationModel.verification_status
+                                        ),
                                     )
                                 )
                             )
@@ -697,11 +690,7 @@ class CrewQueryService:
                 selectinload(CrewMemberModel.certifications),
                 selectinload(CrewMemberModel.documents),
             )
-            .where(
-                CrewMemberModel.full_name.ilike(
-                    _contains_like(str(crew_name)), escape="\\"
-                )
-            )
+            .where(CrewMemberModel.full_name.ilike(_contains_like(str(crew_name)), escape="\\"))
         )
         # A partial name can match several approved profiles (for example
         # "Alex Carter" and "Alex Carter Jr"). Do not let
@@ -838,9 +827,7 @@ class CrewQueryService:
             expired_certs = []
             expiring_certs = []
             for cert in crew.certifications:
-                compliance_status = _derived_compliance_status(
-                    cert.expiry_date, cert.status, today
-                )
+                compliance_status = _derived_compliance_status(cert.expiry_date, cert.status, today)
                 if compliance_status is None or cert.verification_status == "rejected":
                     continue
                 if cert.expiry_date:

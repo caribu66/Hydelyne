@@ -393,9 +393,7 @@ class ComplianceAlertService:
             )
             client.close()
         except Exception as e:
-            logger.debug(
-                "Redis compliance publish skipped or failed: %s", type(e).__name__
-            )
+            logger.debug("Redis compliance publish skipped or failed: %s", type(e).__name__)
 
 
 compliance_service = ComplianceAlertService()

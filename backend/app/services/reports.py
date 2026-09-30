@@ -48,6 +48,7 @@ def _derived_certification_status(
         return "expiring_soon"
     return "expired"
 
+
 REPORT_NUMERIC_FIELDS = {
     "total_available",
     "compliant_count",
@@ -480,7 +481,10 @@ class ReportService:
                     raise ValueError("Report model response is too large")
                 report_data = self._load_report_json(response_text)
             except (json.JSONDecodeError, ValueError):
-                if isinstance(response_text, str) and len(response_text) <= MAX_REPORT_RESPONSE_LENGTH:
+                if (
+                    isinstance(response_text, str)
+                    and len(response_text) <= MAX_REPORT_RESPONSE_LENGTH
+                ):
                     start = response_text.find("{")
                     end = response_text.rfind("}")
                 else:

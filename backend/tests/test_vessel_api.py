@@ -239,9 +239,7 @@ async def test_provider_response_size_is_bounded(declared_length: bool) -> None:
     class FakeResponse:
         status_code = 200
         headers = (
-            {"Content-Length": str(MAX_VESSEL_API_RESPONSE_BYTES + 1)}
-            if declared_length
-            else {}
+            {"Content-Length": str(MAX_VESSEL_API_RESPONSE_BYTES + 1)} if declared_length else {}
         )
 
         async def aiter_bytes(self):

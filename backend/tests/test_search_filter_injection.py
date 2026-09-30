@@ -187,9 +187,7 @@ async def test_search_documents_normalizes_upload_classification_alias(client):
     ("path", "method_name"),
     [("/api/search/crew", "search_crew_members"), ("/api/search/documents", "search_documents")],
 )
-async def test_search_provider_failure_is_not_reported_as_empty_success(
-    client, path, method_name
-):
+async def test_search_provider_failure_is_not_reported_as_empty_success(client, path, method_name):
     with patch.object(
         meilisearch_client,
         method_name,

@@ -444,7 +444,11 @@ class ConsultantKnowledgeService:
         # otherwise an older in-flight mutation can overwrite the newer
         # projection in Meilisearch.
         latest = await self._load_crew_for_projection(crew.id)
-        if latest is None or latest.publication_status != "approved" or not _is_general_search_crew(latest):
+        if (
+            latest is None
+            or latest.publication_status != "approved"
+            or not _is_general_search_crew(latest)
+        ):
             return await self.remove_from_index(crew.id)
         latest_projection = _crew_meilisearch_doc(latest)
         if latest_projection != projection:
@@ -455,7 +459,11 @@ class ConsultantKnowledgeService:
     async def remove_from_index(self, crew_id: str) -> bool:
         deleted = await meilisearch_client.delete_crew_member(crew_id)
         latest = await self._load_crew_for_projection(crew_id)
-        if latest is not None and latest.publication_status == "approved" and _is_general_search_crew(latest):
+        if (
+            latest is not None
+            and latest.publication_status == "approved"
+            and _is_general_search_crew(latest)
+        ):
             # A stale removal can race a newer approval. Restore the current
             # source-of-truth projection after the delete task is submitted.
             result = await meilisearch_client.index_crew_member(_crew_meilisearch_doc(latest))

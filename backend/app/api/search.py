@@ -112,7 +112,9 @@ async def search_crew(
             offset=offset,
         )
     except SearchProviderUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Crew search is temporarily unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="Crew search is temporarily unavailable"
+        ) from exc
     # Meilisearch is a derived projection. Recheck publication state in the
     # source of truth so a stale approved flag cannot expose a withdrawn draft.
     raw_hits_value = results.get("hits", [])
@@ -213,7 +215,7 @@ async def search_documents(
                             CrewMember.publication_status == "draft",
                             CrewMember.submitted_by == current_user.id,
                         ),
-                    )
+                    ),
                 )
             )
             visible_crew_ids = set(visible_rows.scalars().all())
@@ -237,9 +239,7 @@ async def search_documents(
             # general index. T3 admins may receive evidence for an already matched
             # document, but the index itself contains metadata only.
             searchable_attributes=(
-                None
-                if current_user.role == "admin"
-                else list(DOCUMENT_SEARCHABLE_ATTRIBUTES)
+                None if current_user.role == "admin" else list(DOCUMENT_SEARCHABLE_ATTRIBUTES)
             ),
         )
     except SearchProviderUnavailable as exc:

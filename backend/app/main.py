@@ -98,9 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         await bootstrap_admin()
     except Exception as exc:
-        logging.getLogger(__name__).warning(
-            "Admin bootstrap skipped (%s)", type(exc).__name__
-        )
+        logging.getLogger(__name__).warning("Admin bootstrap skipped (%s)", type(exc).__name__)
     # Setup Meilisearch indexes if available (non-blocking)
     try:
         from app.services.meilisearch import meilisearch_client

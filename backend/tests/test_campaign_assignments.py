@@ -68,7 +68,9 @@ async def test_assignment_listing_rejects_blank_vessel_filter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_status_update_locks_contractor_before_assignment(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_status_update_locks_contractor_before_assignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assignment = SimpleNamespace(
         id="assignment-1",
         crew_member_id="crew-1",

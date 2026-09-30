@@ -52,11 +52,7 @@ def _load_document_projection_input(
         session.rollback()
         return None, "document has no published contractor"
     crew = session.get(CrewMember, doc.crew_member_id)
-    if (
-        crew is None
-        or not is_contractor_profile(crew)
-        or crew.publication_status != "approved"
-    ):
+    if crew is None or not is_contractor_profile(crew) or crew.publication_status != "approved":
         session.rollback()
         return None, "contractor is not published"
 
@@ -84,7 +80,10 @@ async def _is_searchable_document(document_id: str) -> bool:
         document = await session.get(DocumentModel, document_id)
         if document is None or document.extraction_status not in SEARCHABLE_EXTRACTION_STATUSES:
             return False
-        if document.uploaded_by == "contractor-upload-link" and document.extraction_status != "approved":
+        if (
+            document.uploaded_by == "contractor-upload-link"
+            and document.extraction_status != "approved"
+        ):
             return False
         if not document.crew_member_id:
             return False

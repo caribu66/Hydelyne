@@ -31,7 +31,7 @@ def test_extraction_payload_discards_unknown_and_unbounded_model_fields():
                 '{"full_name":"'
                 + ("A" * 20_000)
                 + '","unexpected":"do not persist","skills":['
-                + ','.join('"skill"' for _ in range(150))
+                + ",".join('"skill"' for _ in range(150))
                 + '],"confidence":{"full_name":0.9}}'
             )
         }
@@ -52,9 +52,7 @@ def test_confidence_from_model_result_falls_back_to_empty_mapping(value):
 def test_confidence_from_model_result_preserves_mapping():
     from app.services.extraction import ExtractionService
 
-    assert ExtractionService.confidence_from_result({"confidence": {"name": 0.9}}) == {
-        "name": 0.9
-    }
+    assert ExtractionService.confidence_from_result({"confidence": {"name": 0.9}}) == {"name": 0.9}
 
 
 def test_extracted_text_is_bounded_before_persistence():

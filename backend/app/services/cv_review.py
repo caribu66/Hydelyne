@@ -96,9 +96,7 @@ class CVReviewService:
         if note is not None and not isinstance(note, str):
             raise ValueError("Review note must be a string")
         if note is not None and len(note) > MAX_REVIEW_NOTE_LENGTH:
-            raise ValueError(
-                f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)"
-            )
+            raise ValueError(f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)")
         factory = get_session_factory()
         async with factory() as session:
             review = (
@@ -218,9 +216,7 @@ class CVReviewService:
         if not isinstance(note, str):
             raise ValueError("Review note must be a string")
         if len(note) > MAX_REVIEW_NOTE_LENGTH:
-            raise ValueError(
-                f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)"
-            )
+            raise ValueError(f"Review note is too large (max {MAX_REVIEW_NOTE_LENGTH} characters)")
         factory = get_session_factory()
         async with factory() as session:
             review = (

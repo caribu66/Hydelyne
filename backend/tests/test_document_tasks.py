@@ -55,9 +55,7 @@ def test_document_processing_preserves_review_terminal_status(monkeypatch):
         crew_member_id="crew-1",
         uploaded_by="staff-1",
     )
-    reviewed_doc = SimpleNamespace(
-        **{**original_doc.__dict__, "extraction_status": "rejected"}
-    )
+    reviewed_doc = SimpleNamespace(**{**original_doc.__dict__, "extraction_status": "rejected"})
     first_session = MagicMock()
     first_session.execute = AsyncMock(return_value=_AsyncSessionResult(original_doc))
     first_session.commit = AsyncMock()
@@ -111,7 +109,9 @@ def test_document_processing_preserves_review_terminal_status(monkeypatch):
     knowledge.reconcile_document_index = AsyncMock(return_value=True)
     monkeypatch.setattr(document_service, "consultant_knowledge_service", knowledge, raising=False)
 
-    result = __import__("asyncio").run(document_service.document_service.process_document("document-1"))
+    result = __import__("asyncio").run(
+        document_service.document_service.process_document("document-1")
+    )
 
     assert result["status"] == "rejected"
 

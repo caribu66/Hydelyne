@@ -17,7 +17,13 @@ from __future__ import annotations
 
 AVAILABILITY_STATUS_VALUES: tuple[str, ...] = ("available", "on_assignment", "unavailable")
 
-CERT_STATUS_VALUES: tuple[str, ...] = ("pending_verification", "valid", "expiring_soon", "expired", "rejected")
+CERT_STATUS_VALUES: tuple[str, ...] = (
+    "pending_verification",
+    "valid",
+    "expiring_soon",
+    "expired",
+    "rejected",
+)
 
 CERT_VERIFICATION_STATUS_VALUES: tuple[str, ...] = ("unverified", "verified", "rejected")
 
@@ -39,9 +45,7 @@ DOCUMENT_CLASSIFICATIONS: tuple[str, ...] = (
 # These upload origins are not allowed to publish a CV through the general
 # document workflow. CVs from them must be rejected and handled only through
 # the staff-upload administrator review flow.
-CV_UPLOADERS_REQUIRING_REJECTION: frozenset[str] = frozenset(
-    {"agent", "contractor-upload-link"}
-)
+CV_UPLOADERS_REQUIRING_REJECTION: frozenset[str] = frozenset({"agent", "contractor-upload-link"})
 
 CLASSIFICATION_ALIASES: dict[str, str] = {
     "cert": "certificate",

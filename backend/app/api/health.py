@@ -66,7 +66,9 @@ def _redacted_or_detail(detail: str) -> dict[str, str]:
 def _readiness_response(results: dict[str, str]) -> dict[str, Any]:
     """Return readiness data, using a non-2xx status when dependencies fail."""
     response: dict[str, Any] = {
-        "status": "healthy" if all(value == "healthy" for value in results.values()) else "degraded",
+        "status": "healthy"
+        if all(value == "healthy" for value in results.values())
+        else "degraded",
         "services": results,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -97,9 +99,7 @@ async def _dependency_statuses() -> dict[str, str]:
     async def ollama() -> str:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                async with client.stream(
-                    "GET", f"{settings.OLLAMA_BASE_URL}/api/tags"
-                ) as response:
+                async with client.stream("GET", f"{settings.OLLAMA_BASE_URL}/api/tags") as response:
                     return "healthy" if response.status_code == 200 else "unhealthy"
         except Exception:
             return "unhealthy"
@@ -223,11 +223,15 @@ async def ollama_health(
                     if payload is None:
                         raise RuntimeError("Ollama returned invalid health payload")
                     models = payload.get("models", [])
-                    body["models"] = [
-                        model.get("name")
-                        for model in models
-                        if isinstance(model, dict) and isinstance(model.get("name"), str)
-                    ] if isinstance(models, list) else []
+                    body["models"] = (
+                        [
+                            model.get("name")
+                            for model in models
+                            if isinstance(model, dict) and isinstance(model.get("name"), str)
+                        ]
+                        if isinstance(models, list)
+                        else []
+                    )
                 return body
             finally:
                 await response.aclose()
@@ -312,9 +316,7 @@ async def full_health_check(
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            async with client.stream(
-                "GET", f"{settings.OLLAMA_BASE_URL}/api/tags"
-            ) as response:
+            async with client.stream("GET", f"{settings.OLLAMA_BASE_URL}/api/tags") as response:
                 results["ollama"] = "healthy" if response.status_code == 200 else "unhealthy"
     except Exception as e:
         logger.error("Ollama health check failed (%s)", type(e).__name__)

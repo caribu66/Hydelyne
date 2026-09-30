@@ -51,12 +51,8 @@ query GetCrewMember($id: String!) {
 def test_valid_certification_count_uses_verified_expiry_window():
     reference_date = date(2026, 9, 13)
 
-    assert _counts_as_valid_certification(
-        date(2027, 1, 1), "verified", reference_date
-    ) is True
-    assert _counts_as_valid_certification(
-        date(2026, 9, 20), "verified", reference_date
-    ) is False
+    assert _counts_as_valid_certification(date(2027, 1, 1), "verified", reference_date) is True
+    assert _counts_as_valid_certification(date(2026, 9, 20), "verified", reference_date) is False
     assert _counts_as_valid_certification(None, "verified", reference_date) is True
 
 
@@ -77,9 +73,7 @@ async def test_staff_role_change_removes_search_projection_after_commit(monkeypa
         documents=[SimpleNamespace(id="document-1")],
     )
     session = SimpleNamespace(
-        execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: crew)
-        ),
+        execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: crew)),
         commit=AsyncMock(),
     )
     monkeypatch.setattr(
@@ -123,9 +117,7 @@ async def test_update_availability_ignores_login_account_rows(monkeypatch):
             return None
 
     session = SimpleNamespace(
-        execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: account)
-        ),
+        execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: account)),
         commit=AsyncMock(),
     )
     monkeypatch.setattr(
@@ -152,9 +144,7 @@ async def test_update_crew_member_rejects_login_account_rows(monkeypatch):
             return None
 
     session = SimpleNamespace(
-        execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: account)
-        )
+        execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: account))
     )
     monkeypatch.setattr(
         "app.services.crew.get_session_factory",
@@ -178,9 +168,7 @@ async def test_compliance_status_excludes_login_account_certifications(monkeypat
 
     account = SimpleNamespace(password_hash="hashed", role="staff")
     session = SimpleNamespace(
-        execute=AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: account)
-        )
+        execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: account))
     )
     monkeypatch.setattr(
         "app.services.crew.get_session_factory",
@@ -197,6 +185,7 @@ async def test_compliance_status_excludes_login_account_certifications(monkeypat
         "pending_verification": 0,
     }
     session.execute.assert_awaited_once()
+
 
 LIST_CREW_QUERY = """
 query ListCrewMembers {
@@ -468,9 +457,7 @@ async def test_compliance_status_uses_expiry_date_for_valid_count(db_session, mo
 
 
 @pytest.mark.asyncio
-async def test_compliance_status_counts_legacy_null_certification_states(
-    db_session, monkeypatch
-):
+async def test_compliance_status_counts_legacy_null_certification_states(db_session, monkeypatch):
     """Legacy nullable certification states remain visible as pending evidence."""
     crew = CrewMember(id="compliance-null-crew", full_name="Legacy Compliance")
     db_session.add(crew)

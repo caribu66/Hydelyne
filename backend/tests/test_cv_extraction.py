@@ -719,9 +719,7 @@ def test_deterministic_cv_text_fallback_bounds_review_payload_lines():
     from app.services.cv_processing import CVProcessingService
 
     training = CVProcessingService.training_from_text("TRAINING\nCourse 1" + "x" * 1_000)
-    systems = CVProcessingService.systems_from_text(
-        "SYSTEMS EXPERIENCE\nQGIS 1" + "x" * 1_000
-    )
+    systems = CVProcessingService.systems_from_text("SYSTEMS EXPERIENCE\nQGIS 1" + "x" * 1_000)
 
     assert all(len(value) <= 255 for value in training)
     assert all(len(value) <= 255 for value in systems)
@@ -742,9 +740,7 @@ def test_deterministic_cv_payload_bounds_table_strings_before_review_persistence
         "app.services.cv_table_extractor.extract_cv_tables",
         return_value=table_result,
     ):
-        result = CVProcessingService.extract_cv_deterministically(
-            _helena_pdf_path(), "pdf", ""
-        )
+        result = CVProcessingService.extract_cv_deterministically(_helena_pdf_path(), "pdf", "")
 
     assert len(result["professional_summary"]) == 20_000
     assert len(result["nationality"]) == 20_000
