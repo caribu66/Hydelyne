@@ -17,7 +17,7 @@ from __future__ import annotations
 
 AVAILABILITY_STATUS_VALUES: tuple[str, ...] = ("available", "on_assignment", "unavailable")
 
-CERT_STATUS_VALUES: tuple[str, ...] = ("pending_verification", "valid", "expiring_soon", "expired")
+CERT_STATUS_VALUES: tuple[str, ...] = ("pending_verification", "valid", "expiring_soon", "expired", "rejected")
 
 CERT_VERIFICATION_STATUS_VALUES: tuple[str, ...] = ("unverified", "verified", "rejected")
 

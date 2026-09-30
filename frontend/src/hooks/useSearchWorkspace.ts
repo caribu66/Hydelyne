@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { UserProfile, SortOption, FilterState } from '../types'
 import { FILTER_PRESETS } from '../data/mockProfiles'
+import { avatarFor, departmentFromTags } from '../lib/mappers'
 import { filterProfiles, getActiveFilterCount, INITIAL_FILTER_STATE, sortProfiles } from '../utils/filterUtils'
 import { CrewQueryResult } from './useCrewQuery'
 
@@ -39,9 +40,12 @@ export function selectAIResultProfiles(
       id: ai.id,
       name: ai.name,
       title: ai.tags?.[0] ? `${ai.tags[0]} Contractor` : 'Contractor',
-      avatar: '',
+      // Same conventions as the local roster mapper: an initials avatar that
+      // never breaks <img>, and a department derived from tags instead of an
+      // empty badge.
+      avatar: avatarFor(ai.name),
       company: 'Company not recorded',
-      department: '',
+      department: departmentFromTags(ai.tags ?? []),
       location: ai.country_of_residence ?? 'Location not recorded',
       remoteType: 'On-site',
       yearsOfExperience: ai.experience_years

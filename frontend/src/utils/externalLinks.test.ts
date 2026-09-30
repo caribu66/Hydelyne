@@ -19,9 +19,15 @@ describe('safeLinkedInUrl', () => {
 });
 
 describe('mobilizationMailto', () => {
-  it('encodes recipient delimiters and the subject', () => {
+  it('keeps a valid recipient intact and encodes only the subject', () => {
+    expect(mobilizationMailto('crew+ops@example.test', 'Survey & HSE')).toBe(
+      'mailto:crew+ops@example.test?subject=Hydenlyne%20Mobilization%20Request%20-%20Survey%20%26%20HSE',
+    );
+  });
+
+  it('strips query or fragment smuggled into the stored email', () => {
     expect(mobilizationMailto('crew+ops@example.test?x=1', 'Survey & HSE')).toBe(
-      'mailto:crew%2Bops%40example.test%3Fx%3D1?subject=Hydenlyne%20Mobilization%20Request%20-%20Survey%20%26%20HSE',
+      'mailto:crew+ops@example.test?subject=Hydenlyne%20Mobilization%20Request%20-%20Survey%20%26%20HSE',
     );
   });
 });

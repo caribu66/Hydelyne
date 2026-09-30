@@ -21,11 +21,11 @@ const httpLink = new HttpLink({
   },
 })
 
-const errorLink = onError(({ graphQLErrors, networkError }) => {
+const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
   const unauthenticated = graphQLErrors?.some(
     (e) => (e.extensions?.code as string) === 'UNAUTHENTICATED' || /Authentication/i.test(e.message)
   )
-  if (unauthenticated) {
+  if (unauthenticated && operation.operationName !== 'Me') {
     clearLegacyAuthToken()
     window.dispatchEvent(new CustomEvent('hydenlyne:session-expired'))
   }

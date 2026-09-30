@@ -12,6 +12,12 @@ describe('csv export boundaries', () => {
     );
   });
 
+  it('neutralizes formulas hidden behind whitespace or control characters', () => {
+    expect(csvCell('  =1+1')).toBe('"\'  =1+1"');
+    expect(csvCell('\t@malicious')).toBe(`"'\t@malicious"`);
+    expect(csvCell('\r\n-HYPERLINK("x")')).toBe('"\'\r\n-HYPERLINK(""x"")"');
+  });
+
   it('builds rows with stable CSV delimiters', () => {
     expect(csvDocument([['Name', 'Email'], ['Ava, Example', 'ava@example.test']])).toBe(
       '"Name","Email"\n"Ava, Example","ava@example.test"',

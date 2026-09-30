@@ -205,7 +205,8 @@ async def _read_bounded_json(
             return None
         chunks.append(chunk)
     try:
-        return json.loads(b"".join(chunks))
+        payload: object = json.loads(b"".join(chunks))
+        return payload
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
 

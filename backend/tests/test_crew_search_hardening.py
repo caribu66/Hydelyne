@@ -128,7 +128,7 @@ async def test_search_handles_wildcard_characters_safely(db_session: Any) -> Non
 
 @pytest.mark.asyncio
 async def test_search_handles_extremely_long_strings(db_session: Any) -> None:
-    """Very large search payloads must not crash or cause unbounded resource spikes."""
+    """Very large search payloads are rejected before touching the database."""
     await _create_test_crew_member(
         db_session,
         full_name="Standard Specialist",
@@ -138,8 +138,8 @@ async def test_search_handles_extremely_long_strings(db_session: Any) -> None:
     svc = CrewService()
     with patch("app.services.crew.get_session_factory", return_value=lambda: db_session):
         huge_payload = "A" * 10000
-        results = await svc.list_crew_members(search=huge_payload)
-        assert results == []
+        with pytest.raises(ValueError, match="Search query"):
+            await svc.list_crew_members(search=huge_payload)
 
 
 @pytest.mark.asyncio
@@ -255,7 +255,12 @@ async def test_search_does_not_match_restricted_work_history_or_email(db_session
 
 @pytest.mark.asyncio
 async def test_search_empty_and_whitespace_only(db_session: Any) -> None:
-    """Empty or whitespace-only search does not filter out approved crew members."""
+    """Blank search input is rejected; only None disables the filter.
+
+    Every transport boundary (GraphQL, REST, natural-language query) rejects
+    blank/oversized input, and the service enforces the same rule so a direct
+    caller cannot silently list the full roster with a blank query.
+    """
     crew = await _create_test_crew_member(
         db_session,
         full_name="Whitespace Test",
@@ -267,10 +272,10 @@ async def test_search_empty_and_whitespace_only(db_session: Any) -> None:
         res_none = await svc.list_crew_members(search=None)
         assert any(c.id == crew.id for c in res_none)
 
-        # Empty string should not fail
-        res_empty = await svc.list_crew_members(search="")
-        assert any(c.id == crew.id for c in res_empty)
+        # Empty string is rejected, not silently treated as "match all"
+        with pytest.raises(ValueError, match="Search query must not be blank"):
+            await svc.list_crew_members(search="")
 
-        # Whitespace-only string should be stripped cleanly and behave like empty/all
-        res_spaces = await svc.list_crew_members(search="   ")
-        assert any(c.id == crew.id for c in res_spaces)
+        # Whitespace-only input is stripped and rejected like empty
+        with pytest.raises(ValueError, match="Search query must not be blank"):
+            await svc.list_crew_members(search="   ")

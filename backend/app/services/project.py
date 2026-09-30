@@ -95,21 +95,22 @@ class ProjectService:
             return assignments_by_project
 
         async with get_session_factory()() as session:
-            visibility = True
-            if actor_role != "admin":
-                visibility = or_(
-                    CrewMember.publication_status == "approved",
-                    and_(
-                        CrewMember.publication_status == "draft",
-                        CrewMember.submitted_by == actor_id,
-                    ),
-                )
-            visible_stmt = select(CrewMember.id).where(
+            conditions = [
                 CrewMember.id.in_(assigned_ids),
                 CrewMember.password_hash.is_(None),
                 or_(CrewMember.role.is_(None), CrewMember.role.not_in(("staff", "admin"))),
-                visibility,
-            )
+            ]
+            if actor_role != "admin":
+                conditions.append(
+                    or_(
+                        CrewMember.publication_status == "approved",
+                        and_(
+                            CrewMember.publication_status == "draft",
+                            CrewMember.submitted_by == actor_id,
+                        ),
+                    )
+                )
+            visible_stmt = select(CrewMember.id).where(*conditions)
             visible_ids = set((await session.execute(visible_stmt)).scalars())
 
         return {

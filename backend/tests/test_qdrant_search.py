@@ -68,3 +68,25 @@ def test_embedding_vector_must_match_qdrant_dimension(monkeypatch):
     monkeypatch.setattr(qdrant.httpx, "Client", lambda **kwargs: ValidJsonClient())
     with pytest.raises(RuntimeError, match="Embedding generation failed"):
         qdrant.QdrantService()._generate_embedding("query")
+
+
+def test_qdrant_client_has_finite_request_timeout(monkeypatch):
+    """Provider calls run in worker threads: an unbounded client would park
+    a thread forever on a hung Qdrant."""
+    import app.services.qdrant as qdrant
+
+    captured: dict[str, object] = {}
+
+    class _RecordingClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def get_collections(self) -> object:
+            raise RuntimeError("no real Qdrant in unit tests")
+
+    monkeypatch.setattr(qdrant, "QdrantClient", _RecordingClient)
+    # Collection ensure fails against the stub but the property still returns
+    # the client; only the construction kwargs are under test here.
+    assert qdrant.QdrantService().client is not None
+
+    assert captured.get("timeout") == qdrant.QDRANT_REQUEST_TIMEOUT_SECONDS

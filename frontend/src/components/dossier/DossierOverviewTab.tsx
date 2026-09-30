@@ -4,6 +4,7 @@ import { HighlightText } from '../HighlightText';
 import { CertificationBadge } from '../CertificationBadge';
 import { formatExperience } from '../../utils/experience';
 import { availabilityLabel as getAvailabilityLabel } from '../../utils/profileLabels';
+import { latestWorkHistoryEntry } from '../../utils/dossierUtils';
 import {
   Sparkles,
   Compass,
@@ -43,9 +44,7 @@ export const DossierOverviewTab: FC<DossierOverviewTabProps> = ({
   const profileSkills = Array.from(new Set([...(profile.skills ?? []), ...(profile.expertise ?? [])]));
   const credentialCount = profile.certificationDetails?.length ?? profile.certifications?.length ?? 0;
   const indexedDocumentCount = documents.filter((doc) => doc.extractionStatus === 'extracted').length;
-  const latestProject = [...(profile.workHistory ?? [])].sort((left, right) =>
-    (right.startDate ?? '').localeCompare(left.startDate ?? ''),
-  )[0];
+  const latestProject = latestWorkHistoryEntry(profile.workHistory ?? []);
   const highlightedSkills = profileSkills.slice(0, 3);
 
   return (

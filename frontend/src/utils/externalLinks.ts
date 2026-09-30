@@ -17,7 +17,11 @@ export function safeLinkedInUrl(candidate: string | undefined, profileName: stri
 }
 
 export function mobilizationMailto(email: string, title: string): string {
-  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(
+  // The recipient is an addr-spec, not a query component: encoding it breaks
+  // `@`/`+` and lets a stored `?`/`#` split the subject we append. Strip any
+  // query/fragment smuggled into the stored value; only the subject is encoded.
+  const recipient = email.trim().split(/[?#]/, 1)[0]?.trim() ?? '';
+  return `mailto:${recipient}?subject=${encodeURIComponent(
     `Hydenlyne Mobilization Request - ${title}`,
   )}`;
 }

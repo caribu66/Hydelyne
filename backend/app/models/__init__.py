@@ -47,7 +47,10 @@ class CrewMember(Base):
     insurance_policy_number: Mapped[Optional[str]] = mapped_column(String(100))
     insurance_coverage: Mapped[Optional[str]] = mapped_column(Text)
     insurance_expiry: Mapped[Optional[date]] = mapped_column(Date)
-    availability_status: Mapped[str] = mapped_column(String(20), default="available", index=True)
+    # Fail-closed: a profile with no recorded availability must not read as
+    # mobilizable. This matches the GraphQL read side, which projects missing
+    # values as "unavailable", and the mobilization compliance preflight.
+    availability_status: Mapped[str] = mapped_column(String(20), default="unavailable", index=True)
     availability_date: Mapped[Optional[date]] = mapped_column(Date)
     profile_completeness_score: Mapped[Optional[float]] = mapped_column(Float)
     # Audited aggregate of non-overlapping work-history periods. Keep months

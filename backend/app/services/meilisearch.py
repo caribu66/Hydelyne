@@ -20,6 +20,11 @@ DOCUMENTS_INDEX = "documents"
 APPROVED_CREW_FILTER = 'publication_status = "approved"'
 SEARCHABLE_DOCUMENTS_FILTER = 'extraction_status IN ["approved", "extracted"]'
 DOCUMENT_SEARCHABLE_ATTRIBUTES = ("file_name", "file_type", "classification")
+# Bound every synchronous provider call (all run in worker threads via
+# to_thread): without this a hung Meilisearch parks the thread indefinitely
+# and repeated stalls exhaust the pool. Kept above the 5s task-wait window
+# so configuration waits fail on their own terms, not on the socket.
+MEILISEARCH_REQUEST_TIMEOUT_SECONDS = 10
 
 
 class SearchProviderUnavailable(RuntimeError):
@@ -39,7 +44,9 @@ class MeilisearchClient:
         if self._client is None:
             import meilisearch
 
-            self._client = meilisearch.Client(self.base_url, self.master_key)
+            self._client = meilisearch.Client(
+                self.base_url, self.master_key, timeout=MEILISEARCH_REQUEST_TIMEOUT_SECONDS
+            )
         return self._client
 
     def _wait_for_task(self, task_uid: int) -> bool:
@@ -59,7 +66,12 @@ class MeilisearchClient:
             return False
 
     async def setup_indexes(self) -> None:
-        """Create and configure search indexes."""
+        """Create and configure search indexes.
+
+        Failures propagate: boot keeps serving (see the lifespan handler in
+        app/main.py, which logs and continues), but the failure stays
+        observable instead of booting with silently unconfigured indexes.
+        """
         import asyncio
 
         def _sync_setup() -> None:
@@ -133,11 +145,8 @@ class MeilisearchClient:
                 if not self._wait_for_task(task.task_uid):
                     raise RuntimeError("Meilisearch index configuration task did not succeed")
 
-        try:
-            await asyncio.to_thread(_sync_setup)
-            logger.info("Meilisearch indexes configured successfully")
-        except Exception as exc:
-            logger.error("Failed to setup Meilisearch indexes (%s)", type(exc).__name__)
+        await asyncio.to_thread(_sync_setup)
+        logger.info("Meilisearch indexes configured successfully")
 
     async def index_crew_member(self, crew_member: dict[str, Any]) -> Optional[dict[str, int]]:
         """Index a crew member for search."""

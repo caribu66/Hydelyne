@@ -12,6 +12,7 @@ import {
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DocumentUploadModal } from './DocumentUploadModal';
 import { documentMatchesQuery, hasOriginalDocumentFile } from '../utils/documentUtils';
+import { copyTextToClipboard } from '../utils/clipboard';
 import { createDocumentRequest, downloadDocumentFile } from '../lib/documentsApi';
 import {
   FileText,
@@ -85,9 +86,15 @@ export const DocumentVault: FC<DocumentVaultProps> = ({
       const request = await createDocumentRequest(profile.id);
       if (currentSessionKeyRef.current !== sessionKey) return;
       const link = `${window.location.origin}/upload/${encodeURIComponent(request.token)}`;
-      await navigator.clipboard.writeText(link);
-      if (currentSessionKeyRef.current !== sessionKey) return;
-      onShowToast('Secure upload link copied — it expires in 14 days');
+      // Never lose the secure link: if the clipboard is unavailable or
+      // denied, surface the link itself so it can be copied manually.
+      if (await copyTextToClipboard(link)) {
+        if (currentSessionKeyRef.current !== sessionKey) return;
+        onShowToast('Secure upload link copied — it expires in 14 days');
+      } else {
+        if (currentSessionKeyRef.current !== sessionKey) return;
+        onShowToast(`Clipboard unavailable — copy the secure upload link manually: ${link}`);
+      }
     } catch (error) {
       if (currentSessionKeyRef.current !== sessionKey) return;
       onShowToast(error instanceof Error ? error.message : 'Could not create a secure upload link');
@@ -223,7 +230,9 @@ Documents listed above are recorded in the document vault for compliance review.
     window.document.body.appendChild(a);
     a.click();
     window.document.body.removeChild(a);
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    // Retain the object URL briefly: Firefox/Safari consume the anchor
+    // navigation asynchronously, so a 0ms revocation can cancel the download.
+    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
     onShowToast(`Exported complete compliance bundle for ${profile.name.split(' ')[0]}`);
   };
 

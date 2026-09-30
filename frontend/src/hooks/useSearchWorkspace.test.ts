@@ -45,4 +45,23 @@ describe('selectAIResultProfiles', () => {
 
     expect(profile?.yearsOfExperience).toBe(12.5)
   })
+
+  it('synthesizes a usable avatar and department for results outside the roster', () => {
+    const [profile] = selectAIResultProfiles([], [
+      { id: 'remote-1', name: 'Remote Specialist', tags: ['PAM', 'Offshore'] },
+    ])
+
+    // An empty avatar breaks <img> in shortlist and detail views; reuse the
+    // local mapper's initials avatar instead.
+    expect(profile?.avatar).toMatch(/^data:image\/svg\+xml,/)
+    expect(profile?.avatar).toContain('RS')
+    // Same department derivation as the local roster mapper, not an empty badge.
+    expect(profile?.department).toBe('Marine Environmental')
+  })
+
+  it('falls back to the generic department when AI tags carry no discipline', () => {
+    const [profile] = selectAIResultProfiles([], [{ id: 'remote-1', name: 'Remote Specialist' }])
+
+    expect(profile?.department).toBe('Survey, HSE & Client Rep')
+  })
 })

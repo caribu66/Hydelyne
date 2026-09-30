@@ -13,6 +13,23 @@ from app.domain.crew_accounts import is_contractor_profile
 from app.models import Certification, CrewMember
 
 
+def counts_as_medical_evidence(certification: Certification) -> bool:
+    """Return whether a certificate row may populate the deployability projection.
+
+    Administrator-verified evidence always counts. Unverified rows count only
+    when backed by a linked source document from the extraction pipeline — a
+    bare pending assertion with no evidence must not read as mobilizable.
+    Rejected rows never count.
+    """
+    if certification.status is not None and certification.status == "rejected":
+        return False
+    if certification.verification_status == "verified":
+        return True
+    return (
+        certification.document_ref is not None and certification.verification_status != "rejected"
+    )
+
+
 async def reconcile_medical_profile(
     session: AsyncSession,
     *,
@@ -33,8 +50,7 @@ async def reconcile_medical_profile(
         for certification in certifications.scalars()
         if certification.expiry_date
         and is_medical_cert_type(certification.cert_type)
-        and (certification.status is None or certification.status != "rejected")
-        and certification.verification_status == "verified"
+        and counts_as_medical_evidence(certification)
     ]
     replacement_expiry = max(medical_dates) if medical_dates else None
     crew.medical_expiry = replacement_expiry
@@ -84,8 +100,7 @@ async def reconcile_medical_profile_after_detachment(
         for certification in remaining.scalars()
         if certification.expiry_date
         and is_medical_cert_type(certification.cert_type)
-        and (certification.status is None or certification.status != "rejected")
-        and certification.verification_status == "verified"
+        and counts_as_medical_evidence(certification)
     ]
     replacement_expiry = max(medical_dates) if medical_dates else None
     crew.medical_expiry = replacement_expiry

@@ -88,7 +88,9 @@ export const CandidateCompareModal: FC<CandidateCompareModalProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    // Retain the object URL briefly: Firefox/Safari consume the anchor
+    // navigation asynchronously, so a 0ms revocation can cancel the download.
+    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const handlePrint = () => {

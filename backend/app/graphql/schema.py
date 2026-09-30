@@ -410,11 +410,19 @@ class Query:
         ]
 
     @strawberry.field
-    @require_auth
     async def me(self, info: Info) -> Optional[CrewMember]:
+        from app.auth.decorators import _extract_token, auth_service
         from app.graphql.scrub import scrub_crew_member
 
         user = info.context.get("current_user")
+        if not user:
+            request = info.context.get("request")
+            if request:
+                token = _extract_token(request)
+                if token:
+                    user = await auth_service.get_user_from_token(token)
+                    if user:
+                        info.context["current_user"] = user
         if not user:
             return None
         tier = tier_for_role(user.role)
@@ -570,6 +578,16 @@ class Query:
     async def crew_summary(self, info: Info, crew_id: str) -> str:
         from app.services.consultant_knowledge import consultant_knowledge_service
 
+        actor = info.context["current_user"]
+        # Summaries cost an Ollama/cache call per ID and describe a profile,
+        # so they enforce the same boundary as documents_by_crew: T1 callers
+        # see nothing, and everyone else needs profile access. The not-found
+        # string matches summarize()'s own miss response, so denials do not
+        # oracle whether the ID exists.
+        if tier_for_role(actor.role) == "T1" or not await crew_service.can_access_profile(
+            crew_id, actor_id=actor.id, actor_role=actor.role
+        ):
+            return "No crew member found with that id."
         factory = get_session_factory()
         async with factory() as session:
             return await consultant_knowledge_service.summarize(crew_id, db_session=session)
@@ -1039,24 +1057,21 @@ class Mutation:
             return AuthPayload(success=False, message="Invalid email or password")
 
         # Login-specific rate limiting: 5 attempts / 5 min per (ip, canonical email).
+        # increment_rate_limit falls back to a process-local counter when Redis
+        # is down, so brute-force protection holds during an outage instead of
+        # silently disappearing; a None return still fails open but stays loud.
         request = info.context.get("request")
         client_ip = request.client.host if request and request.client else "unknown"
         login_key = f"login:{client_ip}:{email.strip().lower()}"
         try:
-            if await cache_service.is_redis_available():
-                login_count = await cache_service.increment_rate_limit(login_key, 300)
-                if login_count is not None and login_count > 5:
-                    from graphql import GraphQLError
+            login_count = await cache_service.increment_rate_limit(login_key, 300)
+            if login_count is not None and login_count > 5:
+                from graphql import GraphQLError
 
-                    raise GraphQLError(
-                        "Too many login attempts. Please try again later.",
-                        extensions={"code": "RATE_LIMITED"},
-                    )
-            else:
-                # Fail-open for availability, but observable: Redis outage
-                # must not silently disable brute-force protection.
-                logger = logging.getLogger(__name__)
-                logger.warning("Login rate limit skipped: redis unavailable")
+                raise GraphQLError(
+                    "Too many login attempts. Please try again later.",
+                    extensions={"code": "RATE_LIMITED"},
+                )
         except GraphQLError:
             raise
         except Exception as e:
@@ -1420,9 +1435,7 @@ class Mutation:
             doc = await document_service.link_to_crew_member(document_id, crew_id)
         except ValueError as exc:
             if "not found" in str(exc).lower():
-                raise GraphQLError(
-                    "Document or crew member not found", extensions={"code": "NOT_FOUND"}
-                ) from exc
+                raise GraphQLError(str(exc), extensions={"code": "NOT_FOUND"}) from exc
             raise GraphQLError(str(exc), extensions={"code": "BAD_USER_INPUT"}) from exc
         if not doc:
             raise GraphQLError("Document not found", extensions={"code": "NOT_FOUND"})

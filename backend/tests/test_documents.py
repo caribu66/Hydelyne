@@ -289,9 +289,11 @@ async def test_manual_confirmation_rejects_login_account_document(monkeypatch):
         extraction_status="needs_review",
         classification="certificate",
     )
+    account = SimpleNamespace(password_hash="hashed", role="staff")
     session = SimpleNamespace(
-        execute=AsyncMock(return_value=_DocumentResult(document)),
-        get=AsyncMock(return_value=SimpleNamespace(password_hash="hashed", role="staff")),
+        execute=AsyncMock(
+            side_effect=[_DocumentResult(document), _DocumentResult(account)]
+        ),
     )
     monkeypatch.setattr(
         "app.services.document_service.get_session_factory",
@@ -838,6 +840,69 @@ async def test_contractor_upload_link_creates_a_review_queue_item(client, db_ses
     assert queue.status_code == 200
     assert queue.json()[0]["contractor_name"] == "Requested Upload Contractor"
     assert queue.json()[0]["document_id"] == document_id
+
+
+@pytest.mark.asyncio
+async def test_contractor_upload_dispatch_failure_fails_the_review_queue_item(
+    client, db_session
+):
+    """If the broker is down, the committed review row must not linger as
+    `unread` in the staff queue for a document marked `failed`."""
+    crew_id = str(uuid.uuid4())
+    db_session.add(CrewMember(id=crew_id, full_name="Dispatch Failure Contractor"))
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/documents/requests", data={"crew_id": crew_id, "expires_in_days": "14"}
+    )
+    assert created.status_code == 200
+    token = created.json()["token"]
+
+    document_id = str(uuid.uuid4())
+
+    class _BrokerDown:
+        def delay(self, *_args, **_kwargs):
+            raise ConnectionError("broker down")
+
+    with (
+        patch("app.api.documents.process_document_extraction", new=_BrokerDown()),
+        patch(
+            "app.api.documents.document_upload_service.save_file",
+            new=AsyncMock(return_value=(document_id, "/tmp/contractor-failed.pdf", 42)),
+        ),
+    ):
+        uploaded = await client.post(
+            f"/api/documents/request/{token}/upload",
+            data={"idempotency_key": "contractor-dispatch-fail-1", "classification": "cert"},
+            files={
+                "file": (
+                    "certificate.pdf",
+                    io.BytesIO(b"%PDF-1.4\ncontractor\n%%EOF"),
+                    "application/pdf",
+                )
+            },
+        )
+    assert uploaded.status_code == 200
+    assert uploaded.json()["status"] == "failed"
+
+    factory = get_session_factory()
+    async with factory() as session:
+        doc = (
+            await session.execute(select(Document).where(Document.id == document_id))
+        ).scalar_one()
+        assert doc.extraction_status == "failed"
+        review = (
+            await session.execute(
+                select(IncomingDocumentReview).where(
+                    IncomingDocumentReview.document_id == document_id
+                )
+            )
+        ).scalar_one()
+        assert review.status == "failed"
+
+    queue = await client.get("/api/documents/review-queue")
+    assert queue.status_code == 200
+    assert all(item["document_id"] != document_id for item in queue.json())
 
 
 @pytest.mark.asyncio
@@ -1913,7 +1978,14 @@ async def test_resolve_document_review_by_document_id(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_staff_cannot_review_an_admin_uploaded_document_by_id(client, db_session):
+async def test_staff_cannot_review_an_admin_uploaded_document_by_id(
+    client, db_session, monkeypatch
+):
+    from app.services.crew import auth_service
+
+    acting_staff = CrewMember(id="staff-1", full_name="Reviewing Staff", role="staff")
+    monkeypatch.setattr(auth_service, "get_user_from_token", AsyncMock(return_value=acting_staff))
+
     crew_id = str(uuid.uuid4())
     doc_id = str(uuid.uuid4())
     db_session.add(
@@ -2049,7 +2121,7 @@ async def test_rejected_document_review_retry_repeats_vector_cleanup(db_session)
             extraction_status="rejected",
         )
     )
-    await db_session.flush()
+    await db_session.commit()
     request = await document_request_service.create(
         crew_id=crew_id, actor_id="staff-1", actor_role="staff", expires_in_days=14
     )
@@ -2216,7 +2288,14 @@ async def test_agent_upload_rejects_unknown_crew_and_dedupes_retries(
     assert second.json()["id"] == first.json()["id"]
     # Stored classification is the normalized canonical value, not "cert".
     docs = (
-        (await db_session.execute(select(Document).where(Document.crew_member_id == crew_id)))
+        (
+            await db_session.execute(
+                select(Document).where(
+                    Document.crew_member_id == crew_id,
+                    Document.upload_key == "agent-retry-1",
+                )
+            )
+        )
         .scalars()
         .all()
     )

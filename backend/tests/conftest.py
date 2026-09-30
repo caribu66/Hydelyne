@@ -39,8 +39,16 @@ from app.services.crew import auth_service  # noqa: E402
 from app.services.upload import document_upload_service  # noqa: E402
 from app.services.upload import settings as upload_settings
 from app.tasks.document_tasks import (  # noqa: E402
+    cleanup_deleted_crew_projections,
+    cleanup_document_projections,
+    cleanup_local_document_cache,
+    cleanup_orphaned_upload,
+    index_document_embeddings,
     process_document_extraction,
     process_dropbox_document,
+    reconcile_certificate_projection,
+    reconcile_crew_projection,
+    reconcile_document_search_projection,
 )
 
 TEST_DATABASE_URL = os.getenv(
@@ -84,12 +92,39 @@ auth_decorators._extract_token = lambda request: "test-token"
 document_upload_service.dropbox_available = False
 upload_settings.REQUIRE_DROPBOX_STORAGE = False
 
+_orig_get_file_async = document_upload_service.get_file_async
+
+
+async def _test_get_file_async(storage_path: str) -> bytes | None:
+    res = await _orig_get_file_async(storage_path)
+    if res is not None:
+        return res
+    if storage_path.startswith("/tmp/"):
+        if storage_path.endswith(".png"):
+            return (
+                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
+                b"\x00\x00\x00\x1f\x15c4"
+            )
+        return b"%PDF-1.4 mock content for testing"
+    return None
+
+
+document_upload_service.get_file_async = _test_get_file_async  # type: ignore[method-assign]
+
 # .delay() publishes to the real Celery/Redis broker, which requires auth this
 # environment's REDIS_URL doesn't carry. That doesn't fail fast: kombu retries
 # the connection with no timeout, so any upload test blocks forever instead of
 # hitting the `except Exception` around the call site in app/api/documents.py.
 process_document_extraction.delay = MagicMock()
 process_dropbox_document.delay = MagicMock()
+index_document_embeddings.delay = MagicMock()
+cleanup_document_projections.delay = MagicMock()
+reconcile_document_search_projection.delay = MagicMock()
+reconcile_certificate_projection.delay = MagicMock()
+cleanup_deleted_crew_projections.delay = MagicMock()
+reconcile_crew_projection.delay = MagicMock()
+cleanup_orphaned_upload.delay = MagicMock()
+cleanup_local_document_cache.delay = MagicMock()
 
 # Meilisearch indexing (create/update/delete crew member) makes a real network
 # call by default; the test environment has no Meilisearch server reachable,
@@ -97,9 +132,14 @@ process_dropbox_document.delay = MagicMock()
 # timeout on every crew mutation test. Mock it so tests are fast and so
 # individual tests can assert it was called with the expected document.
 from app.services.meilisearch import meilisearch_client
+from app.services.qdrant import qdrant_service
 
 meilisearch_client.index_crew_member = AsyncMock(return_value={"task_uid": 0})
 meilisearch_client.delete_crew_member = AsyncMock(return_value=True)
+meilisearch_client.index_document = AsyncMock(return_value={"task_uid": 0})
+meilisearch_client.delete_document = AsyncMock(return_value=True)
+meilisearch_client.delete_documents = AsyncMock(return_value=True)
+qdrant_service.delete_document = AsyncMock(return_value=True)
 
 # Default Redis availability to False so no test calls a real Redis by accident.
 # Individual tests can monkeypatch cache_service.is_redis_available / specific

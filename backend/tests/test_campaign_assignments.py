@@ -90,6 +90,7 @@ async def test_status_update_locks_contractor_before_assignment(monkeypatch: pyt
                 _AssignmentResult(crew),
                 _AssignmentResult(assignment),
                 _AssignmentResult(values=[]),
+                _AssignmentResult(values=[]),
             ]
         )
     )

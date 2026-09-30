@@ -4,6 +4,7 @@ import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { X, Download, Copy, Check, Trash2, Users } from 'lucide-react';
 import { UserProfile } from '../types';
 import { csvDocument } from '../utils/csv';
+import { copyTextToClipboard } from '../utils/clipboard';
 import { isoDateAfterDays } from '../utils/operationsHome';
 import { formatExperience } from '../utils/experience';
 import { availabilityLabel } from '../utils/profileLabels';
@@ -26,12 +27,14 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
   onSelectProfile,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useAccessibleDialog(isOpen, dialogRef, onClose);
 
   useEffect(() => {
     setCopied(false);
+    setCopyFailed(false);
     return () => {
       if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
     };
@@ -47,15 +50,19 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
       .join('\n\n------------------------------------\n\n');
 
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
-      copyFeedbackTimerRef.current = setTimeout(() => {
-        copyFeedbackTimerRef.current = null;
-        setCopied(false);
-      }, 2000);
+      if (await copyTextToClipboard(text)) {
+        setCopied(true);
+        setCopyFailed(false);
+        if (copyFeedbackTimerRef.current !== null) clearTimeout(copyFeedbackTimerRef.current);
+        copyFeedbackTimerRef.current = setTimeout(() => {
+          copyFeedbackTimerRef.current = null;
+          setCopied(false);
+        }, 2000);
+      } else {
+        setCopyFailed(true);
+      }
     } catch {
-      // Fallback
+      setCopyFailed(true);
     }
   };
 
@@ -81,7 +88,9 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+    // Retain the object URL briefly: Firefox/Safari consume the anchor
+    // navigation asynchronously, so a 0ms revocation can cancel the download.
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
   };
 
   return (
@@ -217,7 +226,13 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
 
             {/* Footer actions */}
             {shortlistedProfiles.length > 0 && (
-              <div className="p-4 border-t border-border-subtle bg-canvas/60 flex items-center justify-between gap-3 flex-wrap">
+              <div className="p-4 border-t border-border-subtle bg-canvas/60 space-y-2">
+                {copyFailed && (
+                  <p role="alert" className="text-xs text-danger">
+                    Could not copy the summary. Clipboard is unavailable or denied — use Export CSV instead.
+                  </p>
+                )}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
                 <button
                   type="button"
                   onClick={onClear}
@@ -244,6 +259,7 @@ export const ExportShortlistModal: FC<ExportShortlistModalProps> = ({
                     <Download className="w-3.5 h-3.5" />
                     <span>Export CSV</span>
                   </button>
+                </div>
                 </div>
               </div>
             )}

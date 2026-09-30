@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserProfile } from '../types';
 import { csvDocument } from '../utils/csv';
+import { copyTextToClipboard } from '../utils/clipboard';
 import { formatExperience } from '../utils/experience';
 import { availabilityLabel } from '../utils/profileLabels';
 
@@ -100,8 +101,7 @@ export function useShortlist(allProfiles: UserProfile[], userId: string | null) 
       .join('\n\n');
 
     try {
-      await navigator.clipboard.writeText(text);
-      return true;
+      return await copyTextToClipboard(text);
     } catch {
       return false;
     }

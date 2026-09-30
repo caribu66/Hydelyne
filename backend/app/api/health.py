@@ -15,6 +15,7 @@ from app.config import get_settings
 from app.database import get_engine
 from app.models import CrewMember
 from app.services.cache import get_redis
+from app.services.qdrant import QDRANT_REQUEST_TIMEOUT_SECONDS
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -206,8 +207,8 @@ async def ollama_health(
     """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            request = client.build_request("GET", f"{settings.OLLAMA_BASE_URL}/api/tags")
-            response = await client.send(request, stream=True)
+            req = client.build_request("GET", f"{settings.OLLAMA_BASE_URL}/api/tags")
+            response = await client.send(req, stream=True)
             try:
                 if response.status_code != 200:
                     raise RuntimeError(f"Ollama returned status {response.status_code}")
@@ -251,7 +252,11 @@ async def qdrant_health(
         from qdrant_client import QdrantClient
 
         def _get_collection_names() -> list[str]:
-            client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+            client = QdrantClient(
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
+                timeout=QDRANT_REQUEST_TIMEOUT_SECONDS,
+            )
             return [item.name for item in client.get_collections().collections]
 
         collection_names = await asyncio.to_thread(_get_collection_names)
@@ -319,7 +324,11 @@ async def full_health_check(
         from qdrant_client import QdrantClient
 
         def _probe_qdrant() -> None:
-            qdrant_client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+            qdrant_client = QdrantClient(
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
+                timeout=QDRANT_REQUEST_TIMEOUT_SECONDS,
+            )
             qdrant_client.get_collections()
 
         await asyncio.to_thread(_probe_qdrant)

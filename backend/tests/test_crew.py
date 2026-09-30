@@ -261,8 +261,22 @@ async def test_create_crew_member(client):
     data = response.json()["data"]["createCrewMember"]
     assert data["fullName"] == "John Smith"
     assert data["email"] == "john.smith@example.com"
-    assert data["availabilityStatus"] == "available"
+    # Fail-closed: omitted availability is not evidence of mobilizability.
+    assert data["availabilityStatus"] == "unavailable"
     assert data["id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_omitted_availability_persists_as_unavailable(db_session):
+    """An ORM-created profile without availability must persist as
+    unavailable, matching the GraphQL read side and the mobilization
+    compliance preflight — never as mobilizable."""
+    crew = CrewMember(full_name="Availability Default Contractor")
+    db_session.add(crew)
+    await db_session.commit()
+    await db_session.refresh(crew)
+
+    assert crew.availability_status == "unavailable"
 
 
 @pytest.mark.asyncio

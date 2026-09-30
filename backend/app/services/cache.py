@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any, Optional
@@ -25,7 +26,7 @@ async def get_redis() -> aioredis.Redis:
         # one call is genuinely unclassifiable by mypy — not a stub gap we
         # can route around. The module-level annotation above is what gives
         # every *caller* of get_redis() a real `Redis` type regardless.
-        _redis_pool = aioredis.from_url(
+        _redis_pool = aioredis.from_url(  # type: ignore[no-untyped-call]
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
@@ -50,8 +51,16 @@ class CacheService:
     # practice (see ConsultantKnowledgeService.summarize).
     SUMMARY_TTL = timedelta(minutes=30)
 
+    # Bound for the process-local rate-limit fallback below. Login keys are
+    # per (ip, email), so an attacker could mint distinct keys; the cap keeps
+    # that memory bounded while still throttling every key it retains.
+    MEMORY_RATE_LIMIT_MAX_KEYS = 10000
+
     def __init__(self) -> None:
         self._redis: Optional[aioredis.Redis] = None
+        # key -> (count, window_expires_at_monotonic). Populated only when
+        # Redis is unreachable; buckets are per-process, not distributed.
+        self._memory_rate_limits: dict[str, tuple[int, float]] = {}
 
     async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
@@ -144,7 +153,11 @@ class CacheService:
 
         Fixed window: TTL is set only when the counter is first created so
         sustained traffic cannot extend the window indefinitely.
-        Returns None when Redis is unavailable (caller decides fail-open/closed).
+        When Redis is unreachable, falls back to a process-local counter so
+        brute-force protection degrades instead of disappearing. The fallback
+        buckets are per-process (not distributed across replicas) and bounded;
+        callers must still treat a None return as "unmetered" — it only
+        happens if the in-process bookkeeping itself fails.
         """
         try:
             redis = await self._get_redis()
@@ -157,8 +170,33 @@ class CacheService:
                 await redis.expire(key, window_seconds)
             return count
         except Exception as exc:
-            logger.warning("Rate limit increment failed (%s)", type(exc).__name__)
-            return None
+            logger.warning(
+                "Rate limit increment failed, using process-local fallback (%s)",
+                type(exc).__name__,
+            )
+            return self._increment_memory_rate_limit(key, window_seconds)
+
+    def _increment_memory_rate_limit(self, key: str, window_seconds: int) -> int:
+        """Process-local fixed-window counter used when Redis is down."""
+        now = time.monotonic()
+        for expired_key in [
+            existing
+            for existing, (_, expires_at) in self._memory_rate_limits.items()
+            if expires_at <= now
+        ]:
+            del self._memory_rate_limits[expired_key]
+        entry = self._memory_rate_limits.get(key)
+        count = entry[0] + 1 if entry is not None else 1
+        if (
+            key not in self._memory_rate_limits
+            and len(self._memory_rate_limits) >= self.MEMORY_RATE_LIMIT_MAX_KEYS
+        ):
+            # Full and no expired entries left: evict the oldest insertion to
+            # stay bounded. Dicts preserve insertion order, and re-incremented
+            # keys keep their original position, so this is FIFO eviction.
+            self._memory_rate_limits.pop(next(iter(self._memory_rate_limits)))
+        self._memory_rate_limits[key] = (count, now + window_seconds)
+        return count
 
 
 cache_service = CacheService()

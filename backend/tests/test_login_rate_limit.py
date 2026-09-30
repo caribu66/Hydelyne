@@ -62,8 +62,10 @@ async def test_login_rate_limited_after_5_attempts(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_login_rate_limit_not_triggered_when_redis_unavailable(client, monkeypatch):
-    """If Redis is down, login should still work (rate limit is best-effort)."""
+async def test_login_still_rate_limited_when_redis_unavailable(client, monkeypatch):
+    """If Redis is down, logins keep working but brute-force protection must
+    not disappear: the process-local fallback still rate-limits the 6th rapid
+    attempt in the same window."""
     monkeypatch.setattr(
         "app.services.crew.auth_service.authenticate",
         AsyncMock(
@@ -73,23 +75,35 @@ async def test_login_rate_limit_not_triggered_when_redis_unavailable(client, mon
             }
         ),
     )
-    monkeypatch.setattr(
-        "app.services.cache.cache_service.is_redis_available", AsyncMock(return_value=False)
-    )
-    monkeypatch.setattr(
-        "app.services.cache.cache_service.increment_rate_limit", AsyncMock(return_value=None)
-    )
+    cache_service._memory_rate_limits.clear()
 
-    response = await client.post(
-        "/graphql",
-        json={
-            "query": LOGIN_MUTATION,
-            "variables": {"email": "test@example.com", "password": "pass"},
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()["data"]["login"]
-    assert data["success"] is True
+    async def no_redis() -> object:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(cache_service, "_get_redis", no_redis)
+
+    statuses = []
+    for i in range(6):
+        response = await client.post(
+            "/graphql",
+            json={
+                "query": LOGIN_MUTATION,
+                "variables": {"email": "test@example.com", "password": "pass"},
+            },
+        )
+        if "errors" in response.json():
+            for err in response.json()["errors"]:
+                if err.get("extensions", {}).get("code") == "RATE_LIMITED":
+                    statuses.append("rate_limited")
+                    break
+            else:
+                statuses.append("other_error")
+        else:
+            statuses.append("ok")
+
+    # First 5 succeed (availability preserved), 6th is still throttled.
+    assert statuses[:5] == ["ok"] * 5
+    assert statuses[5] == "rate_limited"
 
 
 @pytest.mark.asyncio
@@ -127,6 +141,50 @@ async def test_login_rate_limit_canonicalizes_email_whitespace(client, monkeypat
 
     assert len(seen_keys) == 2
     assert seen_keys[0] == seen_keys[1]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_memory_fallback_resets_after_window(monkeypatch):
+    """The process-local fallback must start a fresh window once the old one
+    expires, or a Redis outage would permanently lock users out."""
+    cache_service._memory_rate_limits.clear()
+
+    async def no_redis() -> object:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(cache_service, "_get_redis", no_redis)
+
+    assert await cache_service.increment_rate_limit("login:fallback-window", 300) == 1
+    assert await cache_service.increment_rate_limit("login:fallback-window", 300) == 2
+
+    # Simulate the window elapsing.
+    count, _ = cache_service._memory_rate_limits["login:fallback-window"]
+    assert count == 2
+    import time as _time
+
+    cache_service._memory_rate_limits["login:fallback-window"] = (count, _time.monotonic() - 1)
+
+    assert await cache_service.increment_rate_limit("login:fallback-window", 300) == 1
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_memory_fallback_is_bounded(monkeypatch):
+    """An attacker minting distinct keys during an outage must not grow the
+    fallback store without bound."""
+    cache_service._memory_rate_limits.clear()
+
+    async def no_redis() -> object:
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(cache_service, "_get_redis", no_redis)
+    monkeypatch.setattr(cache_service, "MEMORY_RATE_LIMIT_MAX_KEYS", 4)
+
+    for i in range(6):
+        await cache_service.increment_rate_limit(f"login:flood-{i}", 300)
+
+    assert len(cache_service._memory_rate_limits) <= 4
+    # The most recent keys survive; every retained key still counts.
+    assert await cache_service.increment_rate_limit("login:flood-5", 300) == 2
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,21 @@ import { SpecialistDocument } from '../types';
 
 /** Returns true only when the original document binary is attached or hosted. */
 export function hasOriginalDocumentFile(document: SpecialistDocument): boolean {
-  return Boolean(document.fileUrl && /^(data:|https?:\/\/)/i.test(document.fileUrl));
+  const fileUrl = document.fileUrl;
+  if (!fileUrl) return false;
+  if (/^https?:\/\//i.test(fileUrl)) return true;
+  // Data URLs are legitimate locally attached binaries (see types.ts), but a
+  // bare `data:` allowlist also trusts `data:text/html` payloads from
+  // untrusted index contents. Only accept inert document/image MIME types.
+  const dataUrlMatch = /^data:([^;,]+)[;,]/i.exec(fileUrl);
+  if (!dataUrlMatch?.[1]) return false;
+  const mimeType = dataUrlMatch[1].trim().toLowerCase();
+  return (
+    mimeType === 'application/pdf' ||
+    mimeType === 'application/octet-stream' ||
+    mimeType === 'text/plain' ||
+    mimeType.startsWith('image/')
+  );
 }
 
 /** Review actions are valid only for non-terminal extraction states. */

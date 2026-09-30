@@ -90,6 +90,47 @@ def test_dropbox_webhook_account_fanout_is_bounded():
 
 
 @pytest.mark.asyncio
+async def test_dropbox_webhook_rejected_when_secret_unconfigured(client, monkeypatch):
+    """Without a configured app secret there is nothing to verify the
+    provider signature against, so the webhook must be unavailable in every
+    environment — not an unauthenticated sync-work queue."""
+    from app.api import dropbox as dropbox_api
+
+    monkeypatch.setattr(dropbox_api.settings, "DROPBOX_APP_SECRET", "", raising=False)
+    with patch.object(dropbox_api, "process_dropbox_account", new=AsyncMock()) as queued:
+        response = await client.post(
+            "/api/dropbox/webhook",
+            content=b'{"list_folder": {"accounts": ["dbid:attacker"]}}',
+            headers={"X-Dropbox-Signature": "anything"},
+        )
+
+    assert response.status_code == 503
+    queued.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_dropbox_webhook_accepts_valid_signature(client, monkeypatch):
+    """A correctly signed notification is still accepted and fanned out."""
+    import hashlib
+    import hmac
+
+    from app.api import dropbox as dropbox_api
+
+    monkeypatch.setattr(dropbox_api.settings, "DROPBOX_APP_SECRET", "test-secret", raising=False)
+    body = b'{"list_folder": {"accounts": ["dbid:legit"]}}'
+    signature = hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+    with patch.object(dropbox_api, "process_dropbox_account", new=AsyncMock()) as queued:
+        response = await client.post(
+            "/api/dropbox/webhook",
+            content=body,
+            headers={"X-Dropbox-Signature": signature},
+        )
+
+    assert response.status_code == 200
+    queued.assert_awaited_once_with("dbid:legit")
+
+
+@pytest.mark.asyncio
 async def test_dropbox_file_outside_managed_root_is_ignored():
     """A connected Dropbox account must not ingest unrelated root files."""
     with patch("app.api.dropbox.get_session_factory") as get_factory:

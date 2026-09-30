@@ -48,7 +48,9 @@ class CrewMemberDTO(BaseModel):
     visa: Optional[VisaInfoDTO] = None
     medical: Optional[MedicalInfoDTO] = None
     insurance: Optional[InsuranceInfoDTO] = None
-    availability_status: str = "available"
+    # Fail-closed like the persistence default: omitted availability is not
+    # evidence of mobilizability.
+    availability_status: str = "unavailable"
     availability_date: Optional[date] = None
     profile_completeness_score: Optional[float] = None
     internal_notes: Optional[str] = None
@@ -71,7 +73,9 @@ class CrewMemberCreateDTO(BaseModel):
     visa: Optional[VisaInfoDTO] = None
     medical: Optional[MedicalInfoDTO] = None
     insurance: Optional[InsuranceInfoDTO] = None
-    availability_status: str = "available"
+    # Fail-closed like the persistence default: omitted availability is not
+    # evidence of mobilizability.
+    availability_status: str = "unavailable"
     internal_notes: Optional[str] = None
     tags: Optional[list[str]] = None
 

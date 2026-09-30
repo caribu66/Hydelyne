@@ -4,11 +4,25 @@ backend/docs/consultant-knowledge-core.md and
 backend/docs/cv-ingestion-pipeline.md.
 """
 
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.models import CrewMember
+
+
+def _mock_user(monkeypatch, role, user_id=None):
+    from app.services.crew import auth_service
+
+    user = CrewMember(
+        id=user_id or str(uuid.uuid4()),
+        full_name=f"{role.title()} User",
+        email=f"{role}-summary@test.com",
+        role=role,
+    )
+    monkeypatch.setattr(auth_service, "get_user_from_token", AsyncMock(return_value=user))
+    return user
 
 
 def test_summarize_response_template_formats_without_keyerror():
@@ -233,6 +247,100 @@ async def test_process_cv_extraction_invalidates_the_summary_cache():
         )
 
     mock_delete.assert_awaited_once_with(cache_service._make_key("summary", crew_id))
+
+
+@pytest.mark.asyncio
+async def test_crew_summary_denies_t1_enumeration(client, db_session, monkeypatch):
+    """Any authenticated T1 caller could previously enumerate crew_summary by
+    ID (one Ollama/cache call per ID). T1 now gets the same not-found string
+    as a missing profile, and generation is never invoked."""
+    _mock_user(monkeypatch, "user")
+    target = CrewMember(
+        full_name="Enumerated Contractor",
+        email="enumerated@example.com",
+        publication_status="approved",
+    )
+    db_session.add(target)
+    await db_session.commit()
+
+    with patch(
+        "app.services.consultant_knowledge.crew_query_service.generate_crew_summary",
+        new=AsyncMock(return_value="A generated summary."),
+    ) as mock_generate:
+        response = await client.post(
+            "/graphql",
+            json={
+                "query": "query($id: String!) { crewSummary(crewId: $id) }",
+                "variables": {"id": target.id},
+            },
+        )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["crewSummary"] == "No crew member found with that id."
+    mock_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_crew_summary_denies_other_users_draft(client, db_session, monkeypatch):
+    """Drafts are visible only to their submitter and administrators: another
+    authenticated user must not obtain a draft's summary."""
+    owner_id = str(uuid.uuid4())
+    _mock_user(monkeypatch, "user")
+    draft = CrewMember(
+        full_name="Someone Elses Draft",
+        email="someone-elses-draft@example.com",
+        publication_status="draft",
+        submitted_by=owner_id,
+    )
+    db_session.add(draft)
+    await db_session.commit()
+
+    with patch(
+        "app.services.consultant_knowledge.crew_query_service.generate_crew_summary",
+        new=AsyncMock(return_value="A generated summary."),
+    ) as mock_generate:
+        response = await client.post(
+            "/graphql",
+            json={
+                "query": "query($id: String!) { crewSummary(crewId: $id) }",
+                "variables": {"id": draft.id},
+            },
+        )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["crewSummary"] == "No crew member found with that id."
+    mock_generate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_crew_summary_allows_staff_for_approved_profile(client, db_session, monkeypatch):
+    """Staff (T2) with profile access still receive the authorized summary."""
+    _mock_user(monkeypatch, "staff")
+    target = CrewMember(
+        full_name="Approved Contractor",
+        email="approved-summary@example.com",
+        publication_status="approved",
+    )
+    db_session.add(target)
+    await db_session.commit()
+
+    with patch(
+        "app.services.consultant_knowledge.crew_query_service.generate_crew_summary",
+        new=AsyncMock(return_value="A generated summary."),
+    ):
+        response = await client.post(
+            "/graphql",
+            json={
+                "query": "query($id: String!) { crewSummary(crewId: $id) }",
+                "variables": {"id": target.id},
+            },
+        )
+
+    body = response.json()
+    assert "errors" not in body, body
+    assert body["data"]["crewSummary"] == "A generated summary."
 
 
 @pytest.mark.asyncio

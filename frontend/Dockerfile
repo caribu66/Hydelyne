@@ -31,8 +31,7 @@ RUN API_ORIGIN=$(printf '%s' "$VITE_GRAPHQL_URL" | sed -E 's#^(https?://[^/]+).*
     && ESCAPED_ORIGIN=$(printf '%s' "$API_ORIGIN" | sed 's#[\\&#]#\\&#g') \
     && sed "s#__API_ORIGIN__#${ESCAPED_ORIGIN}#" /etc/nginx/conf.d/default.conf.template \
        > /etc/nginx/conf.d/default.conf \
-    && rm /etc/nginx/conf.d/default.conf.template \
-    && nginx -t
+    && rm /etc/nginx/conf.d/default.conf.template
 
 EXPOSE 80
 

@@ -55,8 +55,7 @@ services:
       OLLAMA_FLASH_ATTENTION: "1"
     volumes:
       # Reuse the models already on disk (~28GB) instead of pulling them again.
-      # Read-only, so the container serves them but never mutates the store.
-      - ${OLLAMA_MODELS_PATH:-${HOME}/.ollama/models}:/models:ro
+      - ${OLLAMA_MODELS_PATH:-${HOME}/.ollama/models}:/models
       - ollama_data:/root/.ollama
     security_opt:
       # The large read-only model bind mount is not SELinux-relabelled; disabling

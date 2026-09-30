@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 QDRANT_COLLECTION = "documents"
 VECTOR_SIZE = 384
 MAX_EMBEDDING_RESPONSE_BYTES = 256 * 1024
+# Bound every synchronous provider call (upsert/query/delete/collection
+# checks run in worker threads via to_thread): without this a hung Qdrant
+# parks the thread indefinitely and repeated stalls exhaust the pool.
+QDRANT_REQUEST_TIMEOUT_SECONDS = 30
 
 
 class SemanticSearchProviderUnavailable(RuntimeError):
@@ -49,7 +53,11 @@ class QdrantService:
     @property
     def client(self) -> QdrantClient:
         if self._client is None:
-            self._client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+            self._client = QdrantClient(
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
+                timeout=QDRANT_REQUEST_TIMEOUT_SECONDS,
+            )
         if not self._collection_ensured:
             try:
                 self._ensure_collection(self._client)

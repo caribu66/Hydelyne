@@ -288,6 +288,25 @@ describe('sortProfiles', () => {
     expect(sortProfiles(profiles, 'experience-asc', '').map((p) => p.id)).toEqual(['a', 'c', 'b']);
   });
 
+  it('sorts unknown experience last in both experience directions', () => {
+    const mixed = [
+      makeProfile({ id: 'unknown', yearsOfExperience: null }),
+      ...profiles,
+    ];
+    expect(sortProfiles(mixed, 'experience-asc', '').map((p) => p.id)).toEqual([
+      'a',
+      'c',
+      'b',
+      'unknown',
+    ]);
+    expect(sortProfiles(mixed, 'experience-desc', '').map((p) => p.id)).toEqual([
+      'b',
+      'c',
+      'a',
+      'unknown',
+    ]);
+  });
+
   it('sorts by name ascending / descending', () => {
     expect(sortProfiles(profiles, 'name-asc', '').map((p) => p.id)).toEqual(['b', 'c', 'a']);
     expect(sortProfiles(profiles, 'name-desc', '').map((p) => p.id)).toEqual(['a', 'c', 'b']);

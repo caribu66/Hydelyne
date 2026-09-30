@@ -1,5 +1,158 @@
 # Changelog
 
+## Showcase readiness — all backend tests green (2026-09-30)
+
+- Fixed all 11 failing backend tests on top of the uncommitted WIP tree; full
+  suite is now 736 passed (2 `llm`-marked deselected by default config), with
+  `ruff check`, `mypy` (60 files), single Alembic head, and `git diff --check`
+  clean. Frontend untouched and green: `tsc`+ESLint, 239 vitest tests,
+  `ui:audit:strict`. Both container images (`backend/`, `frontend/`) build
+  under Podman and `compose config` validates. Tool: OpenCode/Muse Spark.
+- Root causes (verified against HEAD via `git stash`, not assumed):
+  - 5 failures pre-existed at HEAD (never-passing tests): wrong import
+    (`app.services.auth`, which does not exist — `auth_service` lives in
+    `app.services.crew`), a detail query that never selected `documentRef`,
+    two Dropbox download fixtures using 3-part paths that were never managed
+    (endpoint correctly 404s), and a patch target
+    (`app.services.upload.dropbox_request`) that never existed — the call
+    goes through `dropbox_request_status`.
+  - 6 failures came from the WIP tree: `list_crew_members` was made lenient
+    (blank→unfiltered, oversized→`[]`), `_extracted_certification_status`
+    was reordered expiry-first, and the medical projection was loosened to
+    not-rejected; conftest's new `index_document`/`delete_document`
+    instance mocks shadowed the real methods two task-wait tests exercise.
+- Deliberate contract decisions where committed tests conflicted:
+  - Blank/oversized keyword search stays fail-closed (`ValueError`, matching
+    GraphQL/REST/`process_query`); the two hardening tests were aligned to
+    the strict contract instead of weakening the boundary test.
+  - Lifecycle vs trust split into two axes: `_extracted_certification_status`
+    stays verification-first; `link_extracted_certificate` derives
+    date-driven warnings (`expired`/`expiring_soon`) from document evidence
+    but demotes positive `valid` to `pending_verification` (same demotion as
+    `update_certification`); the medical projection uses one shared
+    `counts_as_medical_evidence` predicate (verified, or document-backed and
+    not rejected — bare pending rows never populate), now shared by both
+    reconcile paths and the compliance recompute instead of three copies.
+- Remaining risk: `ruff format --check` still flags pre-existing drift in 44
+  files (untouched lines only — new/edited lines are format-clean); the
+  `alembic` venv shim has a stale shebang (use `python -m alembic`).
+
+## Container startup, build hardening & session initialization fixes (2026-09-17)
+
+- Removed `:ro` flag from Ollama `/models` volume mount in `docker-compose.yml` so Ollama can initialize its manifests directory and download models on clean hosts without read-only filesystem crashes.
+- Added `frontend/.dockerignore` and `backend/.dockerignore` to prevent host `node_modules`, `dist`, `.venv`, and build caches from stomping on container build stages during `COPY . .`.
+- Removed build-time `nginx -t` from `frontend/Dockerfile` which failed under rootless Podman build namespaces attempting to bind port 80.
+- Resolved "Loading session…" hang:
+  - In `backend/app/graphql/schema.py`, removed `@require_auth` from `me` and added session token user extraction so `me` query returns `data: { me: null }` without error when unauthenticated instead of raising an `UNAUTHENTICATED` GraphQLError.
+  - In `frontend/src/lib/apollo.ts`, guarded `hydenlyne:session-expired` so `Me` probe queries do not trigger false session expirations and cache resets.
+  - In `frontend/src/hooks/useAuth.tsx`, ensured `setInitialized(true)` is set on session expiration so the public view is rendered without blocking.
+- Successfully verified `./scripts/local-stack.sh start` and end-to-end unauthenticated/authenticated flows: all 11 services running and healthy. Tool: Antigravity.
+
+## Hidden-Bug Pass 376 — AI-result synthesis and sorting integrity (2026-09-15)
+
+- AI-synthesized roster rows now reuse the local mapper's conventions instead
+  of maintaining a divergent fallback set: initials avatars via `avatarFor`
+  (empty `src` broke images in shortlist/detail views) and tag-derived
+  departments via `departmentFromTags` (empty badge), both newly exported from
+  `lib/mappers.ts` as the single source of truth.
+- Unknown experience now sorts last in ascending experience order (previously
+  presented first as zero years), mirroring the existing rate-asc
+  nulls-last pattern. Descending order already placed unknowns last.
+- The dossier "latest project" is now derived by parsed start-date instead of
+  lexicographic comparison, so malformed values like "Q3 2024" can no longer
+  outrank a real ISO date; entries without parseable dates sort last. New
+  `latestWorkHistoryEntry` helper in `dossierUtils.ts` with coverage.
+- Left deliberately unchanged after inspection: the tag-derived title guess
+  and `On-site` default match the local mapper's own conventions; unknown
+  availability mapping to `Unavailable` matches the backend fail-closed
+  doctrine; the experience-range filter excluding unknowns is fail-closed too.
+- Added regression coverage (6 tests). Frontend tests (239), TypeScript,
+  ESLint, build, and UI audit passed. Tool: OpenCode/Muse Spark.
+
+## Hidden-Bug Pass 375 — provider timeouts and worker efficiency (2026-09-15)
+
+- Bounded all synchronous search-provider calls with finite client timeouts:
+  Qdrant 30s (`QDRANT_REQUEST_TIMEOUT_SECONDS`, also used by both `/health`
+  probes) and Meilisearch 10s (`MEILISEARCH_REQUEST_TIMEOUT_SECONDS`). Both
+  SDKs default to no timeout, so a hung provider used to park worker threads
+  indefinitely. Existing fail-closed handlers now engage instead.
+- `setup_indexes` no longer swallows configuration failure: it propagates so
+  the existing lifespan warning fires, instead of booting with silently
+  unconfigured search attributes.
+- Batched the periodic compliance medical recompute from two round-trips per
+  affected crew to two queries total, with identical recompute semantics.
+- Triaged two hunt claims as non-bugs: `document_indexable_text` excludes
+  `extracted_text` deliberately (C3 must stay PostgreSQL-only, documented on
+  the helper), and `reconcile_crew_projection` closes its session before
+  network I/O while `index_crew_member` re-reads the source row itself.
+- Added regression coverage (4 tests). Full suite 702 passed with only the 34
+  failures already proven pre-existing at HEAD. Ruff check clean, format clean
+  on touched lines, mypy zero new errors. Tool: OpenCode/Muse Spark.
+
+## Hidden-Bug Pass 374 — availability fail-closed creation default (2026-09-15)
+
+- Profiles created without recorded availability now persist as `unavailable`
+  instead of `available`: changed the ORM default on
+  `CrewMember.availability_status` and the `CrewMemberCreateDTO`/`CrewMemberDTO`
+  defaults to match the GraphQL read side and the mobilization compliance
+  preflight (missing availability is not evidence of mobilizability). No
+  migration: the column has no `server_default`, so this is an ORM-side
+  default change only. Seeds set availability explicitly and are unaffected.
+- Triaged the remaining contract-batch claims without changing them:
+  `DocumentClassification.CERT="cert"` is consumed only by the retired
+  `uploadDocument` mutation; `CertType` values are the persisted source via
+  `addCertification`; publication `approved` defaults carry documented intent
+  (explicit creation paths) and would need a migration; pagination defaults
+  are bounded server-side; the Qdrant projection gap is search-quality work
+  for a later pass with a reindex plan.
+- Updated the `test_create_crew_member` assertion and added an ORM persistence
+  regression test. Full suite 698 passed with only the 34 failures already
+  proven pre-existing at HEAD. Ruff check clean, format clean on touched
+  lines, mypy zero new errors. Tool: OpenCode/Muse Spark.
+
+## Hidden-Bug Pass 373 — backend security fail-open and authz fixes (2026-09-15)
+
+- Login brute-force protection now survives a Redis outage: `increment_rate_limit`
+  falls back to a bounded process-local fixed-window counter instead of leaving
+  logins unmetered. Logins keep working; the 6th rapid attempt is still throttled.
+- Dropbox webhook signature verification is now mandatory in every environment:
+  without a configured app secret the endpoint returns 503 instead of queuing
+  sync work for unauthenticated requests.
+- Admin document downloads (local and Dropbox routes) now fail closed with a
+  retryable 503 when the audit write fails, instead of serving unlogged C3 bytes.
+- Contractor-upload broker failures now mark the paired review-queue row `failed`
+  alongside the document, so staff no longer see a stale `unread` item for a
+  document that can never be processed.
+- `crewSummary` now enforces `can_access_profile` and denies T1 callers like
+  `documentsByCrew`, returning the same not-found string so denials do not
+  oracle whether a profile ID exists.
+- Added regression coverage (10 tests). Backend: targeted suites pass (login
+  rate-limit, crew summary, dropbox deletion, field-level auth minus 3
+  pre-existing failures, documents minus 5 pre-existing failures); full suite
+  697 passed with 34 failures all proven identical at HEAD (no live
+  Redis/Meilisearch/providers in this sandbox). Ruff check clean, ruff format
+  clean on touched lines (5 files were already format-dirty at HEAD), mypy
+  shows zero new errors (11 pre-existing, dependency-drift). Tool: OpenCode/Muse
+  Spark. Note: the repo backend `.venv` is broken in this environment (its base
+  interpreter path does not exist); verification used a fresh Python 3.11 venv
+  in /tmp with the pinned requirements.
+
+## Hidden-Bug Pass 372 — frontend trust and lifecycle fixes (2026-09-15)
+
+- Restricted `hasOriginalDocumentFile` to HTTPS(S) and inert data-URL document
+  binaries (PDF, images, octet-stream, plain text), so `data:text/html` payloads
+  from untrusted index contents can no longer be opened as original files.
+- Fixed `mobilizationMailto` encoding the whole recipient (breaking `+`/`@`) and
+  letting a stored `?`/`#` split the subject; only the subject is now encoded.
+- Closed a CSV-injection bypass where leading whitespace, tabs, or line breaks
+  hid `=`, `+`, `-`, `@`, `|`, `%` prefixes from the formula guard.
+- Made shortlist copy failures visible (inline alert) and preserved the secure
+  upload link in a toast when the clipboard is unavailable, instead of losing it.
+- Retained Blob object URLs for a 5s grace period across document, shortlist,
+  comparison, and bundle downloads so Firefox/Safari can consume them.
+- Added regression coverage. Frontend tests (233), TypeScript, ESLint, build,
+  and UI audit passed. Tool: OpenCode/Muse Spark.
+
 ## 2026-09-13
 
 - **CV extraction failure-state fix** — Codex — exceptional CV extraction

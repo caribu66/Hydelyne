@@ -97,13 +97,15 @@ def _critical_credential_issue(
     crew: CrewMember,
     certifications: list[Certification],
     start_date: date,
+    *,
+    has_active_assignments: bool = False,
 ) -> str | None:
     """Return a blocking availability or credential issue, if any."""
     if crew.publication_status == "rejected":
         return "Specialist profile is rejected"
     if crew.availability_status == "unavailable":
         return "Specialist is marked unavailable"
-    if crew.availability_status == "on_assignment":
+    if not has_active_assignments and crew.availability_status == "on_assignment":
         if crew.availability_date is None:
             return "Specialist is already on assignment with no release date"
         if crew.availability_date >= start_date:
@@ -213,18 +215,6 @@ class AssignmentService:
             ):
                 raise PermissionError("Crew member is not accessible to this actor")
 
-            if status in ACTIVE_ASSIGNMENT_STATUSES:
-                cert_res = await session.execute(
-                    select(Certification).where(Certification.crew_member_id == crew_member_id)
-                )
-                credential_issue = _critical_credential_issue(
-                    crew, list(cert_res.scalars().all()), start_date
-                )
-                if credential_issue is not None:
-                    raise ValueError(
-                        f"Cannot confirm assignment: {credential_issue}. Resolve the credential first."
-                    )
-
             # 2. Schedule conflict check for confirmed/on_board assignments
             if status in ACTIVE_ASSIGNMENT_STATUSES:
                 conflict_stmt = select(CampaignAssignment).where(
@@ -239,6 +229,30 @@ class AssignmentService:
                 if conflict_res.scalar_one_or_none() is not None:
                     raise ValueError(
                         f"Specialist {crew.full_name} already has an active assignment overlapping {start_date} to {end_date}"
+                    )
+
+                cert_res = await session.execute(
+                    select(Certification).where(Certification.crew_member_id == crew_member_id)
+                )
+                has_active = (
+                    await session.execute(
+                        select(CampaignAssignment.id)
+                        .where(
+                            CampaignAssignment.crew_member_id == crew_member_id,
+                            CampaignAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+                        )
+                        .limit(1)
+                    )
+                ).scalar_one_or_none() is not None
+                credential_issue = _critical_credential_issue(
+                    crew,
+                    list(cert_res.scalars().all()),
+                    start_date,
+                    has_active_assignments=has_active,
+                )
+                if credential_issue is not None:
+                    raise ValueError(
+                        f"Cannot confirm assignment: {credential_issue}. Resolve the credential first."
                     )
 
             # 3. Ensure Vessel exists locally in PostgreSQL
@@ -455,19 +469,6 @@ class AssignmentService:
                 raise PermissionError("Crew member is not accessible to this actor")
 
             if new_status in ACTIVE_ASSIGNMENT_STATUSES:
-                cert_res = await session.execute(
-                    select(Certification).where(
-                        Certification.crew_member_id == assignment.crew_member_id
-                    )
-                )
-                credential_issue = _critical_credential_issue(
-                    crew, list(cert_res.scalars().all()), assignment.start_date
-                )
-                if credential_issue is not None:
-                    raise ValueError(
-                        f"Cannot confirm assignment: {credential_issue}. Resolve the credential first."
-                    )
-
                 overlap_stmt = select(CampaignAssignment).where(
                     and_(
                         CampaignAssignment.crew_member_id == assignment.crew_member_id,
@@ -482,6 +483,22 @@ class AssignmentService:
                     raise ValueError(
                         "Specialist already has an active assignment overlapping "
                         f"{assignment.start_date} to {assignment.end_date}"
+                    )
+
+                cert_res = await session.execute(
+                    select(Certification).where(
+                        Certification.crew_member_id == assignment.crew_member_id
+                    )
+                )
+                credential_issue = _critical_credential_issue(
+                    crew,
+                    list(cert_res.scalars().all()),
+                    assignment.start_date,
+                    has_active_assignments=True,
+                )
+                if credential_issue is not None:
+                    raise ValueError(
+                        f"Cannot confirm assignment: {credential_issue}. Resolve the credential first."
                     )
 
             assignment.status = new_status

@@ -85,7 +85,7 @@ def test_managed_dropbox_path_rejects_remote_traversal(value):
 @pytest.mark.asyncio
 async def test_delete_from_dropbox_rejects_unmanaged_path(upload_service):
     upload_service.dropbox_available = True
-    with patch("app.services.upload.dropbox_request", new_callable=AsyncMock) as request:
+    with patch("app.services.upload.dropbox_request_status", new_callable=AsyncMock) as request:
         assert not await upload_service.delete_from_dropbox("/hydenlyne/crew/../../secret.pdf")
         request.assert_not_awaited()
 

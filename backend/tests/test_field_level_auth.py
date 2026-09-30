@@ -266,7 +266,7 @@ query Detail($id: String!) {
         id fullName email phone dateOfBirth
         passport { number }
         certifications { id certType certNumber }
-        workHistory { id clientName }
+        workHistory { id clientName documentRef }
         internalNotes
     }
 }
@@ -742,6 +742,42 @@ async def test_rest_download_rejects_storage_content_with_wrong_magic_bytes(
 
     assert resp.status_code == 422
     assert resp.json()["detail"] == "Stored document failed validation"
+
+
+@pytest.mark.asyncio
+async def test_rest_download_fails_closed_when_audit_write_fails(client, db_session, monkeypatch):
+    """C3 bytes must never leave without an audit entry: if the audit write
+    fails, the download fails (retryable 503) instead of serving unlogged
+    evidence."""
+    crew_id = await _create_crew_with_sensitive_fields(db_session)
+    doc = Document(
+        id=str(uuid.uuid4()),
+        crew_member_id=crew_id,
+        file_name="secret.pdf",
+        file_type="pdf",
+        file_size=10,
+        storage_type="local",
+        storage_path="/tmp/secret.pdf",
+    )
+    db_session.add(doc)
+    await db_session.commit()
+    monkeypatch.setattr(
+        "app.services.crew.auth_service.get_user_from_token",
+        AsyncMock(return_value=_make_user("admin")),
+    )
+    monkeypatch.setattr(
+        "app.services.upload.document_upload_service.get_file_async",
+        AsyncMock(return_value=b"%PDF-1.4\nbytes\n%%EOF"),
+    )
+    monkeypatch.setattr(
+        "app.services.audit.audit_service.log_access",
+        AsyncMock(side_effect=RuntimeError("audit db down")),
+    )
+
+    resp = await client.get(f"/api/documents/{doc.id}/download")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "Download audit unavailable; try again"
 
 
 @pytest.mark.asyncio
@@ -1223,15 +1259,17 @@ async def test_dropbox_download_admin_returns_file_bytes(client, db_session, mon
     crew = CrewMember(id=str(uuid.uuid4()), full_name="Dropbox Download Crew")
     db_session.add(crew)
     await db_session.flush()
+    doc_id = str(uuid.uuid4())
+    managed_path = f"/hydenlyne/{crew.id}/documents/misc/{doc_id}_certificate.pdf"
     doc = Document(
-        id=str(uuid.uuid4()),
+        id=doc_id,
         crew_member_id=crew.id,
         file_name="certificate.pdf",
         file_type="pdf",
         file_size=4,
         storage_type="dropbox",
-        storage_path="/hydenlyne/crew/certificate.pdf",
-        dropbox_path="/hydenlyne/crew/certificate.pdf",
+        storage_path=managed_path,
+        dropbox_path=managed_path,
     )
     db_session.add(doc)
     await db_session.commit()
@@ -1257,15 +1295,17 @@ async def test_dropbox_download_admin_rejects_wrong_magic_bytes(client, db_sessi
     crew = CrewMember(id=str(uuid.uuid4()), full_name="Invalid Dropbox Crew")
     db_session.add(crew)
     await db_session.flush()
+    doc_id = str(uuid.uuid4())
+    managed_path = f"/hydenlyne/{crew.id}/documents/misc/{doc_id}_certificate.pdf"
     doc = Document(
-        id=str(uuid.uuid4()),
+        id=doc_id,
         crew_member_id=crew.id,
         file_name="certificate.pdf",
         file_type="pdf",
         file_size=10,
         storage_type="dropbox",
-        storage_path="/hydenlyne/crew/certificate.pdf",
-        dropbox_path="/hydenlyne/crew/certificate.pdf",
+        storage_path=managed_path,
+        dropbox_path=managed_path,
     )
     db_session.add(doc)
     await db_session.commit()

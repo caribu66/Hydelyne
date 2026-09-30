@@ -255,7 +255,9 @@ export function sortProfiles(
     case 'experience-desc':
       return list.sort((a, b) => numericExperience(b.yearsOfExperience) - numericExperience(a.yearsOfExperience));
     case 'experience-asc':
-      return list.sort((a, b) => numericExperience(a.yearsOfExperience) - numericExperience(b.yearsOfExperience));
+      // Unknown experience sorts last, not as zero years: same nulls-last
+      // convention as the rate-asc branch below.
+      return list.sort((a, b) => (a.yearsOfExperience ?? Number.MAX_SAFE_INTEGER) - (b.yearsOfExperience ?? Number.MAX_SAFE_INTEGER));
     case 'recent': {
       return list.sort((a, b) => {
         const timeA = validTimestamp(a.dateAdded);

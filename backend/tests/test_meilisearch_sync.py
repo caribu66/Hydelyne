@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.meilisearch import meilisearch_client
+from app.services.meilisearch import MeilisearchClient, meilisearch_client
 
 CREATE_CREW_MUTATION = """
 mutation CreateCrewMember($fullName: String!, $email: String) {
@@ -113,7 +113,16 @@ async def test_document_index_waits_for_meilisearch_task_completion():
     fake_client.index.return_value = fake_index
     fake_client.wait_for_task.return_value = SimpleNamespace(status="succeeded")
 
-    with patch.object(meilisearch_client, "_client", fake_client):
+    with (
+        patch.object(meilisearch_client, "_client", fake_client),
+        # conftest replaces index_document with a network-safe AsyncMock;
+        # bind the real method so this test exercises the task-wait logic.
+        patch.object(
+            meilisearch_client,
+            "index_document",
+            MeilisearchClient.index_document.__get__(meilisearch_client),
+        ),
+    ):
         result = await meilisearch_client.index_document({"id": "document-1"})
 
     assert result == {"task_uid": 41}
@@ -128,7 +137,16 @@ async def test_document_delete_reports_failed_meilisearch_task():
     fake_client.index.return_value = fake_index
     fake_client.wait_for_task.return_value = SimpleNamespace(status="failed")
 
-    with patch.object(meilisearch_client, "_client", fake_client):
+    with (
+        patch.object(meilisearch_client, "_client", fake_client),
+        # conftest replaces delete_document with a network-safe AsyncMock;
+        # bind the real method so this test exercises the failure reporting.
+        patch.object(
+            meilisearch_client,
+            "delete_document",
+            MeilisearchClient.delete_document.__get__(meilisearch_client),
+        ),
+    ):
         result = await meilisearch_client.delete_document("document-1")
 
     assert result is False
@@ -164,3 +182,49 @@ async def test_index_setup_waits_for_configuration_tasks():
         await meilisearch_client.setup_indexes()
 
     assert fake_client.wait_for_task.call_count == 5
+
+
+@pytest.mark.asyncio
+async def test_index_setup_failure_propagates_instead_of_being_swallowed():
+    """A failed configuration task must surface (boot logs and continues via
+    the lifespan handler) rather than boot with silently unconfigured indexes."""
+    fake_index = MagicMock()
+    fake_index.update_searchable_attributes.return_value = SimpleNamespace(task_uid=51)
+    fake_index.update_filterable_attributes.return_value = SimpleNamespace(task_uid=52)
+    fake_index.update_sortable_attributes.return_value = SimpleNamespace(task_uid=53)
+    fake_client = MagicMock()
+    fake_client.index.return_value = fake_index
+    fake_client.wait_for_task.return_value = SimpleNamespace(status="failed")
+
+    with (
+        patch.object(meilisearch_client, "_client", fake_client),
+        pytest.raises(RuntimeError, match="did not succeed"),
+    ):
+        await meilisearch_client.setup_indexes()
+
+
+@pytest.mark.asyncio
+async def test_meilisearch_client_has_finite_request_timeout():
+    """Provider calls run in worker threads: an unbounded client would park
+    a thread forever on a hung Meilisearch."""
+    import meilisearch
+
+    from app.services.meilisearch import MEILISEARCH_REQUEST_TIMEOUT_SECONDS
+
+    captured: dict[str, object] = {}
+    real_client = meilisearch.Client
+
+    def _spy(url: str, api_key: object = None, **kwargs: object) -> object:
+        captured.update(kwargs)
+        return real_client(url, api_key, **kwargs)
+
+    client = meilisearch_client
+    old = client._client
+    client._client = None
+    try:
+        with patch.object(meilisearch, "Client", side_effect=_spy):
+            _ = client.client
+    finally:
+        client._client = old
+
+    assert captured.get("timeout") == MEILISEARCH_REQUEST_TIMEOUT_SECONDS

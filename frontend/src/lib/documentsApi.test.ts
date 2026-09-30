@@ -241,6 +241,7 @@ describe('documentsApi contractor upload functions', () => {
     it('defers object URL revocation until after the download is triggered', async () => {
       const revoke = vi.fn()
       const callbacks: Array<() => void> = []
+      const delays: Array<number> = []
       const anchor = {
         href: '',
         download: '',
@@ -258,8 +259,9 @@ describe('documentsApi contractor upload functions', () => {
       vi.stubGlobal('document', documentStub)
       vi.stubGlobal('window', {
         document: documentStub,
-        setTimeout: (callback: () => void) => {
+        setTimeout: (callback: () => void, delay?: number) => {
           callbacks.push(callback)
+          delays.push(delay ?? 0)
           return 1
         },
       })
@@ -272,6 +274,9 @@ describe('documentsApi contractor upload functions', () => {
 
       expect(anchor.click).toHaveBeenCalledOnce()
       expect(revoke).not.toHaveBeenCalled()
+      // The grace period keeps the URL alive for browsers that consume the
+      // anchor navigation asynchronously (Firefox/Safari).
+      expect(delays[0]).toBeGreaterThanOrEqual(1000)
       const revokeCallback = callbacks[0]
       expect(revokeCallback).toBeDefined()
       revokeCallback?.()

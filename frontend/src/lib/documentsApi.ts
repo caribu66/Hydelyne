@@ -276,8 +276,9 @@ export async function downloadDocumentFile(documentId: string, fileName: string)
   anchor.remove()
   // Let the browser consume the object URL before revoking it. Synchronous
   // revocation can cancel the download in browsers that schedule the anchor
-  // navigation after the click handler returns.
-  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
+  // navigation after the click handler returns; Firefox/Safari may still be
+  // consuming the URL after a 0ms tick, so retain it for a grace period.
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 5000)
 }
 
 export type BE_Classification =

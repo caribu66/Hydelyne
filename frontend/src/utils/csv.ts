@@ -3,7 +3,10 @@ export type CsvCellValue = string | number | null | undefined;
 /** Escape a value for CSV and prevent spreadsheet formula interpretation. */
 export function csvCell(value: CsvCellValue): string {
   const text = String(value ?? '');
-  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  // Spreadsheets ignore leading whitespace (spaces, tabs, line breaks) when
+  // detecting formulas, so inspect the first significant character, not the
+  // raw start. `trimStart` covers exactly that whitespace class.
+  const safeText = /^[=+\-@|%]/.test(text.trimStart()) ? `'${text}` : text;
   return `"${safeText.replace(/"/g, '""')}"`;
 }
 

@@ -16,6 +16,7 @@ from app.domain.crew_accounts import is_contractor_profile
 from app.models import Certification, CrewMember
 from app.models import Document as DocumentModel
 from app.services.audit import append_document_audit_entry
+from app.services.certification_projection import counts_as_medical_evidence
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ def _get_sync_redis_client() -> redis.Redis:
     # redis-py ships py.typed, but `from_url` itself has no parameter/return
     # annotations in its own source (same finding as cache.py's async
     # equivalent) — genuinely unclassifiable by mypy, not a stub gap.
-    client: redis.Redis = redis.from_url(
+    client: redis.Redis = redis.from_url(  # type: ignore[no-untyped-call]
         settings.REDIS_URL,
         encoding="utf-8",
         decode_responses=True,
@@ -290,25 +291,30 @@ class ComplianceAlertService:
         if affected_crew_ids:
             # Recompute the denormalized medical projection from all current
             # evidence. An older certificate may expire while a newer one for
-            # the same contractor is still valid.
-            for crew_id in affected_crew_ids:
-                crew = session.execute(
-                    select(CrewMember).where(CrewMember.id == crew_id).with_for_update()
-                ).scalar_one_or_none()
+            # the same contractor is still valid. Batched into two queries
+            # regardless of crew count instead of two round-trips per crew.
+            crew_ids = sorted(affected_crew_ids)
+            crews = {
+                crew.id: crew
+                for crew in session.execute(
+                    select(CrewMember).where(CrewMember.id.in_(crew_ids)).with_for_update()
+                ).scalars()
+            }
+            expiries_by_crew: dict[str, list[date]] = {crew_id: [] for crew_id in crew_ids}
+            for cert in session.execute(
+                select(Certification).where(Certification.crew_member_id.in_(crew_ids))
+            ).scalars():
+                if (
+                    cert.expiry_date
+                    and is_medical_cert_type(cert.cert_type)
+                    and counts_as_medical_evidence(cert)
+                ):
+                    expiries_by_crew[cert.crew_member_id].append(cert.expiry_date)
+            for crew_id in crew_ids:
+                crew = crews.get(crew_id)
                 if crew is None:
                     continue
-                medical_dates = [
-                    cert.expiry_date
-                    for cert in session.execute(
-                        select(Certification).where(Certification.crew_member_id == crew_id)
-                    ).scalars()
-                    if (
-                        cert.expiry_date
-                        and is_medical_cert_type(cert.cert_type)
-                        and (cert.status is None or cert.status != "rejected")
-                        and cert.verification_status == "verified"
-                    )
-                ]
+                medical_dates = expiries_by_crew[crew_id]
                 replacement_expiry = max(medical_dates) if medical_dates else None
                 crew.medical_expiry = replacement_expiry
                 crew.medical_status = (

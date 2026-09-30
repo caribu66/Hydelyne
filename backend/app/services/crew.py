@@ -995,6 +995,7 @@ class CertificationService:
             ).scalar_one_or_none()
             if crew is None or not is_contractor_profile(crew):
                 raise ValueError("Crew member not found")
+            status = _extracted_certification_status(expiry_date, "verified")
             cert = Certification(
                 crew_member_id=crew_id,
                 cert_type=cert_type,
@@ -1002,6 +1003,8 @@ class CertificationService:
                 issuing_body=issuing_body,
                 issue_date=issue_date,
                 expiry_date=expiry_date,
+                status=status,
+                verification_status="verified",
             )
             session.add(cert)
             if is_medical_cert_type(cert_type):
@@ -1315,7 +1318,14 @@ class CertificationService:
         ):
             extracted_confidence = round(float(raw_confidence), 2)
 
-        status = _extracted_certification_status(expiry_date, "unverified")
+        # Lifecycle warnings (expired/expiring_soon) describe calendar facts
+        # evidenced in the linked document and display freely; a positive
+        # "valid" claim requires administrator verification (same demotion
+        # as update_certification), so it stays pending_verification here.
+        # Trust itself remains in verification_status, which compliance
+        # checks gate on independently.
+        evidenced_status = _extracted_certification_status(expiry_date, "verified")
+        status = evidenced_status if evidenced_status != "valid" else "pending_verification"
 
         factory = get_session_factory()
         async with factory() as session:

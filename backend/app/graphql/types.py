@@ -179,6 +179,7 @@ class CertStatus(Enum):
     EXPIRING_SOON = "expiring_soon"
     EXPIRED = "expired"
     PENDING_VERIFICATION = "pending_verification"
+    REJECTED = "rejected"
 
 
 @strawberry.enum

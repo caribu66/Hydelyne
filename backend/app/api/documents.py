@@ -299,6 +299,18 @@ async def upload_requested_document(
                 ).scalar_one()
                 if doc.extraction_status == "pending":
                     doc.extraction_status = "failed"
+                    # The review row committed above would otherwise linger as
+                    # `unread` in the staff queue for a document that can never
+                    # be processed. Mark it terminal alongside the document.
+                    review = (
+                        await session.execute(
+                            _select(IncomingDocumentReview)
+                            .where(IncomingDocumentReview.document_id == document_id)
+                            .with_for_update()
+                        )
+                    ).scalar_one_or_none()
+                    if review is not None and review.status in ("unread", "claimed"):
+                        review.status = "failed"
                     await session.commit()
         return {
             "id": document_id,
@@ -817,11 +829,16 @@ async def download_document(
             ):
                 raise HTTPException(status_code=404, detail="Document not found")
 
-        # Audit log: record access
+        # Audit log: record access. C3 bytes must never leave without an audit
+        # entry, so an audit-write failure fails the download (retryable 503)
+        # instead of serving unlogged evidence.
         try:
             await audit_service.log_access(document_id, current_user.id, "download")
         except Exception as e:
             logger.warning("Document audit write failed (%s)", type(e).__name__)
+            raise HTTPException(
+                status_code=503, detail="Download audit unavailable; try again"
+            ) from e
 
         # This route is async: use the async storage helper so a Dropbox
         # cache miss does not call asyncio.run() from inside the active loop.

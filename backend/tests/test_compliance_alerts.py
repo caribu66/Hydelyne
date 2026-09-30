@@ -144,6 +144,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         email="devans@example.com",
         role="user",
         medical_status="fit",
+        publication_status="approved",
     )
     db_session.add(crew)
 
@@ -169,6 +170,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         cert_type="OGUK Medical",
         expiry_date=date(2026, 8, 20),
         status="valid",
+        verification_status="verified",
         document_ref=doc_id,
     )
     # 2. Urgent cert in 30d window (needs status update to "expiring_soon")
@@ -178,6 +180,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         cert_type="BOSIET",
         expiry_date=date(2026, 9, 20),
         status="valid",
+        verification_status="verified",
     )
     # 3. Warning cert in 60d window
     cert_60d = Certification(
@@ -186,6 +189,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         cert_type="HUET",
         expiry_date=date(2026, 10, 15),
         status="valid",
+        verification_status="verified",
     )
     # 4. Notice cert in 90d window
     cert_90d = Certification(
@@ -194,6 +198,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         cert_type="FOET",
         expiry_date=date(2026, 11, 20),
         status="valid",
+        verification_status="verified",
     )
     # 5. Compliant cert (> 90 days)
     cert_ok = Certification(
@@ -202,6 +207,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         cert_type="STCW",
         expiry_date=date(2027, 5, 1),
         status="valid",
+        verification_status="verified",
     )
     # 6. Already expired cert (status already "expired", should be in alerts but not re-updated)
     cert_already_expired = Certification(
@@ -210,6 +216,7 @@ async def test_evaluate_and_update_compliance_sync(db_session):
         cert_type="CA-EBS",
         expiry_date=date(2026, 7, 1),
         status="expired",
+        verification_status="verified",
     )
     rejected_future = Certification(
         id=str(uuid.uuid4()),
@@ -466,6 +473,7 @@ async def test_expiring_soon_cert_does_not_leak_into_medical_status(db_session):
         cert_type="OGUK Medical",
         expiry_date=date.today() + timedelta(days=10),
         status="valid",
+        verification_status="verified",
     )
     db_session.add(cert)
     await db_session.commit()
@@ -510,6 +518,7 @@ async def test_async_check_and_update_expiration_status_transitions_expiring_soo
         cert_type="OGUK Medical",
         expiry_date=date.today() - timedelta(days=2),
         status="expiring_soon",
+        verification_status="verified",
     )
     db_session.add(cert)
     await db_session.commit()
@@ -589,3 +598,84 @@ async def test_expiring_old_medical_does_not_hide_newer_valid_medical(db_session
     assert old_cert.status == "expired"
     assert crew.medical_expiry == current_cert.expiry_date
     assert crew.medical_status == "fit"
+
+
+@pytest.mark.asyncio
+async def test_sync_medical_recompute_is_batched_not_per_crew(db_session, monkeypatch):
+    """The periodic recompute must not issue two round-trips per affected crew:
+    one crew SELECT and one certification SELECT cover every affected crew."""
+    ref_date = date(2026, 9, 1)
+    crews = [
+        CrewMember(id=str(uuid.uuid4()), full_name=f"Batched Recompute Crew {i}") for i in range(3)
+    ]
+    db_session.add_all(crews)
+    # Each crew gets a transitioning driver cert plus distinct medical evidence.
+    drivers = [
+        Certification(
+            id=str(uuid.uuid4()),
+            crew_member_id=crews[i].id,
+            cert_type="BOSIET",
+            expiry_date=date(2026, 9, 11),
+            status="valid",
+        )
+        for i in range(3)
+    ]
+    medicals = [
+        Certification(  # expired verified medical -> recompute yields expired
+            id=str(uuid.uuid4()),
+            crew_member_id=crews[0].id,
+            cert_type="OGUK Medical",
+            expiry_date=date(2026, 8, 20),
+            status="valid",
+            verification_status="verified",
+        ),
+        Certification(  # future verified medical -> recompute yields fit
+            id=str(uuid.uuid4()),
+            crew_member_id=crews[1].id,
+            cert_type="OGUK Medical",
+            expiry_date=date(2027, 5, 1),
+            status="valid",
+            verification_status="verified",
+        ),
+    ]
+    db_session.add_all(drivers + medicals)
+    await db_session.commit()
+
+    from app.services.sync_processor import get_sync_session
+
+    sync_session = get_sync_session()
+    statements: list[str] = []
+    real_execute = sync_session.execute
+
+    def _counting_execute(statement: object, *args: object, **kwargs: object) -> object:
+        statements.append(
+            str(
+                statement.compile(compile_kwargs={"literal_binds": True})  # type: ignore[union-attr]
+            )
+        )
+        return real_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(sync_session, "execute", _counting_execute)
+    try:
+        result = compliance_service.evaluate_and_update_compliance_sync(
+            sync_session, reference_date=ref_date
+        )
+    finally:
+        sync_session.close()
+
+    assert result["updated"] == 4
+    crew_selects = [sql for sql in statements if "FROM crew_members" in sql]
+    cert_selects = [sql for sql in statements if "FROM certifications" in sql]
+    # Two batched cert scans (rows, then empty) plus one batched recompute
+    # select each; the crew count includes the scan's selectin-load of the
+    # crew relationship. The old per-crew loop needed three recompute selects
+    # of each kind for three crews (four crew selects, five cert selects).
+    assert len(crew_selects) == 2
+    assert len(cert_selects) == 3
+
+    await db_session.refresh(crews[0])
+    await db_session.refresh(crews[1])
+    await db_session.refresh(crews[2])
+    assert crews[0].medical_status == "expired"
+    assert crews[1].medical_status == "fit"
+    assert crews[2].medical_status is None

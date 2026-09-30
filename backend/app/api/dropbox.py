@@ -117,19 +117,19 @@ async def dropbox_webhook_handler(
     """Handle Dropbox webhook notifications for file changes."""
     raw_body = await _read_bounded_webhook_body(request)
     signature = request.headers.get("X-Dropbox-Signature", "")
-    # Enforce signature in production; in dev allow empty secret with warning
-    if settings.APP_ENV == "production" and not settings.DROPBOX_APP_SECRET:
+    # Webhooks authenticate with the provider signature before any side
+    # effect. Without a configured secret there is nothing to verify against,
+    # so the endpoint is unavailable in every environment — silently queuing
+    # sync work for unauthenticated requests is not an option even in dev.
+    if not settings.DROPBOX_APP_SECRET:
         raise HTTPException(status_code=503, detail="Dropbox webhook not configured")
-    if settings.DROPBOX_APP_SECRET:
-        expected = hmac.new(
-            settings.DROPBOX_APP_SECRET.encode(),
-            raw_body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            raise HTTPException(status_code=403, detail="Invalid signature")
-    elif settings.APP_ENV == "production":
-        raise HTTPException(status_code=403, detail="Missing signature")
+    expected = hmac.new(
+        settings.DROPBOX_APP_SECRET.encode(),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
     import json as _json
 
@@ -247,9 +247,10 @@ async def continue_dropbox_listing(account_id: str, cursor: str) -> None:
             await process_dropbox_entries(data.get("entries", []))
             await save_dropbox_cursor(account_id, data.get("cursor"))
             while data.get("has_more"):
-                cursor = data.get("cursor")
-                if not cursor:
+                next_cursor = data.get("cursor")
+                if not isinstance(next_cursor, str) or not next_cursor:
                     break
+                cursor = next_cursor
                 status_code, data = await dropbox_request_json(
                     client,
                     "POST",
@@ -596,10 +597,10 @@ async def process_dropbox_file(file_entry: dict) -> None:
         parts = file_path.strip("/").split("/")
         if len(parts) >= 2 and parts[0] == "hydenlyne":
             candidate = parts[1]
-            owner = await session.execute(
+            owner_result = await session.execute(
                 select(CrewMember).where(CrewMember.id == candidate).with_for_update()
             )
-            crew_member_id = _managed_dropbox_owner_id(owner.scalar_one_or_none())
+            crew_member_id = _managed_dropbox_owner_id(owner_result.scalar_one_or_none())
 
         doc = DocumentModel(
             file_name=file_name,
@@ -662,11 +663,16 @@ async def download_dropbox_file(
         if not doc.dropbox_path or not is_managed_dropbox_path(doc.dropbox_path):
             raise HTTPException(status_code=404, detail="Document not found")
 
-        # Audit log: record access
+        # Audit log: record access. C3 bytes must never leave without an audit
+        # entry, so an audit-write failure fails the download (retryable 503)
+        # instead of serving unlogged evidence.
         try:
             await audit_service.log_access(document_id, current_user.id, "download")
         except Exception as exc:
             logger.warning("Audit log failed for Dropbox download (%s)", type(exc).__name__)
+            raise HTTPException(
+                status_code=503, detail="Download audit unavailable; try again"
+            ) from exc
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:

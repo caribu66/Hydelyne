@@ -392,6 +392,7 @@ class DocumentService:
         Returns:
             Dict with extraction results.
         """
+        was_approved_without_evidence = False
         factory = get_session_factory()
         async with factory() as session:
             stmt = select(DocumentModel).where(DocumentModel.id == document_id).with_for_update()
@@ -419,11 +420,11 @@ class DocumentService:
                         "status": "rejected",
                         "classification": normalize_classification(doc.classification),
                     }
-            approved_without_evidence = (
+            was_approved_without_evidence = bool(
                 doc.extraction_status == "approved" and not doc.extracted_data
             )
             if doc.extraction_status == "rejected" or (
-                doc.extraction_status == "approved" and not approved_without_evidence
+                doc.extraction_status == "approved" and not was_approved_without_evidence
             ):
                 return {
                     "document_id": document_id,
@@ -439,7 +440,10 @@ class DocumentService:
                     }
                 logger.warning("Recovering stale document extraction claim")
                 doc.extraction_status = "pending"
-            if doc.extraction_status not in {"pending", "failed"} and not approved_without_evidence:
+            if (
+                doc.extraction_status not in {"pending", "failed"}
+                and not was_approved_without_evidence
+            ):
                 return {
                     "document_id": document_id,
                     "status": doc.extraction_status,
@@ -570,11 +574,13 @@ class DocumentService:
                             "classification": normalize_classification(db_doc.classification),
                         }
                 final_crew_member_id = db_doc.crew_member_id
-                approved_without_evidence = (
+                is_currently_approved_without_evidence = (
                     db_doc.extraction_status == "approved" and not db_doc.extracted_data
                 )
                 if db_doc.extraction_status == "rejected" or (
-                    db_doc.extraction_status == "approved" and not approved_without_evidence
+                    db_doc.extraction_status == "approved"
+                    and not is_currently_approved_without_evidence
+                    and not was_approved_without_evidence
                 ):
                     terminal_status = db_doc.extraction_status
                     # The row may have been reviewed while extraction was in
@@ -643,7 +649,11 @@ class DocumentService:
                         # content. Re-enter the reviewable workflow.
                         db_doc.extraction_status = (
                             "needs_review"
-                            if approved_without_evidence or needs_review
+                            if (
+                                was_approved_without_evidence
+                                or is_currently_approved_without_evidence
+                                or needs_review
+                            )
                             else "extracted"
                         )
                     db_doc.processing_started_at = None
@@ -866,7 +876,13 @@ class DocumentService:
             if doc.crew_member_id:
                 from app.models import CrewMember as CrewMemberModel
 
-                crew = await session.get(CrewMemberModel, doc.crew_member_id)
+                crew = (
+                    await session.execute(
+                        select(CrewMemberModel)
+                        .where(CrewMemberModel.id == doc.crew_member_id)
+                        .with_for_update()
+                    )
+                ).scalar_one_or_none()
                 if crew is None or not is_contractor_profile(crew):
                     raise ValueError("Document is not linked to a contractor profile")
             if doc.extraction_status in {"approved", "rejected"}:

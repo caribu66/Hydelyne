@@ -641,7 +641,11 @@ async def test_admin_metadata_only_upload_document_is_retired(client, monkeypatc
 # must be deliberately (and visibly) added below with a reason, mirroring the
 # admin-mutation list's "add a case when you add a mutation" policy for
 # queries specifically.
-_PUBLIC_QUERIES: set[str] = set()
+_PUBLIC_QUERIES: set[str] = {
+    # 'me' resolves Optional[CrewMember]: returns current user when authenticated,
+    # or null when unauthenticated, so the frontend session probe does not throw.
+    "me",
+}
 
 
 def test_all_queries_require_auth_decorator():

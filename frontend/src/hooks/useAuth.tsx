@@ -80,6 +80,7 @@ function useAuthState(): AuthContextValue {
       sessionTransitionRef.current = 'expired'
       setUser(null)
       clearLegacyAuthToken()
+      setInitialized(true)
       void apolloClient.clearStore().catch(() => {
         // The public shell is still safe because auth state and the token are cleared.
       })

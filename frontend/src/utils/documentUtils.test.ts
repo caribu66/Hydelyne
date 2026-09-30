@@ -35,6 +35,25 @@ describe('hasOriginalDocumentFile', () => {
     expect(hasOriginalDocumentFile({ ...document, fileUrl: 'file:///private/BOSIET.pdf' })).toBe(false);
     expect(hasOriginalDocumentFile({ ...document, fileUrl: 'javascript:alert(1)' })).toBe(false);
   });
+
+  it('accepts inert data-URL document binaries', () => {
+    expect(
+      hasOriginalDocumentFile({ ...document, fileUrl: 'data:application/pdf;base64,JVBERi0x' }),
+    ).toBe(true);
+    expect(hasOriginalDocumentFile({ ...document, fileUrl: 'data:image/png;base64,iVBOR' })).toBe(true);
+  });
+
+  it('rejects active data-URL payloads from untrusted index contents', () => {
+    expect(
+      hasOriginalDocumentFile({ ...document, fileUrl: 'data:text/html,<script>alert(1)</script>' }),
+    ).toBe(false);
+    expect(
+      hasOriginalDocumentFile({ ...document, fileUrl: 'data:application/xhtml+xml;base64,PGI+' }),
+    ).toBe(false);
+    expect(
+      hasOriginalDocumentFile({ ...document, fileUrl: 'data:application/javascript;base64,YWxlcnQ=' }),
+    ).toBe(false);
+  });
 });
 
 describe('isDocumentReviewable', () => {

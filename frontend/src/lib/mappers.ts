@@ -44,7 +44,7 @@ function mapAvailability(status?: string): AvailabilityStatus {
   }
 }
 
-function avatarFor(name: string): string {
+export function avatarFor(name: string): string {
   const initials = name
     .trim()
     .split(/\s+/)
@@ -59,7 +59,7 @@ function avatarFor(name: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
-function departmentFromTags(tags: string[]): string {
+export function departmentFromTags(tags: string[]): string {
   if (tags.some((t) => /mmo|pam|environmental/i.test(t))) return 'Marine Environmental'
   if (tags.some((t) => /seismic|geophys|qc/i.test(t))) return 'Geophysical & Survey QC'
   if (tags.some((t) => /geotech|cpt|cable/i.test(t))) return 'Geotechnical & Subsea'

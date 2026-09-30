@@ -394,14 +394,14 @@ class DocumentRequestService:
                     f"Document decision has already been resolved ({doc.extraction_status})"
                 )
 
-            if action == "approve" and doc.extraction_status not in {"extracted", "needs_review"}:
-                raise ValueError(
-                    "Document extraction is not ready for approval; wait for extraction to finish"
-                )
-
             if normalize_classification(doc.classification) == "cv":
                 raise ValueError(
                     "CV documents must be resolved through the administrator CV review workflow"
+                )
+
+            if action == "approve" and doc.extraction_status not in {"extracted", "needs_review"}:
+                raise ValueError(
+                    "Document extraction is not ready for approval; wait for extraction to finish"
                 )
 
             if actor_role != "admin" and (

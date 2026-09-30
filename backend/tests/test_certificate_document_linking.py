@@ -1106,6 +1106,7 @@ async def test_processing_does_not_overwrite_terminal_review_decision(db_session
         storage_type="local",
         classification="certificate",
         extraction_status="approved",
+        extracted_data={"certificate_type": "BOSIET"},
     )
     db_session.add(doc)
     await db_session.commit()
