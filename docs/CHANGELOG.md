@@ -9,6 +9,13 @@
   unauthenticated `me` returns `{me: null}`, admin login works
   (`admin@hydenlyne.local`, local-only `.env` password), seeded 100 crew via
   additive `seed_100.py` for 107 total with working keyword search.
+- Dropbox live: rebuilt OAuth (old credentials lost with prior env) — new
+  app key/secret + refresh token exchanged via `dropbox_authorize.py` flow
+  and stored in local `.env` only. Verified live: upload stores as
+  `dropbox`, Dropbox download returns exact bytes, `/health/services`
+  reports `dropbox: healthy`, test document deleted afterwards. The
+  auto-refresh provider (`DropboxTokenProvider`) keeps it connected without
+  manual token replacement. Tool: OpenCode/Muse Spark.
 - Bearer follow-up closed, no bug: replaying the real session token as
   `Authorization: Bearer` authenticates fine. The earlier
   `UNAUTHENTICATED` was a smoke-test artifact — `login` intentionally
