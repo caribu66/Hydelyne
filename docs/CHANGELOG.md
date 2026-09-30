@@ -9,11 +9,15 @@
   unauthenticated `me` returns `{me: null}`, admin login works
   (`admin@hydenlyne.local`, local-only `.env` password), seeded 100 crew via
   additive `seed_100.py` for 107 total with working keyword search.
-- Observed, not blocking the demo (browser uses cookies, which work): a body
-  `token` replayed as `Authorization: Bearer` got `UNAUTHENTICATED` on
-  `crewMembers`. Follow-up: check token-vs-cookie handling in the auth
-  context path. Also noted live: login rate limiting (5/5min) engages
-  correctly — avoid rapid repeat logins during the demo. Tool: OpenCode/Muse Spark.
+- Bearer follow-up closed, no bug: replaying the real session token as
+  `Authorization: Bearer` authenticates fine. The earlier
+  `UNAUTHENTICATED` was a smoke-test artifact — `login` intentionally
+  returns `token: null` (pinned by
+  `test_login_returns_user_and_http_only_cookie_without_exposing_token`;
+  the session travels only in the HttpOnly cookie). Frontend never queries
+  the body token. No code change.
+- Noted live: login rate limiting (5/5min) engages correctly — avoid rapid
+  repeat logins during the demo. Tool: OpenCode/Muse Spark.
 
 ## Showcase readiness — all backend tests green (2026-09-30)
 
