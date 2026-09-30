@@ -79,8 +79,11 @@ class MeilisearchClient:
             # raises, so create unconditionally and tolerate already-exists.
             try:
                 self.client.create_index(CREW_MEMBERS_INDEX, {"primaryKey": "id"})
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Meilisearch crew index creation was skipped (%s); it may already exist",
+                    type(exc).__name__,
+                )
 
             crew_index = self.client.index(CREW_MEMBERS_INDEX)
             # C1-only searchable attributes per ADR 0005 — email/phone and
@@ -126,8 +129,11 @@ class MeilisearchClient:
             # Documents index — same lazy-handle reasoning as above.
             try:
                 self.client.create_index(DOCUMENTS_INDEX, {"primaryKey": "id"})
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Meilisearch document index creation was skipped (%s); it may already exist",
+                    type(exc).__name__,
+                )
 
             doc_index = self.client.index(DOCUMENTS_INDEX)
             document_index_tasks = [
@@ -408,9 +414,7 @@ class MeilisearchClient:
             }
         except Exception as exc:
             logger.error("Failed to search documents (%s)", type(exc).__name__)
-            raise SearchProviderUnavailable(
-                "Document search is temporarily unavailable"
-            ) from exc
+            raise SearchProviderUnavailable("Document search is temporarily unavailable") from exc
 
 
 meilisearch_client = MeilisearchClient()

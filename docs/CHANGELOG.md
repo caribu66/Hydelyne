@@ -1,5 +1,18 @@
 # Changelog
 
+## Repository hygiene pass (2026-10-01)
+
+- Added a narrow ignore rule for Claude Code worktrees so local checkout
+  metadata, generated caches, and worktree environment files cannot appear as
+  repository content; the existing worktree was left untouched.
+- Updated the frontend lockfile to resolve the transitive `brace-expansion`
+  advisory; `npm audit --audit-level=moderate` now reports zero vulnerabilities.
+- Replaced silent Meilisearch index-creation and Vessel API cache fallbacks with
+  safe type-only debug diagnostics, and removed an unreachable cache projection
+  fragment. Bandit and the affected provider tests now pass.
+- Tool: Codex. Follow-up: the backend repository-wide Ruff format gate still
+  reports 43 pre-existing files outside this focused cleanup.
+
 ## Client showcase guide (2026-09-30)
 
 - Added `docs/SHOWCASE.md`: a short, non-technical guide for the client

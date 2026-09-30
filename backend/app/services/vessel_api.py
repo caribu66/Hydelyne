@@ -329,9 +329,7 @@ class VesselApiService:
             logger.warning("VesselAPI timeout for %s: %s", method, type(exc).__name__)
             raise VesselApiUpstreamError("Vessel service timed out") from exc
         except httpx.TransportError as exc:
-            logger.warning(
-                "VesselAPI transport failure for %s: %s", method, type(exc).__name__
-            )
+            logger.warning("VesselAPI transport failure for %s: %s", method, type(exc).__name__)
             raise VesselApiUpstreamError("Vessel service unavailable") from exc
 
         if resp.status_code == 401:
@@ -384,17 +382,13 @@ class VesselApiService:
                 vessels = [
                     _coerce_vessel_summary(v) for v in cached["vessels"] if isinstance(v, dict)
                 ]
-                # Rehydrate as plain dicts for GraphQL mapping below
                 return VesselSearchResult(
-                    vessels=[
-                        _coerce_vessel_summary(v) for v in cached["vessels"] if isinstance(v, dict)
-                    ],
+                    vessels=vessels,
                     cached=True,
                     upstream_count=cached.get("upstream_count"),
                 )
-                _ = vessels  # keep mypy quiet if branch unreachable
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Vessel search cache entry ignored (%s)", type(exc).__name__)
 
         data = await self._request(
             "GET",
@@ -430,8 +424,8 @@ class VesselApiService:
                 "upstream_count": len(raw_list),
             }
             await self._set_cached(ckey, to_cache, ttl_s)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Vessel search cache write skipped (%s)", type(exc).__name__)
 
         return VesselSearchResult(vessels=summaries, cached=False, upstream_count=len(raw_list))
 
@@ -444,8 +438,8 @@ class VesselApiService:
         if isinstance(cached, dict) and (cached.get("name") or cached.get("imo")):
             try:
                 return _coerce_vessel_summary(cached)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Vessel detail cache entry ignored (%s)", type(exc).__name__)
         data = await self._request(
             "GET",
             f"/vessel/{vid}",
@@ -464,8 +458,8 @@ class VesselApiService:
         summary = _coerce_vessel_summary(inner)
         try:
             await self._set_cached(ckey, inner, ttl_s)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Vessel detail cache write skipped (%s)", type(exc).__name__)
         return summary
 
     async def get_position(
@@ -524,7 +518,11 @@ class VesselApiService:
             or not -180 <= longitude <= 180
         ):
             raise ValueError("longitude out of range")
-        if not isinstance(radius_m, int) or isinstance(radius_m, bool) or not 100 <= radius_m <= 500000:
+        if (
+            not isinstance(radius_m, int)
+            or isinstance(radius_m, bool)
+            or not 100 <= radius_m <= 500000
+        ):
             raise ValueError("radius must be 100..500000 meters")
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
             raise ValueError("limit must be 1..50")
@@ -542,8 +540,8 @@ class VesselApiService:
                     cached=True,
                     upstream_count=cached.get("upstream_count"),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Vessel radius cache entry ignored (%s)", type(exc).__name__)
         data = await self._request(
             "GET",
             "/location/vessels/radius",
@@ -584,8 +582,8 @@ class VesselApiService:
                 {"vessels": [s.__dict__ for s in summaries], "upstream_count": len(raw_list)},
                 ttl_s,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Vessel radius cache write skipped (%s)", type(exc).__name__)
         return VesselSearchResult(vessels=summaries, cached=False, upstream_count=len(raw_list))
 
     async def health_check(self) -> dict[str, Any]:

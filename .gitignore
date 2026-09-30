@@ -32,6 +32,7 @@ build/
 # AI tool working state (not project content)
 .kilo/
 .claude/scheduled_tasks.lock
+/.claude/worktrees/
 # .claude/skills/ IS tracked — project-level skills read by Claude Code.
 
 # OS
