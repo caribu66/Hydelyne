@@ -7,6 +7,7 @@ Revises: 015_contractor_document_requests
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "016_vessel_assignments"
@@ -27,8 +28,12 @@ def upgrade() -> None:
         sa.Column("length", sa.Float(), nullable=True),
         sa.Column("width", sa.Float(), nullable=True),
         sa.Column("year_built", sa.Integer(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
+        sa.Column(
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
     )
     op.create_index("ix_vessels_name", "vessels", ["name"])
     op.create_index("ix_vessels_mmsi", "vessels", ["mmsi"])
@@ -61,14 +66,22 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=20), nullable=False, server_default="proposed"),
         sa.Column("agreed_day_rate", sa.Float(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
+        sa.Column(
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
     )
-    op.create_index("ix_campaign_assignments_crew_member_id", "campaign_assignments", ["crew_member_id"])
+    op.create_index(
+        "ix_campaign_assignments_crew_member_id", "campaign_assignments", ["crew_member_id"]
+    )
     op.create_index("ix_campaign_assignments_project_id", "campaign_assignments", ["project_id"])
     op.create_index("ix_campaign_assignments_vessel_imo", "campaign_assignments", ["vessel_imo"])
     op.create_index("ix_campaign_assignments_status", "campaign_assignments", ["status"])
-    op.create_index("ix_campaign_assignments_dates", "campaign_assignments", ["start_date", "end_date"])
+    op.create_index(
+        "ix_campaign_assignments_dates", "campaign_assignments", ["start_date", "end_date"]
+    )
 
 
 def downgrade() -> None:

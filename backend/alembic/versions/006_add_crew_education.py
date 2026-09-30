@@ -3,11 +3,12 @@
 Revision ID: 006_add_crew_education
 Revises: 005_add_document_extracted_text
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "006_add_crew_education"
 down_revision: Union[str, None] = "005_add_document_extracted_text"

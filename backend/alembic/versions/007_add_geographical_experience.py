@@ -3,11 +3,12 @@
 Revision ID: 007_add_geographical_experience
 Revises: 006_add_crew_education
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "007_add_geographical_experience"
 down_revision: Union[str, None] = "006_add_crew_education"

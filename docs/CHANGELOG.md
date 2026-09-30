@@ -1,5 +1,77 @@
 # Changelog
 
+## Client showcase guide (2026-09-30)
+
+- Added `docs/SHOWCASE.md`: a short, non-technical guide for the client
+  showcase — problem, capabilities, consultant journey, demo flow, and trust
+  notes, using product terminology (specialist, shortlist, compare,
+  mobilization request).
+- Added `docs/showcase.html`: a self-contained, styled showcase page (inline
+  CSS, no external dependencies, print-friendly) built from the same content
+  for projecting or sharing with potential clients. Open it directly in a
+  browser; the header logo resolves to `hydenlyne-logo-colour.png` at the
+  repo root. Docs-only change; no code, schema, or contract impact.
+  Tool: Muse Code.
+
+## Showcase hardening — avoid Redis socket stalls in login (2026-09-30)
+
+- Login now skips cache reads when Redis health is unavailable and writes
+  failed-attempt counts directly to the bounded process-local fallback. This
+  avoids avoidable Redis socket waits during a cache outage while preserving
+  the existing 5-failure lockout behavior.
+- Verified: auth sequence 5 passed, login rate-limit tests 7 passed, fallback
+  tests 3 passed, touched-file Ruff/mypy/format checks clean, frontend gates
+  remain green from this session. The full backend suite passes outside the
+  restricted runner: 737 passed, 2 deselected in 8.54s. The observed
+  `aiosqlite` stall is sandbox-only and does not reproduce in the normal test
+  environment.
+- Also normalized the legacy Ruff import/whitespace findings across migration
+  and utility scripts; repository-wide `ruff check` now passes without changing
+  runtime behavior.
+- The stricter repository format gate still reports 43 pre-existing files in
+  `app/` and `tests/`; they were intentionally left untouched to avoid a
+  broad formatting-only diff immediately before the showcase.
+
+## Showcase verification — live stack and E2E hardening (2026-09-30)
+
+- Verified the already-running local stack outside the restricted runner: all
+  11 containers are up, backend `/health/` is healthy, and frontend `/health`
+  returns `ok`.
+- Fixed the CV review accessibility contract by exposing the original document
+  as an `Open original CV` link, stabilized workspace screenshot tests with a
+  fixed clock, and refreshed the eight inspected responsive baselines.
+- Stabilized operations accessibility checks by waiting for the animated
+  workspace to settle before Axe evaluation. Full Playwright CI now passes
+  `193 passed, 3 skipped` across mobile, tablet, desktop, and wide projects.
+
+## Showcase hardening — login rate limit counts failures only (2026-09-30)
+
+- The GraphQL `login` rate limiter (5/5min per ip+email) now counts only
+  failed attempts. Previously every attempt incremented the counter, so
+  repeated legitimate logins (e.g. a demo walkthrough) got `RATE_LIMITED`
+  on the 6th login; the new test
+  `test_repeated_successful_logins_are_never_throttled` fails on the old
+  code and passes on the new. Brute-force protection is unchanged: 5
+  failures still lock the bucket for the window (pre-check `>= 5` plus
+  post-failure increment `> 5` for race safety), key/window/threshold
+  untouched, Redis-outage memory fallback still throttles the 6th failure.
+- The login path now checks cache availability before both the rate-limit read
+  and failure write. When Redis is unavailable, it records failures directly
+  in the bounded process-local fallback instead of opening a second socket
+  attempt; this keeps demo authentication responsive during a cache outage.
+- Gates: backend 737 passed (736 + 1 new), `ruff check`/`mypy` clean, new
+  lines format-clean (schema.py drift hunks at 433/691/1339/1420
+  pre-existed); frontend untouched, still lint/239 tests/build/`ui:audit`
+  green from the earlier pass. `git diff --check` clean, single Alembic
+  head (`019_document_processing_lease`).
+- Not done / needs a human: the demo stack is DOWN (no listeners on
+  :8000/:3000) and could not be revived from this session — podman cannot
+  chmod `/run/user/1000/libpod` inside the sandbox and unsandboxed
+  execution needs human approval (prompts disabled). Before the showcase,
+  run `./scripts/local-stack.sh start` from a normal shell, then verify
+  `curl localhost:8000/health` and login once as `admin@hydenlyne.local`.
+  Tool: Muse Code.
+
 ## Showcase stack live with demo data (2026-09-30)
 
 - Committed the tree as `0c92236` (61 files; `.claude/worktrees/` left

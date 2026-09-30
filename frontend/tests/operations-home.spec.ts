@@ -594,6 +594,7 @@ test.describe('operations home — staff visibility and actions', () => {
   test('meets accessibility for operations home', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Test/ })).toBeVisible()
+    await expect(page.locator('.scan-workspace')).toHaveCSS('opacity', '1')
     const results = await new AxeBuilder({ page }).include('[aria-label="Operations overview"]').analyze()
     expect(results.violations).toEqual([])
   })
@@ -606,6 +607,7 @@ test.describe('operations home — staff visibility and actions', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
     await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Test/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Find a contractor' })).toBeVisible()
+    await expect(page.locator('.scan-workspace')).toHaveCSS('opacity', '1')
     const results = await new AxeBuilder({ page }).include('[aria-label="Operations overview"]').analyze()
     expect(results.violations).toEqual([])
     const dimensions = await page.evaluate(() => ({

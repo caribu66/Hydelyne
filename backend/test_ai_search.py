@@ -1,11 +1,10 @@
 """Test AI search capabilities with 50 natural language queries."""
+
 import asyncio
-import json
 import time
 
 from app.database import get_session_factory
 from app.services.crew_query import crew_query_service
-
 
 QUERIES = [
     # Certification searches (1-10)
@@ -19,7 +18,6 @@ QUERIES = [
     "Find people with PAMGUARD Advanced",
     "List crew members with EOD Level 3",
     "Who holds JNCC MMO certification",
-
     # Availability searches (11-20)
     "Who is available immediately",
     "Show me available crew members",
@@ -31,7 +29,6 @@ QUERIES = [
     "Who is ready to mobilize",
     "Show me crew with immediate availability",
     "Find available hydrographers",
-
     # Experience-based searches (21-30)
     "Who has experience in offshore wind",
     "Find crew with 5 years experience",
@@ -43,7 +40,6 @@ QUERIES = [
     "Find crew with geotechnical experience",
     "Show me experienced HSE advisors",
     "Who has offshore construction experience",
-
     # Role/specialty searches (31-40)
     "Find hydrographers",
     "Show me marine mammal observers",
@@ -55,14 +51,12 @@ QUERIES = [
     "Show me ROV operators",
     "Who are the safety advisors",
     "Find environmental specialists",
-
     # Compliance searches (41-45)
     "Who has expired certifications",
     "Show crew with expired medicals",
     "Find people with expiring BOSIET",
     "Who needs to renew their certification",
     "Show me non-compliant crew members",
-
     # Complex/mixed searches (46-50)
     "Find available crew with BOSIET and OGUK Medical",
     "Who has experience in marine surveys and is available",
@@ -94,16 +88,20 @@ async def run_tests():
                 summary = result.get("summary", "")
                 result_count = len(result.get("results", []))
 
-                results.append({
-                    "query": query,
-                    "intent": intent,
-                    "results": result_count,
-                    "time": elapsed,
-                    "success": True,
-                })
+                results.append(
+                    {
+                        "query": query,
+                        "intent": intent,
+                        "results": result_count,
+                        "time": elapsed,
+                        "success": True,
+                    }
+                )
 
                 status = "OK" if result_count > 0 else "EMPTY"
-                print(f"[{i:2d}] {status} | {intent:12s} | {result_count:2d} results | {elapsed:.2f}s")
+                print(
+                    f"[{i:2d}] {status} | {intent:12s} | {result_count:2d} results | {elapsed:.2f}s"
+                )
                 print(f"     Q: {query}")
                 if summary:
                     print(f"     A: {summary[:100]}...")
@@ -112,14 +110,16 @@ async def run_tests():
             except Exception as e:
                 elapsed = time.time() - start
                 total_time += elapsed
-                results.append({
-                    "query": query,
-                    "intent": "ERROR",
-                    "results": 0,
-                    "time": elapsed,
-                    "success": False,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "query": query,
+                        "intent": "ERROR",
+                        "results": 0,
+                        "time": elapsed,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
                 print(f"[{i:2d}] ERROR | {elapsed:.2f}s")
                 print(f"     Q: {query}")
                 print(f"     E: {str(e)[:100]}")

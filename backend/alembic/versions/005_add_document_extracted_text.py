@@ -3,11 +3,12 @@
 Revision ID: 005_add_document_extracted_text
 Revises: 004_add_experience_months
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "005_add_document_extracted_text"
 down_revision: Union[str, None] = "004_add_experience_months"

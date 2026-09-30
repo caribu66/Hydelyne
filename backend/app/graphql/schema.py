@@ -433,15 +433,18 @@ class Query:
     async def crew_member(self, info: Info, id: str) -> Optional[CrewMember]:
         crew = await crew_service.get_crew_member(id)
         actor = info.context["current_user"]
-        if crew and not is_contractor_profile(crew) and actor.role != "admin" and crew.id != actor.id:
+        if (
+            crew
+            and not is_contractor_profile(crew)
+            and actor.role != "admin"
+            and crew.id != actor.id
+        ):
             return None
         if (
             crew
             and crew.publication_status != "approved"
             and actor.role != "admin"
-            and not (
-                crew.publication_status == "draft" and crew.submitted_by == actor.id
-            )
+            and not (crew.publication_status == "draft" and crew.submitted_by == actor.id)
         ):
             return None
         if crew:
@@ -691,9 +694,7 @@ class Query:
             [model], actor_id=actor.id, actor_role=actor.role
         )
         return scrub_project(
-            _model_to_graphql_project(
-                model, crew_assigned=visible_assignments.get(model.id, [])
-            ),
+            _model_to_graphql_project(model, crew_assigned=visible_assignments.get(model.id, [])),
             tier,
         )
 
@@ -1056,16 +1057,28 @@ class Mutation:
         if len(email) > MAX_LOGIN_EMAIL_LENGTH or len(password) > MAX_LOGIN_PASSWORD_LENGTH:
             return AuthPayload(success=False, message="Invalid email or password")
 
-        # Login-specific rate limiting: 5 attempts / 5 min per (ip, canonical email).
-        # increment_rate_limit falls back to a process-local counter when Redis
-        # is down, so brute-force protection holds during an outage instead of
-        # silently disappearing; a None return still fails open but stays loud.
+        # Login-specific rate limiting: 5 failed attempts / 5 min per
+        # (ip, canonical email). Only failures increment the counter: a
+        # successful login is not a brute-force signal, and counting it
+        # locks out legitimate users who authenticate repeatedly. The
+        # pre-check fails open (a None/unparseable read proceeds to
+        # authentication); the post-failure increment is the enforcing
+        # write and falls back to a process-local counter when Redis is
+        # down, so brute-force protection holds during an outage instead
+        # of silently disappearing.
         request = info.context.get("request")
         client_ip = request.client.host if request and request.client else "unknown"
         login_key = f"login:{client_ip}:{email.strip().lower()}"
         try:
-            login_count = await cache_service.increment_rate_limit(login_key, 300)
-            if login_count is not None and login_count > 5:
+            # Avoid a second socket attempt when the health probe already
+            # knows Redis is unavailable; failed-attempt accounting below
+            # still uses the cache service's bounded memory fallback.
+            failed_attempts = (
+                await cache_service.get(login_key)
+                if await cache_service.is_redis_available()
+                else None
+            )
+            if failed_attempts is not None and int(failed_attempts) >= 5:
                 from graphql import GraphQLError
 
                 raise GraphQLError(
@@ -1076,7 +1089,7 @@ class Mutation:
             raise
         except Exception as e:
             logger = logging.getLogger(__name__)
-            logger.warning("Login rate limit check failed: %s", type(e).__name__)
+            logger.warning("Login rate limit pre-check failed: %s", type(e).__name__)
 
         result = await auth_service.authenticate(email, password)
         if result:
@@ -1114,6 +1127,27 @@ class Mutation:
                     availability_status="unavailable",
                 ),
             )
+        # Failed attempt: increment the brute-force counter. The 6th failure
+        # in the window raises RATE_LIMITED instead of returning the generic
+        # invalid-credentials payload.
+        try:
+            failed_count = (
+                await cache_service.increment_rate_limit(login_key, 300)
+                if await cache_service.is_redis_available()
+                else cache_service.increment_rate_limit_fallback(login_key, 300)
+            )
+            if failed_count is not None and failed_count > 5:
+                from graphql import GraphQLError
+
+                raise GraphQLError(
+                    "Too many login attempts. Please try again later.",
+                    extensions={"code": "RATE_LIMITED"},
+                )
+        except GraphQLError:
+            raise
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning("Login rate limit check failed: %s", type(e).__name__)
         return AuthPayload(success=False, message="Invalid email or password")
 
     @strawberry.mutation
@@ -1317,9 +1351,7 @@ class Mutation:
                 flying_point=flying_point,
                 availability_status=availability_status.value if availability_status else None,
             )
-            crew = await crew_service.update_crew_member(
-                id, dto.model_dump(exclude_none=True)
-            )
+            crew = await crew_service.update_crew_member(id, dto.model_dump(exclude_none=True))
         except ValidationError as exc:
             raise GraphQLError(
                 "Invalid crew member input", extensions={"code": "BAD_USER_INPUT"}
@@ -1398,7 +1430,10 @@ class Mutation:
             message = str(exc)
             if "not found" in message.lower():
                 raise GraphQLError("Document not found", extensions={"code": "NOT_FOUND"}) from exc
-            if "cannot be overwritten" in message.lower() or "currently in progress" in message.lower():
+            if (
+                "cannot be overwritten" in message.lower()
+                or "currently in progress" in message.lower()
+            ):
                 raise GraphQLError(
                     "Document is no longer available for confirmation",
                     extensions={"code": "CONFLICT"},

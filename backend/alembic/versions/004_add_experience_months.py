@@ -3,11 +3,12 @@
 Revision ID: 004_add_experience_months
 Revises: 003_add_role
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "004_add_experience_months"
 down_revision: Union[str, None] = "003_add_role"

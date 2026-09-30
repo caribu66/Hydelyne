@@ -109,6 +109,7 @@ test.describe('authenticated specialist workspace', () => {
   test('matches the Hydenlyne workspace baseline', async ({ page }) => {
     await authenticate(page);
     await mockCrewApi(page);
+    await page.clock.install({ time: new Date('2026-09-30T13:00:00Z') });
     await page.goto('/?q=hydrography');
     await expect(page.getByRole('button', { name: /View Alex Morgan dossier/ })).toBeVisible();
     await expect(page).toHaveScreenshot('authenticated-workspace.png', { fullPage: true });
@@ -117,6 +118,7 @@ test.describe('authenticated specialist workspace', () => {
   test('matches the Hydenlyne light workspace baseline', async ({ page }) => {
     await authenticate(page, 'light');
     await mockCrewApi(page);
+    await page.clock.install({ time: new Date('2026-09-30T13:00:00Z') });
     await page.goto('/?q=hydrography');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.getByRole('button', { name: /View Alex Morgan dossier/ })).toBeVisible();

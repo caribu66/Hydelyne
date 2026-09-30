@@ -198,5 +198,9 @@ class CacheService:
         self._memory_rate_limits[key] = (count, now + window_seconds)
         return count
 
+    def increment_rate_limit_fallback(self, key: str, window_seconds: int) -> int:
+        """Record a rate-limit event without opening a Redis connection."""
+        return self._increment_memory_rate_limit(key, window_seconds)
+
 
 cache_service = CacheService()

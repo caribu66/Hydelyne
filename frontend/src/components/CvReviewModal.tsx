@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Check, ClipboardCheck, Loader2, X } from 'lucide-react';
 import { useAccessibleDialog } from '../hooks/useAccessibleDialog';
 import { APPROVE_CV_REVIEW, CV_REVIEWS_QUERY, REJECT_CV_REVIEW } from '../lib/queries';
-import { downloadDocumentFile } from '../lib/documentsApi';
+import { documentDownloadUrl } from '../lib/documentsApi';
 import { apolloResultHasErrors, isSessionDataReady, isSessionQueryEnabled, isSessionRequestCurrent } from '../utils/sessionScope';
 import { formatDocumentDate } from './documentVaultUtils';
 
@@ -46,7 +46,6 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, session
   const [loadingMore, setLoadingMore] = useState(false);
   const [visibleReviews, setVisibleReviews] = useState<CvReview[]>([]);
   const [hasMore, setHasMore] = useState(true);
-  const [downloadingDocument, setDownloadingDocument] = useState(false);
   const requestVersionRef = useRef(0);
   const refreshPendingSessionKeyRef = useRef<string | null>(null);
   const hasCommittedReviewsRef = useRef(false);
@@ -59,7 +58,6 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, session
     setLoadedSessionKey(null);
     setSelectedId(null);
     setActionError(null);
-    setDownloadingDocument(false);
     refreshPendingSessionKeyRef.current = null;
     if (!isOpen || !sessionKey) {
       previousSessionKeyRef.current = null;
@@ -203,22 +201,6 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, session
 
   const handleDataChange = (event: ChangeEvent<HTMLTextAreaElement>) => setDraftData(event.target.value);
 
-  const handleDownloadOriginal = async () => {
-    if (!selected || !sessionKey || currentSessionKeyRef.current !== sessionKey) return;
-    const requestVersion = requestVersionRef.current;
-    setDownloadingDocument(true);
-    try {
-      await downloadDocumentFile(selected.documentId, `cv-${selected.documentId}.pdf`);
-    } catch (actionFailure) {
-      if (requestVersion !== requestVersionRef.current || currentSessionKeyRef.current !== sessionKey) return;
-      setActionError(actionFailure instanceof Error ? actionFailure.message : 'Could not download this CV');
-    } finally {
-      if (requestVersion === requestVersionRef.current && currentSessionKeyRef.current === sessionKey) {
-        setDownloadingDocument(false);
-      }
-    }
-  };
-
   const loadMore = async () => {
     if (!sessionKey || currentSessionKeyRef.current !== sessionKey || !sessionReady) return;
     const requestVersion = requestVersionRef.current;
@@ -267,7 +249,7 @@ export const CvReviewModal: FC<CvReviewModalProps> = ({ isOpen, isAdmin, session
               {selected && <div className="min-h-0 space-y-3 overflow-y-auto rounded-[14px] border border-border-subtle bg-canvas/40 p-4">
                 <div><p className="text-xs font-mono uppercase tracking-wider text-muted">Status</p><p className="text-sm font-semibold capitalize text-primary">{selected.status.replaceAll('_', ' ')}</p></div>
                 {isAdmin && selected.status === 'awaiting_review' ? <>
-                  <button type="button" onClick={() => void handleDownloadOriginal()} disabled={downloadingDocument} className="inline-flex min-h-11 items-center rounded-lg border border-border-strong bg-surface px-4 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50">{downloadingDocument ? 'Downloading…' : 'Download original CV'}</button>
+                  <a href={documentDownloadUrl(selected.documentId)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-lg border border-border-strong bg-surface px-4 text-sm font-semibold text-secondary hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-focus">Open original CV</a>
                   <label className="block text-sm font-semibold text-primary">Extracted CV information<textarea value={draftData} onChange={handleDataChange} className="mt-2 min-h-64 w-full rounded-lg border border-border-strong bg-surface p-3 font-mono text-xs text-primary focus-visible:ring-2 focus-visible:ring-focus" spellCheck={false} /></label>
                   <label className="block text-sm font-semibold text-primary">Review note<textarea value={note} onChange={(event) => setNote(event.target.value)} className="mt-2 min-h-20 w-full rounded-lg border border-border-strong bg-surface p-3 text-sm text-primary focus-visible:ring-2 focus-visible:ring-focus" /></label>
                   <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={handleReject} disabled={rejecting || approving} className="min-h-11 rounded-lg border border-danger-border px-4 text-sm font-semibold text-danger hover:bg-danger-soft focus-visible:ring-2 focus-visible:ring-focus">Reject</button><button type="button" onClick={handleApprove} disabled={rejecting || approving} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-action px-4 text-sm font-semibold text-on-action hover:bg-action-hover focus-visible:ring-2 focus-visible:ring-focus">{approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Approve and publish</button></div>

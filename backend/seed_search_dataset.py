@@ -6,6 +6,7 @@ records and qualifications without deleting or replacing imported data.
 Usage:
     cd backend && .venv/bin/python seed_search_dataset.py
 """
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,6 @@ import sqlite3
 import uuid
 from datetime import date
 from pathlib import Path
-
 
 DATABASE_PATH = Path(__file__).with_name("hydenlyne.db")
 SEED_NAMESPACE = uuid.UUID("2b5c177e-f230-497f-b1f3-fd9e4d78df6f")
@@ -31,7 +31,13 @@ PROFILES = [
     },
     {
         "tags": ["Hydrography", "Multibeam", "QINSy", "Offshore Survey"],
-        "certifications": ["BOSIET", "IHO Cat A Hydrographer", "Multibeam Bathymetry", "QPS QINSy", "OGUK Medical"],
+        "certifications": [
+            "BOSIET",
+            "IHO Cat A Hydrographer",
+            "Multibeam Bathymetry",
+            "QPS QINSy",
+            "OGUK Medical",
+        ],
         "project_type": "offshore hydrographic survey",
         "project_name": "North Sea cable route survey",
         "location": "Aberdeen, UK",
@@ -41,7 +47,12 @@ PROFILES = [
     },
     {
         "tags": ["Geophysics", "Seismic QC", "OBN", "Marine Survey"],
-        "certifications": ["BOSIET", "IOGP Geophysical Rep", "Seismic Data Processing", "OGUK Medical"],
+        "certifications": [
+            "BOSIET",
+            "IOGP Geophysical Rep",
+            "Seismic Data Processing",
+            "OGUK Medical",
+        ],
         "project_type": "marine seismic survey",
         "project_name": "Northern North Sea OBN seismic acquisition",
         "location": "Stavanger, NO",
@@ -61,7 +72,13 @@ PROFILES = [
     },
     {
         "tags": ["HSE", "Safety Case", "Offshore Construction", "NEBOSH"],
-        "certifications": ["BOSIET", "NEBOSH Diploma", "HSE Advisory", "Safety Case Compliance", "OGUK Medical"],
+        "certifications": [
+            "BOSIET",
+            "NEBOSH Diploma",
+            "HSE Advisory",
+            "Safety Case Compliance",
+            "OGUK Medical",
+        ],
         "project_type": "offshore construction support",
         "project_name": "North Sea offshore construction campaign",
         "location": "Aberdeen, UK",
@@ -71,7 +88,13 @@ PROFILES = [
     },
     {
         "tags": ["UXO", "Magnetometer", "ROV", "Cable Route Survey"],
-        "certifications": ["BOSIET", "UXO QC", "Magnetometer", "ROV Video Verification", "OGUK Medical"],
+        "certifications": [
+            "BOSIET",
+            "UXO QC",
+            "Magnetometer",
+            "ROV Video Verification",
+            "OGUK Medical",
+        ],
         "project_type": "offshore UXO cable route survey",
         "project_name": "Baltic export cable UXO clearance survey",
         "location": "Hamburg, DE",
@@ -102,15 +125,15 @@ def seed() -> None:
 
     connection = sqlite3.connect(DATABASE_PATH)
     connection.row_factory = sqlite3.Row
-    columns = {
-        column[1] for column in connection.execute("PRAGMA table_info(crew_members)")
-    }
+    columns = {column[1] for column in connection.execute("PRAGMA table_info(crew_members)")}
     if "experience_months" not in columns:
         connection.execute("ALTER TABLE crew_members ADD COLUMN experience_months INTEGER")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS ix_crew_members_experience_months ON crew_members(experience_months)"
         )
-    workers = connection.execute("SELECT id, tags, medical_status FROM crew_members ORDER BY id").fetchall()
+    workers = connection.execute(
+        "SELECT id, tags, medical_status FROM crew_members ORDER BY id"
+    ).fetchall()
     today = date.today()
     certification_count = work_history_count = 0
 
@@ -122,13 +145,15 @@ def seed() -> None:
         medical_ready = index % 7 != 0
         bosiet_qualified = index % 5 != 0
         certifications = [
-            cert for cert in profile["certifications"]
-            if (cert != "OGUK Medical" or medical_ready)
-            and (cert != "BOSIET" or bosiet_qualified)
+            cert
+            for cert in profile["certifications"]
+            if (cert != "OGUK Medical" or medical_ready) and (cert != "BOSIET" or bosiet_qualified)
         ]
         medical_expiry = (today.replace(year=today.year + 1)).isoformat()
         if medical_ready:
-            medical_status = worker["medical_status"] or ("fit_with_restrictions" if index % 17 == 0 else "fit")
+            medical_status = worker["medical_status"] or (
+                "fit_with_restrictions" if index % 17 == 0 else "fit"
+            )
             connection.execute(
                 """UPDATE crew_members
                    SET tags = ?, profile_completeness_score = COALESCE(profile_completeness_score, 85),
@@ -168,22 +193,41 @@ def seed() -> None:
                     """INSERT INTO certifications
                        (id, crew_member_id, cert_type, issuing_body, issue_date, expiry_date, status, verification_status)
                        VALUES (?, ?, ?, 'Search dataset seed', ?, ?, 'valid', 'verified')""",
-                    (seeded_id(worker["id"], cert_type), worker["id"], cert_type,
-                     today.replace(year=today.year - 1).isoformat(), medical_expiry),
+                    (
+                        seeded_id(worker["id"], cert_type),
+                        worker["id"],
+                        cert_type,
+                        today.replace(year=today.year - 1).isoformat(),
+                        medical_expiry,
+                    ),
                 )
                 certification_count += 1
 
-        for assignment in (profile, {**profile, "project_name": f"[Search seed] {profile['project_name']} follow-up"}):
+        for assignment in (
+            profile,
+            {**profile, "project_name": f"[Search seed] {profile['project_name']} follow-up"},
+        ):
             history_id = seeded_id(worker["id"], assignment["project_name"])
-            exists = connection.execute("SELECT 1 FROM work_history WHERE id = ?", (history_id,)).fetchone()
+            exists = connection.execute(
+                "SELECT 1 FROM work_history WHERE id = ?", (history_id,)
+            ).fetchone()
             if not exists:
                 connection.execute(
                     """INSERT INTO work_history
                        (id, crew_member_id, project_name, project_type, location, country, role, responsibilities, start_date, end_date, status)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed')""",
-                    (history_id, worker["id"], assignment["project_name"], assignment["project_type"],
-                     assignment["location"], assignment["country"], assignment["role"], assignment["responsibilities"],
-                     "2023-03-01", "2024-10-31"),
+                    (
+                        history_id,
+                        worker["id"],
+                        assignment["project_name"],
+                        assignment["project_type"],
+                        assignment["location"],
+                        assignment["country"],
+                        assignment["role"],
+                        assignment["responsibilities"],
+                        "2023-03-01",
+                        "2024-10-31",
+                    ),
                 )
                 work_history_count += 1
 
@@ -198,7 +242,10 @@ def seed() -> None:
         ]
         connection.executemany(
             "UPDATE work_history SET start_date = ?, end_date = ? WHERE id = ?",
-            [(experience_start, today.isoformat(), history_id) for history_id in seeded_history_ids],
+            [
+                (experience_start, today.isoformat(), history_id)
+                for history_id in seeded_history_ids
+            ],
         )
 
         # The seeded contracts deliberately overlap. Their common period is
@@ -209,7 +256,9 @@ def seed() -> None:
         )
 
     connection.commit()
-    print(f"Enriched {len(workers)} crew members; added {certification_count} certifications and {work_history_count} work-history records.")
+    print(
+        f"Enriched {len(workers)} crew members; added {certification_count} certifications and {work_history_count} work-history records."
+    )
 
 
 if __name__ == "__main__":

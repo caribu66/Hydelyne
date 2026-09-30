@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crew DMS by Hydenlyne — Showcase</title>
+<style>
+  :root {
+    --ink: #1c2420;
+    --ink-soft: #43514b;
+    --ink-faint: #6b7a72;
+    --paper: #ffffff;
+    --wash: #f2f5f3;
+    --line: #dfe6e2;
+    --accent: #0d6e5f;
+    --accent-deep: #0a4a41;
+    --gold: #c98a1b;
+    --dark: #101815;
+    --dark-soft: #1d2723;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 32px; }
+
+  /* ---------- header ---------- */
+  header.top {
+    border-bottom: 1px solid var(--line);
+    padding: 20px 0;
+  }
+  header.top .wrap { display: flex; align-items: center; gap: 16px; }
+  header.top img { height: 40px; width: auto; }
+  header.top .wordmark { font-family: Georgia, "Times New Roman", serif; font-size: 22px; letter-spacing: 0.01em; }
+  header.top .wordmark span { color: var(--accent); }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 72px 0 56px; border-bottom: 1px solid var(--line); }
+  .hero h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.12;
+    max-width: 20ch;
+  }
+  .hero h1 em { font-style: italic; color: var(--accent-deep); }
+  .hero p.lede { margin-top: 20px; font-size: 19px; color: var(--ink-soft); max-width: 56ch; }
+  .hero .facts { display: flex; flex-wrap: wrap; gap: 12px 36px; margin-top: 32px; }
+  .hero .facts div { display: flex; align-items: baseline; gap: 10px; }
+  .hero .facts strong { font-family: Georgia, serif; font-size: 30px; font-weight: 400; color: var(--accent-deep); }
+  .hero .facts span { font-size: 14px; color: var(--ink-faint); max-width: 16ch; line-height: 1.4; }
+
+  /* ---------- sections ---------- */
+  section.block { padding: 56px 0; border-bottom: 1px solid var(--line); }
+  .sec-label { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+  h2 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(26px, 3.4vw, 34px);
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  .standfirst { color: var(--ink-soft); font-size: 17px; max-width: 60ch; margin-bottom: 32px; }
+
+  /* ---------- problem / solution split ---------- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .split > div { padding: 32px; }
+  .split .before { background: var(--wash); }
+  .split .after { background: var(--accent-deep); color: #eef4f2; }
+  .split h3 { font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+  .split .before h3 { color: var(--ink-faint); }
+  .split .after h3 { color: #9fd3c8; }
+  .split ul { list-style: none; }
+  .split li { padding: 8px 0 8px 26px; position: relative; font-size: 15.5px; }
+  .split .before li::before { content: "—"; position: absolute; left: 0; color: var(--ink-faint); }
+  .split .after li::before { content: "✓"; position: absolute; left: 0; color: #9fd3c8; }
+
+  /* ---------- capabilities ---------- */
+  .caps { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 40px; margin-top: 8px; }
+  .cap { display: grid; grid-template-columns: 52px 1fr; gap: 16px; align-items: start; }
+  .cap .n {
+    font-family: Georgia, serif; font-size: 15px; color: var(--accent-deep);
+    border: 1px solid var(--line); border-radius: 50%;
+    width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;
+    background: var(--paper);
+  }
+  .cap:nth-child(odd) .n { background: var(--wash); }
+  .cap h3 { font-size: 18px; margin-bottom: 4px; }
+  .cap p { font-size: 15px; color: var(--ink-soft); }
+  .cap.full { grid-column: 1 / -1; background: var(--wash); border-radius: var(--radius); padding: 24px 28px; grid-template-columns: 52px 1fr; }
+
+  /* ---------- journey ---------- */
+  .journey { list-style: none; margin-top: 8px; }
+  .journey li {
+    display: grid; grid-template-columns: 44px 1fr; gap: 18px;
+    padding: 14px 0; position: relative;
+  }
+  .journey li:not(:last-child)::after {
+    content: ""; position: absolute; left: 21px; top: 52px; bottom: -8px; width: 2px; background: var(--line);
+  }
+  .journey .dot {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600; z-index: 1;
+  }
+  .journey li:nth-child(even) .dot { background: var(--accent-deep); }
+  .journey strong { display: block; font-size: 16.5px; }
+  .journey p { font-size: 15px; color: var(--ink-soft); max-width: 62ch; }
+
+  /* ---------- demo agenda ---------- */
+  .agenda { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .agenda .row { display: grid; grid-template-columns: 72px 1fr; gap: 20px; padding: 20px 28px; }
+  .agenda .row + .row { border-top: 1px solid var(--line); }
+  .agenda .row:nth-child(odd) { background: var(--wash); }
+  .agenda .t { font-family: Georgia, serif; font-size: 15px; color: var(--accent-deep); white-space: nowrap; padding-top: 2px; }
+  .agenda strong { display: block; font-size: 16.5px; margin-bottom: 2px; }
+  .agenda p { font-size: 15px; color: var(--ink-soft); }
+
+  /* ---------- trust band ---------- */
+  .trust { background: var(--dark); color: #dfe7e3; }
+  .trust h2 { color: #fff; }
+  .trust .standfirst { color: #a9bab3; }
+  .trust-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; margin-top: 8px; }
+  .trust-grid h3 { font-size: 15px; color: #9fd3c8; margin-bottom: 6px; font-weight: 600; }
+  .trust-grid p { font-size: 14px; color: #b9c6c0; }
+
+  footer { padding: 36px 0 48px; color: var(--ink-faint); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  footer strong { font-family: Georgia, serif; font-weight: 400; font-size: 17px; color: var(--ink); }
+
+  @media (max-width: 720px) {
+    .split, .caps { grid-template-columns: 1fr; }
+    .trust-grid { grid-template-columns: 1fr 1fr; }
+    .agenda .row { grid-template-columns: 1fr; gap: 4px; }
+    .hero { padding: 48px 0 40px; }
+  }
+  @media print {
+    .hero { padding: 32px 0; }
+    section.block { padding: 28px 0; }
+    .trust { background: none; color: var(--ink); }
+    .trust h2, .trust-grid h3 { color: var(--ink); }
+    .trust .standfirst, .trust-grid p { color: var(--ink-soft); }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <img src="../hydenlyne-logo-colour.png" alt="Hydenlyne logo" onerror="this.style.display='none'">
+    <div class="wordmark">Crew DMS <span>by Hydenlyne</span></div>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <h1>The right offshore specialist, <em>ready to mobilize.</em></h1>
+    <p class="lede">Crew DMS replaces scattered CVs and spreadsheets with one trusted roster — every specialist, their documents, their compliance status, and their availability, searchable in plain language.</p>
+    <div class="facts">
+      <div><strong>&lt;1s</strong><span>to read a CV on upload</span></div>
+      <div><strong>100%</strong><span>of roster profiles human-approved</span></div>
+      <div><strong>1 view</strong><span>for search, compliance &amp; mobilization</span></div>
+    </div>
+  </div>
+</div>
+
+<section class="block">
+  <div class="wrap">
+    <div class="sec-label">The problem</div>
+    <h2>Staffing a vessel shouldn't be a scramble.</h2>
+    <p class="standfirst">Today, finding a qualified consultant means digging through inboxes and spreadsheets — then hoping certificates are still valid on mobilization day.</p>
+    <div class="split">
+      <div class="before">
+        <h3>Before Crew DMS</h3>
+        <ul>
+          <li>CVs scattered across email and folders</li>
+          <li>Expired certificates discovered too late</li>
+          <li>No reliable view of who is available</li>
+          <li>Shortlists rebuilt from scratch each time</li>
+        </ul>
+      </div>
+      <div class="after">
+        <h3>With Crew DMS</h3>
+        <ul>
+          <li>One verified roster, always current</li>
+          <li>Expiring items flagged before they block you</li>
+          <li>Availability visible at search time</li>
+          <li>Shortlists and evidence reusable per project</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="sec-label">What it does</div>
+    <h2>Five capabilities, one platform.</h2>
+    <p class="standfirst">From first CV upload to vessel assignment — the whole engagement lives in one place.</p>
+    <div class="caps">
+      <div class="cap">
+        <div class="n">01</div>
+        <div><h3>Automatic roster building</h3><p>Upload a CV and it's read in under a second, then queued for quick human review. Nothing enters search until approved.</p></div>
+      </div>
+      <div class="cap">
+        <div class="n">02</div>
+        <div><h3>Search in plain English</h3><p><i>"Seismic observer with offshore survival, available next month"</i> — ranked candidates with summaries explaining each fit.</p></div>
+      </div>
+      <div class="cap">
+        <div class="n">03</div>
+        <div><h3>Compare &amp; shortlist</h3><p>Side-by-side evaluation, skill views, and client-ready exports that defend the choice.</p></div>
+      </div>
+      <div class="cap">
+        <div class="n">04</div>
+        <div><h3>Compliance tracking</h3><p>Certifications, medicals, and document expiry monitored continuously — every mobilization carries its evidence.</p></div>
+      </div>
+      <div class="cap full">
+        <div class="n">05</div>
+        <div><h3>Operations end to end</h3><p>Vessel assignments, project rosters, contractor document requests, and a secure document vault — from first search to onboard.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="sec-label">How it works</div>
+    <h2>A consultant's journey.</h2>
+    <p class="standfirst">Every step keeps its evidence: the original document, the review decision, and the audit trail stay attached to the profile.</p>
+    <ol class="journey">
+      <li><div class="dot">1</div><div><strong>CV uploaded</strong><p>Read in seconds — name, experience, training, work history extracted automatically.</p></div></li>
+      <li><div class="dot">2</div><div><strong>Human review</strong><p>An administrator checks the proposal beside the original CV, corrects, and approves.</p></div></li>
+      <li><div class="dot">3</div><div><strong>Searchable roster</strong><p>Only approved profiles appear in keyword and natural-language search.</p></div></li>
+      <li><div class="dot">4</div><div><strong>Compared &amp; shortlisted</strong><p>Side-by-side evaluation produces a client-ready export.</p></div></li>
+      <li><div class="dot">5</div><div><strong>Compliance checked</strong><p>Valid, expiring-soon, or blocking — visible before mobilization day.</p></div></li>
+      <li><div class="dot">6</div><div><strong>Mobilized</strong><p>Mobilization request raised and specialist assigned to vessel and project.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="sec-label">Live demo</div>
+    <h2>What you'll see today.</h2>
+    <p class="standfirst">A real walkthrough on live data — follow along in five acts.</p>
+    <div class="agenda">
+      <div class="row"><div class="t">Act I</div><div><strong>Search that understands intent</strong><p>A natural-language query returning ranked specialists with plain-English summaries.</p></div></div>
+      <div class="row"><div class="t">Act II</div><div><strong>The specialist dossier</strong><p>Experience, credentials, documents, and compliance in one view.</p></div></div>
+      <div class="row"><div class="t">Act III</div><div><strong>Compare &amp; shortlist</strong><p>Side-by-side evaluation and a client-ready export.</p></div></div>
+      <div class="row"><div class="t">Act IV</div><div><strong>Compliance at a glance</strong><p>What is valid, what expires soon, and what blocks mobilization.</p></div></div>
+      <div class="row"><div class="t">Act V</div><div><strong>Mobilization</strong><p>From candidate to vessel assignment in a few clicks.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="block trust">
+  <div class="wrap">
+    <div class="sec-label">Why teams trust it</div>
+    <h2>Verified data, private by default.</h2>
+    <p class="standfirst">The safeguards that make the roster safe to staff from.</p>
+    <div class="trust-grid">
+      <div><h3>Approved only</h3><p>Unreviewed or rejected records never appear in search results.</p></div>
+      <div><h3>No guessing at intake</h3><p>CVs are read from their structure; anything unclear goes to human review, never to an AI guess.</p></div>
+      <div><h3>Audited access</h3><p>Role-based permissions with audit trails on downloads and exports.</p></div>
+      <div><h3>Your documents</h3><p>Secure storage with full history — nothing sensitive in logs.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div><strong>Crew DMS</strong> by Hydenlyne<br>For offshore energy, seismic survey, and marine operations teams.</div>
+    <div>Prepared for client showcase · September 2026</div>
+  </div>
+</footer>
+
+</body>
+</html>

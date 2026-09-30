@@ -6,12 +6,14 @@ as Compliant in the Agent Mobilization pre-flight matrix.
 """
 
 import asyncio
-from datetime import date
 import uuid
+from datetime import date
+
 from sqlalchemy import select
 
 from app.database import get_session_factory
-from app.models import CrewMember, Certification
+from app.models import Certification, CrewMember
+
 
 async def enrich_crew():
     factory = get_session_factory()
@@ -19,29 +21,43 @@ async def enrich_crew():
         stmt = select(CrewMember)
         res = await session.execute(stmt)
         crew_members = list(res.scalars().all())
-        
+
         print(f"Loaded {len(crew_members)} crew members")
-        
+
         updated_crew = 0
         added_certs = 0
         updated_certs = 0
-        
+
         for crew in crew_members:
             # Query existing certs
             c_stmt = select(Certification).where(Certification.crew_member_id == crew.id)
             c_res = await session.execute(c_stmt)
             certs = list(c_res.scalars().all())
-            
+
             # Check for existing survival & medical certs
             survival_cert = next(
-                (c for c in certs if any(k in (c.cert_type or "").lower() for k in ("bosiet", "foet", "survival", "ca-ebs"))),
-                None
+                (
+                    c
+                    for c in certs
+                    if any(
+                        k in (c.cert_type or "").lower()
+                        for k in ("bosiet", "foet", "survival", "ca-ebs")
+                    )
+                ),
+                None,
             )
             medical_cert = next(
-                (c for c in certs if any(k in (c.cert_type or "").lower() for k in ("medical", "oguk", "oeuk", "eng1"))),
-                None
+                (
+                    c
+                    for c in certs
+                    if any(
+                        k in (c.cert_type or "").lower()
+                        for k in ("medical", "oguk", "oeuk", "eng1")
+                    )
+                ),
+                None,
             )
-            
+
             # For available or on_assignment specialists: ensure full compliance
             if crew.availability_status in ("available", "on_assignment"):
                 # 1. Update crew medical fields
@@ -50,7 +66,7 @@ async def enrich_crew():
                     crew.medical_expiry = date(2027, 12, 15)
                     crew.medical_provider = "OEUK Approved Clinic"
                     updated_crew += 1
-                
+
                 if not crew.passport_expiry or crew.passport_expiry < date(2027, 1, 1):
                     crew.passport_expiry = date(2030, 6, 30)
                     if not crew.passport_issuing_country:
@@ -62,7 +78,9 @@ async def enrich_crew():
                 if survival_cert:
                     survival_cert.status = "valid"
                     survival_cert.verification_status = "verified"
-                    if not survival_cert.expiry_date or survival_cert.expiry_date < date(2027, 1, 1):
+                    if not survival_cert.expiry_date or survival_cert.expiry_date < date(
+                        2027, 1, 1
+                    ):
                         survival_cert.expiry_date = date(2027, 10, 31)
                     survival_cert.issuing_body = "OPITO"
                     updated_certs += 1
@@ -103,7 +121,7 @@ async def enrich_crew():
                     )
                     session.add(new_med)
                     added_certs += 1
-                
+
                 # Also verify other discipline certs if pending
                 for c in certs:
                     if c.status == "pending_verification" or c.verification_status == "unverified":
@@ -121,7 +139,10 @@ async def enrich_crew():
                     updated_crew += 1
 
         await session.commit()
-        print(f"Enrichment complete: {updated_crew} crew updated, {added_certs} certs added, {updated_certs} certs updated.")
+        print(
+            f"Enrichment complete: {updated_crew} crew updated, {added_certs} certs added, {updated_certs} certs updated."
+        )
+
 
 if __name__ == "__main__":
     asyncio.run(enrich_crew())
