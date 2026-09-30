@@ -1,5 +1,20 @@
 # Changelog
 
+## Showcase stack live with demo data (2026-09-30)
+
+- Committed the tree as `0c92236` (61 files; `.claude/worktrees/` left
+  untracked, `.env` stays ignored). Repo-local git identity set from the
+  user's email (name derived as Sebastien Joseph Gregor — correct on request).
+- Local stack (`scripts/local-stack.sh`) running: backend/frontend healthy,
+  unauthenticated `me` returns `{me: null}`, admin login works
+  (`admin@hydenlyne.local`, local-only `.env` password), seeded 100 crew via
+  additive `seed_100.py` for 107 total with working keyword search.
+- Observed, not blocking the demo (browser uses cookies, which work): a body
+  `token` replayed as `Authorization: Bearer` got `UNAUTHENTICATED` on
+  `crewMembers`. Follow-up: check token-vs-cookie handling in the auth
+  context path. Also noted live: login rate limiting (5/5min) engages
+  correctly — avoid rapid repeat logins during the demo. Tool: OpenCode/Muse Spark.
+
 ## Showcase readiness — all backend tests green (2026-09-30)
 
 - Fixed all 11 failing backend tests on top of the uncommitted WIP tree; full
