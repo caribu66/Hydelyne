@@ -23,6 +23,12 @@
   `test_login_returns_user_and_http_only_cookie_without_exposing_token`;
   the session travels only in the HttpOnly cookie). Frontend never queries
   the body token. No code change.
+- AI live on CPU (no NVIDIA drivers on this laptop): pulled
+  `llama3.1:8b-instruct-q4_K_M` (4.9GB) and `all-minilm` into the Ollama
+  container (host model store was empty). Verified: extraction inference
+  6.2s cold through `OllamaClient.extract`, embeddings return 384 dims
+  (matches Qdrant `VECTOR_SIZE`). Short demo queries/summaries are fine;
+  long CV extractions will take longer on CPU. Tool: OpenCode/Muse Spark.
 - Noted live: login rate limiting (5/5min) engages correctly — avoid rapid
   repeat logins during the demo. Tool: OpenCode/Muse Spark.
 
