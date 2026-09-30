@@ -1,6 +1,28 @@
-# Hydenlyne Crew Document Management Platform
+# Manifest by Hydenlyne
 
-A crew document management platform for Hydenlyne's internal team to manage their global consultant workforce.
+Manifest is Hydenlyne's internal platform for managing a global specialist
+workforce: structured profiles, CVs, compliance documents, search, matching,
+and mobilization workflows in one controlled workspace.
+
+> Internal product repository. The application handles sensitive personal,
+> employment, identity, and compliance data. Do not use real customer data in
+> development or tests.
+
+## Project status
+
+The repository is an active modular monolith with a React frontend, FastAPI
+and GraphQL backend, asynchronous workers, PostgreSQL, Redis, Meilisearch,
+Qdrant, Dropbox, and local Ollama inference.
+
+Useful project references:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Authorization and data classification](docs/AUTHORIZATION.md)
+- [Engineering standards](docs/ENGINEERING_STANDARDS.md)
+- [Showcase guide](docs/SHOWCASE.md)
+- [Security rotation guide](SECRET_ROTATION.md)
+- [Contribution guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Quick Start
 

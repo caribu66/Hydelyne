@@ -1,5 +1,14 @@
 # Changelog
 
+## GitHub presentation and contribution hygiene (2026-10-01)
+
+- Aligned the README with the Manifest product identity and added clear links
+  to architecture, authorization, engineering, showcase, security, and
+  contribution documentation.
+- Added `CONTRIBUTING.md`, `SECURITY.md`, pull-request guidance, and issue
+  templates so changes and vulnerability reports have a consistent path.
+- Tool: Codex. No runtime, API, schema, or deployment behavior changed.
+
 ## Backend formatting cleanup (2026-10-01)
 
 - Applied the repository's configured Ruff formatter to the remaining backend
