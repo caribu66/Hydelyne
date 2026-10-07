@@ -3,7 +3,7 @@ uvicorn[standard]==0.52.4
 sqlalchemy[asyncio]==2.0.52
 asyncpg==0.29.0
 psycopg2-binary==2.9.12
-alembic==1.19.1
+alembic==1.20.0
 pydantic-settings==2.15.0
 strawberry-graphql[fastapi]==0.326.0
 celery[redis]==5.6.3
